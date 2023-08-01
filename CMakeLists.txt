@@ -12,6 +12,14 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(googletest)
 
+# Ensuring Boost is present:
+find_package(Boost REQUIRED)
+message(STATUS ${Boost_INCLUDE_DIRS})
+set(Boost_INCLUDE_DIRS /usr/local/Cellar/boost/1.82.0_1/include)
+message(STATUS ${Boost_INCLUDE_DIRS})
+
+include_directories(${Boost_INCLUDE_DIRS})
+
 # Putting together the main executable & building relevant libraries:
 add_subdirectory(src)
 
