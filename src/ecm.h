@@ -5,24 +5,23 @@ namespace boostMatrix = boost::numeric::ublas;
 class ECMField{
 public:
     // Constructor:
-    ECMField(int xWorldBlocks, int yWorldBlocks, double xWorldSize, double yWorldSize);
+    ECMField(int setElements);
 
     // Getters:
     boostMatrix::matrix<double> getECMHeadingMatrix();
-    double getHeading(double x, double y);
-    bool getMatrixPresent(double x, double y);
+    double getHeading(int i, int j);
+    bool getMatrixPresent(int i, int j);
+    std::tuple<double, double> getAverageHeadingAroundIndex(int i, int j);
 
     // Setters:
-    void setMatrix(double x, double y, double heading);
-
+    void setMatrix(int i, int j, double heading);
 
 private:
-    double xBlockSize;
-    double yBlockSize;
-    boostMatrix::matrix<bool> ecmPresentMatrix;
+    // Matrix size and matrix definitions:
+    int elementCount;
     boostMatrix::matrix<double> ecmHeadingMatrix;
+    boostMatrix::matrix<bool> ecmPresentMatrix;
 
-    // Location functions:
-    std::array<int, 2> getIndexFromLocation(double x, double y);
-
+    // Utility function for scanning ECM:
+    int rollOverIndex(int index);
 };

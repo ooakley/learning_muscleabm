@@ -6,18 +6,20 @@ public:
     // Constructor and intialisation:
     CellAgent(
         double startX, double startY, double startHeading,
-        int setCellSeed,
+        int setCellSeed, int setCellID,
         double setKappa, double setWbLambda, double setWbK
     );
 
     // Getters:
     double getX();
     double getY();
+    std::tuple<double, double> getPosition();
     double getID();
     double getHeading();
 
     // Setters:
-    void setDirectionalInfluence(double newDirectionalInfluence);
+    void setDirectionalInfluence(double newDirectionalInfluence, double newDirectionalIntensity);
+    void setPosition(std::tuple<double, double> newPosition);
 
     // Simulation code:
     void takeRandomStep();
@@ -25,6 +27,7 @@ public:
 private:
     // Randomness and seeding:
     int cellSeed;
+    int cellID;
     std::mt19937 seedGenerator;
     std::uniform_int_distribution<unsigned int> seedDistribution;
 
@@ -32,7 +35,8 @@ private:
     double x;
     double y;
     double heading;
-    double directionalInfluence; // 0 <= theta < pi
+    double directionalInfluence; // -pi <= theta < pi
+    double directionalIntensity; // 0 <= I < 1
 
     // Weibull sampling for step size:
     std::mt19937 generatorWeibull;
@@ -46,6 +50,9 @@ private:
     std::mt19937 generatorU1, generatorU2, generatorB;
     std::uniform_real_distribution<double> uniformDistribution;
     std::bernoulli_distribution bernoulliDistribution;
+
+    // Generator for selecting for environmental influence:
+    std::mt19937 generatorInfluence;
 
     // Member functions for von Mises sampling:
     double sampleVonMises();

@@ -33,3 +33,6 @@
 
 # Build results:
 build/
+
+# Output data:
+*.csv

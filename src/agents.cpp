@@ -2,25 +2,34 @@
 
 #include <random>
 #include <cmath>
+#include <cassert>
 #include <limits>
 #include <iostream>
+
+#include <boost/uuid/uuid.hpp>
+#include <boost/uuid/uuid_generators.hpp>
 
 // Constructor:
 CellAgent::CellAgent(
     double startX, double startY, double startHeading,
-    int setCellSeed,
+    int setCellSeed, int setCellID,
     double setKappa, double setWbLambda, double setWbK
     )
     : x{startX}
     , y{startY}
     , heading{startHeading}
     , directionalInfluence{M_PI / 2}
+    , directionalIntensity{0}
     , cellSeed{setCellSeed}
+    , cellID{setCellID}
     , kappa{setKappa}
 {
     // Initialising randomness:
     seedGenerator = std::mt19937(cellSeed);
     seedDistribution = std::uniform_int_distribution<unsigned int>(0, UINT32_MAX);
+
+    // Initialising influence selector:
+    generatorInfluence = std::mt19937(seedDistribution(seedGenerator));
 
     // Initialising von Mises distribution:
     vm_tau = 1 + sqrt(1 + (4 * pow(kappa, 2)));
@@ -50,8 +59,12 @@ double CellAgent::getY() {
     return y; 
 }
 
+std::tuple<double, double> CellAgent::getPosition() {
+    return std::tuple<double, double>{x, y};
+}
+
 double CellAgent::getID() {
-    return cellSeed;
+    return cellID;
 }
 
 double CellAgent::getHeading() {
@@ -59,8 +72,18 @@ double CellAgent::getHeading() {
 }
 
 // Setters:
-void CellAgent::setDirectionalInfluence(double newDirectionalInfluence) {
+void CellAgent::setDirectionalInfluence
+(
+    double newDirectionalInfluence, double newDirectionalIntensity
+)
+{
     directionalInfluence = newDirectionalInfluence;
+    directionalIntensity = newDirectionalIntensity;
+}
+
+void CellAgent::setPosition(std::tuple<double, double> newPosition) {
+    x = std::get<0>(newPosition);
+    y = std::get<1>(newPosition);
 }
 
 // Simulation code:
@@ -68,16 +91,20 @@ void CellAgent::takeRandomStep() {
     // Sampling 0-centred change in heading;
     double angleDelta{sampleVonMises()};
 
-    // Adding environmental effects:
-    double positiveMu{angleMod(directionalInfluence - heading)};
-    double negativeMu{angleMod(directionalInfluence - M_PI - heading)};
-    double newMu;
-    if (abs(positiveMu) < abs(negativeMu)) {
-        newMu = positiveMu;
-    };
-    if (abs(negativeMu) < abs(positiveMu)) {
-        newMu = negativeMu;
-    };
+    // Checking for whether direction is influenced:
+    double randomThreshold = uniformDistribution(generatorInfluence);
+    double newMu{0};
+    if (randomThreshold < directionalIntensity) {
+        // Adding environmental effects:
+        double positiveMu{angleMod(directionalInfluence - heading)};
+        double negativeMu{angleMod(directionalInfluence - M_PI - heading)};
+        if (abs(positiveMu) < abs(negativeMu)) {
+            newMu = positiveMu;
+        };
+        if (abs(negativeMu) < abs(positiveMu)) {
+            newMu = negativeMu;
+        };
+    }
 
     // This will bias the change in heading to align w/ the environment:
     angleDelta = angleMod(angleDelta + newMu);
@@ -98,7 +125,7 @@ double CellAgent::sampleVonMises() {
         // Sample from our distributions:
         double U1{uniformDistribution(generatorU1)};
         double U2{uniformDistribution(generatorU2)};
-        double B{bernoulliDistribution(generatorB)};
+        int B{int(bernoulliDistribution(generatorB))};
 
         // Calculate derived values:
         double z{cos(M_PI * U1)};
@@ -109,7 +136,7 @@ double CellAgent::sampleVonMises() {
         bool simpleCondition{(c*(2 - c) - U2) > 0};
         if (simpleCondition) {
             angleSampled = true;
-            int angleSign{(2*int(B)) - 1};
+            int angleSign{(2*B) - 1};
             sampledVonMises = angleSign * acos(f);
             break;
         }
@@ -117,7 +144,7 @@ double CellAgent::sampleVonMises() {
         bool logCondition{(log(c/U2) + 1 - c) > 0};
         if (logCondition) {
             angleSampled = true;
-            int angleSign{(2*int(B)) - 1};
+            int angleSign{(2*B) - 1};
             sampledVonMises = angleSign * acos(f);
         }
     }
@@ -125,5 +152,7 @@ double CellAgent::sampleVonMises() {
 }
 
 double CellAgent::angleMod(double angle) {
-    return fmod(angle + M_PI, 2*M_PI) - M_PI;;
+    if (angle < -M_PI) {angle += 2*M_PI;};
+    if (angle > M_PI) {angle -= 2*M_PI;};
+    return angle;
 }
