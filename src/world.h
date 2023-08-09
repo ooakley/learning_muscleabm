@@ -17,6 +17,7 @@ public:
 
     // Getters:
     void writePositionsToCSV(std::ofstream& csvFile);
+    void writeMatrixToCSV(std::ofstream& matrixFile);
 
     // Setters:
 

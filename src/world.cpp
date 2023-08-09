@@ -2,6 +2,7 @@
 #include "agents.h"
 #include "ecm.h"
 
+#include <stdio.h>
 #include <iostream>
 #include <fstream>
 #include <cmath>
@@ -18,9 +19,9 @@ World::World
     : worldSeed{setWorldSeed}
     , worldSideLength{setWorldSideLength}
     , countECMElement{setECMElementCount}
-    , numberOfCells{setNumberOfCells}
-    , ecmField{ECMField(countECMElement)}
     , lengthECMElement{worldSideLength/countECMElement}
+    , ecmField{ECMField(countECMElement)}
+    , numberOfCells{setNumberOfCells}
     , simulationTime{0}
 {
     // Initialising randomness:
@@ -56,6 +57,14 @@ void World::writePositionsToCSV(std::ofstream& csvFile) {
     }
 }
 
+void World::writeMatrixToCSV(std::ofstream& matrixFile) {
+    for (int i = 0; i < countECMElement; i++) {
+        for (int j = 0; j < countECMElement; j++) {
+            matrixFile << ecmField.getHeading(i, j) << ",";
+        }
+    }
+}
+
 // Setters:
 
 // Private member functions:
@@ -74,7 +83,7 @@ CellAgent World::initialiseCell(int setCellID) {
     double startHeading{headingDistribution(headingGenerator)};
     unsigned int setCellSeed{seedDistribution(cellSeedGenerator)};
 
-    return CellAgent(startX, startY, startHeading, setCellSeed, setCellID, 4, 3, 5);
+    return CellAgent(startX, startY, startHeading, setCellSeed, setCellID, 15, 5, 10);
 }
 
 // Simulation functions:
@@ -97,8 +106,8 @@ void World::runCellStep(CellAgent& actingCell) {
 
     // Getting headings of ECM surrounding cell:
     double angle, intensity;
-    std::tie(angle, intensity) = ecmField.getAverageHeadingAroundIndex(
-        startIndex[0], startIndex[1]
+    std::tie(angle, intensity) = ecmField.getAverageDeltaHeadingAroundIndex(
+        startIndex[0], startIndex[1], actingCell.getHeading()
     );
 
     // Calculate and set effects of world on cell:
@@ -147,7 +156,7 @@ void World::setMovementOnMatrix(
 
     // Setting blocks to heading:
     for (const auto& block : blocksToSet) {
-        ecmField.setMatrix(block[0], block[1], cellHeading);
+        ecmField.setSubMatrix(block[0], block[1], cellHeading);
     }
 
 }

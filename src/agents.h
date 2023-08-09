@@ -6,7 +6,7 @@ public:
     // Constructor and intialisation:
     CellAgent(
         double startX, double startY, double startHeading,
-        int setCellSeed, int setCellID,
+        unsigned int setCellSeed, int setCellID,
         double setKappa, double setWbLambda, double setWbK
     );
 
@@ -26,7 +26,7 @@ public:
 
 private:
     // Randomness and seeding:
-    int cellSeed;
+    unsigned int cellSeed;
     int cellID;
     std::mt19937 seedGenerator;
     std::uniform_int_distribution<unsigned int> seedDistribution;

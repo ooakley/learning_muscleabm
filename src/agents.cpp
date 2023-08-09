@@ -12,13 +12,13 @@
 // Constructor:
 CellAgent::CellAgent(
     double startX, double startY, double startHeading,
-    int setCellSeed, int setCellID,
+    unsigned int setCellSeed, int setCellID,
     double setKappa, double setWbLambda, double setWbK
     )
     : x{startX}
     , y{startY}
     , heading{startHeading}
-    , directionalInfluence{M_PI / 2}
+    , directionalInfluence{M_PI}
     , directionalIntensity{0}
     , cellSeed{setCellSeed}
     , cellID{setCellID}
@@ -45,7 +45,7 @@ CellAgent::CellAgent(
 
     // Initialising Weibull distribution:
     generatorWeibull = std::mt19937(seedDistribution(seedGenerator));
-    weibullDistribution = std::weibull_distribution<double>(setWbLambda, setWbK);
+    weibullDistribution = std::weibull_distribution<double>(setWbK, setWbLambda);
 }
 
 // Public Definitions:
@@ -96,18 +96,11 @@ void CellAgent::takeRandomStep() {
     double newMu{0};
     if (randomThreshold < directionalIntensity) {
         // Adding environmental effects:
-        double positiveMu{angleMod(directionalInfluence - heading)};
-        double negativeMu{angleMod(directionalInfluence - M_PI - heading)};
-        if (abs(positiveMu) < abs(negativeMu)) {
-            newMu = positiveMu;
-        };
-        if (abs(negativeMu) < abs(positiveMu)) {
-            newMu = negativeMu;
-        };
+        newMu = directionalInfluence;
     }
 
     // This will bias the change in heading to align w/ the environment:
-    angleDelta = angleMod(angleDelta + newMu);
+    angleDelta = angleDelta + newMu;
     heading = angleMod(heading + angleDelta);
 
     // Calculating new position:
@@ -153,6 +146,6 @@ double CellAgent::sampleVonMises() {
 
 double CellAgent::angleMod(double angle) {
     if (angle < -M_PI) {angle += 2*M_PI;};
-    if (angle > M_PI) {angle -= 2*M_PI;};
+    if (angle >= M_PI) {angle -= 2*M_PI;};
     return angle;
 }

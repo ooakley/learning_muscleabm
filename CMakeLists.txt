@@ -13,7 +13,7 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(googletest)
 
 # Ensuring Boost is present:
-find_package(Boost REQUIRED)
+find_package(Boost COMPONENTS regex system filesystem REQUIRED)
 message(STATUS ${Boost_INCLUDE_DIRS})
 set(Boost_INCLUDE_DIRS /usr/local/Cellar/boost/1.82.0_1/include)
 message(STATUS ${Boost_INCLUDE_DIRS})
