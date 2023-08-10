@@ -1,6 +1,8 @@
 #include "ecm.h"
 #include <cmath>
 #include <boost/numeric/ublas/matrix.hpp>
+
+#include <iostream>
 namespace boostMatrix = boost::numeric::ublas;
 
 // Constructor:
@@ -8,7 +10,7 @@ ECMField::ECMField(int setElements)
     : elementCount{setElements}
     , ecmHeadingMatrix{boostMatrix::zero_matrix<double>(elementCount, elementCount)}
     , ecmPresentMatrix{boostMatrix::zero_matrix<bool>(elementCount, elementCount)}
-    , matrixPersistence{0}
+    , matrixPersistence{0.8}
 {
 }
 
@@ -53,15 +55,18 @@ std::tuple<double, double> ECMField::getAverageDeltaHeadingAroundIndex(
     }
 
     // Getting the angle average:
-    double sineMean;
-    double cosineMean;
+    double sineMean{0};
+    double cosineMean{0};
     for (auto & heading : deltaHeadingVector) {
         sineMean += sin(heading);
         cosineMean += cos(heading);
     }
-    sineMean = sineMean / 9;
-    cosineMean = cosineMean / 9;
 
+    sineMean /= 9;
+    cosineMean /= 9;
+
+    assert(abs(sineMean) <= 1);
+    assert(abs(cosineMean) <= 1);
     double angleAverage{atan2(sineMean, cosineMean)};
     double angleIntensity{sqrt(pow(sineMean, 2) + pow(cosineMean, 2))};
     return {angleAverage, angleIntensity};
@@ -73,8 +78,7 @@ void ECMField::setSubMatrix(int i, int j, double heading) {
     std::array<int, 3> rowScan = {i-1, i, i+1};
     std::array<int, 3> columnScan = {j-1, j, j+1};
 
-    // Getting all headings:
-    std::vector<double> deltaHeadingVector;
+    // Applying heading to matrix in neighbourhood:
     for (auto & row : rowScan)
     {
         int safeRow{rollOverIndex(row)};
@@ -130,9 +134,15 @@ double ECMField::calculateCellDeltaTowardsECM(double ecmHeading, double cellHead
     double negativeMu{ecmHeading - M_PI - cellHeading};
     if (abs(positiveMu) < abs(negativeMu)) {
         assert((positiveMu >= -M_PI) & (positiveMu < M_PI));
+        if (positiveMu >= M_PI/2) {positiveMu -= M_PI;};
+        if (positiveMu < -M_PI/2) {positiveMu += M_PI;};
+        assert(abs(positiveMu) <= M_PI/2);
         return positiveMu;
     };
     assert((negativeMu >= -M_PI) & (negativeMu < M_PI));
+    if (negativeMu >= M_PI/2) {negativeMu -= M_PI;};
+    if (negativeMu < -M_PI/2) {negativeMu += M_PI;};
+    assert(abs(negativeMu) < M_PI/2);
     return negativeMu;
 }
 
@@ -143,8 +153,14 @@ double ECMField::calculateECMDeltaTowardsCell(double ecmHeading, double cellHead
     double negativeMu{ecmHeading - M_PI - cellHeading};
     if (abs(positiveMu) < abs(negativeMu)) {
         assert((positiveMu >= -M_PI) & (positiveMu < M_PI));
+        if (positiveMu >= M_PI/2) {positiveMu -= M_PI;};
+        if (positiveMu < -M_PI/2) {positiveMu += M_PI;};
+        assert(abs(positiveMu) <= M_PI/2);
         return -positiveMu;
     };
     assert((negativeMu >= -M_PI) & (negativeMu < M_PI));
+    if (negativeMu >= M_PI/2) {negativeMu -= M_PI;};
+    if (negativeMu < -M_PI/2) {negativeMu += M_PI;};
+    assert(abs(negativeMu) <= M_PI/2);
     return -negativeMu;
 }

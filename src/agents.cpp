@@ -90,9 +90,12 @@ void CellAgent::setPosition(std::tuple<double, double> newPosition) {
 void CellAgent::takeRandomStep() {
     // Sampling 0-centred change in heading;
     double angleDelta{sampleVonMises()};
+    assert((angleDelta >= -M_PI) & (angleDelta < M_PI));
 
     // Checking for whether direction is influenced:
-    double randomThreshold = uniformDistribution(generatorInfluence);
+    double randomThreshold{uniformDistribution(generatorInfluence)};
+    assert((randomThreshold >= 0) & (randomThreshold < 1));
+
     double newMu{0};
     if (randomThreshold < directionalIntensity) {
         // Adding environmental effects:
