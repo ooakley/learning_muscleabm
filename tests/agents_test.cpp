@@ -7,17 +7,17 @@ protected:
         double startX{0}, startY{0}, startHeading{0}, setKappa{1};
         // Basic cell agent:
         cellAgent = new CellAgent(
-            startX, startY, startHeading, setKappa, 1, 1, 5, 0
+            startX, startY, startHeading, setKappa, 1, 1, 5, 0, 0.5
         );
 
         // Cell agent with the same random seed:
         cellAgentAlt = new CellAgent(
-            startX, startY, startHeading, setKappa, 1, 1, 5, 0
+            startX, startY, startHeading, setKappa, 1, 1, 5, 0, 0.5
         );
 
         // Cell agent with a different random seed:
         cellAgentDifferent = new CellAgent(
-            startX, startY, startHeading, setKappa, 1, 1, 5, 1
+            startX, startY, startHeading, setKappa, 1, 1, 5, 1, 0.5
         );
     }
 

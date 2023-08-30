@@ -20,16 +20,21 @@ int main(int argc, char** argv) {
     }
 
     // Running mulitple simulations:
-    for (int superIteration = 0; superIteration < 10; ++superIteration) {
-        // Showing iteration on console:
-        std::cout << "Iteration: " << std::to_string(superIteration) << "\n";
+    for (int superIteration = 0; superIteration < 1; ++superIteration) {
+        // Getting correct width string representation:
+        std::stringstream iterationStringStream;
+        iterationStringStream << std::setw(3) << std::setfill('0') << superIteration;
+        std::string iterationString{iterationStringStream.str()};
 
-        // Generating filename:
+        // Showing iteration on console:
+        std::cout << "Iteration: " << iterationString << "\n";
+
+        // Generating filepath & filename:
         std::string positionsFilename{
-            directoryPath + "positions_seed" + std::to_string(superIteration) + ".csv"
+            directoryPath + "positions_seed" + iterationString + ".csv"
         };
         std::string matrixFilename{
-            directoryPath + "matrix_seed" + std::to_string(superIteration) + ".txt"
+            directoryPath + "matrix_seed" + iterationString + ".txt"
         };
 
         // Opening filestreams:
@@ -39,7 +44,7 @@ int main(int argc, char** argv) {
         matrixFile.open(matrixFilename);
 
         // Running simulation:
-        World mainWorld{World(superIteration, 1000, 64, 100)};
+        World mainWorld{World(superIteration, 1000, 32, 200)};
         for (int i = 0; i < 1000; ++i) {
             mainWorld.runSimulationStep();
             mainWorld.writePositionsToCSV(csvFile);

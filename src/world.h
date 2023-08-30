@@ -4,7 +4,6 @@
 #include "ecm.h"
 
 class World {
-// This is a long type name we shorten for readability:
 public:
     // Constructor and intialisation:
     World
@@ -48,14 +47,17 @@ private:
 
     // Generators for shuffling, cell positioning and cell rng seeding:
     std::mt19937 shuffleGenerator;
+    std::mt19937 cellSeedGenerator;
+
     std::mt19937 xPositionGenerator;
     std::mt19937 yPositionGenerator;
     std::mt19937 headingGenerator;
-    std::mt19937 cellSeedGenerator;
+    std::mt19937 contactInhibitionGenerator;
 
     // Distributions for seeding position and initial heading:
     std::uniform_real_distribution<double> positionDistribution;
     std::uniform_real_distribution<double> headingDistribution;
+    std::uniform_real_distribution<double> contactInhibitionDistribution;
 
     // Private member functions:
     // Initialisation Functions:

@@ -28,18 +28,20 @@ World::World
     seedGenerator = std::mt19937(worldSeed);
     seedDistribution = std::uniform_int_distribution<unsigned int>(0, UINT32_MAX);
 
-    // Cell randomness:
+    // Initialising generators for cell seeds:
     shuffleGenerator = std::mt19937(seedDistribution(seedGenerator));
     cellSeedGenerator = std::mt19937(seedDistribution(seedGenerator));
 
-    // Cell positions:
+    // Initialising generators for random selection of position, heading and contact inhibition:
     xPositionGenerator = std::mt19937(seedDistribution(seedGenerator));
     yPositionGenerator = std::mt19937(seedDistribution(seedGenerator));
     headingGenerator = std::mt19937(seedDistribution(seedGenerator));
+    contactInhibitionGenerator = std::mt19937(seedDistribution(seedGenerator));
 
     // Distributions:
     positionDistribution = std::uniform_real_distribution<double>(0, worldSideLength);
     headingDistribution = std::uniform_real_distribution<double>(-M_PI, M_PI);
+    contactInhibitionDistribution  = std::uniform_real_distribution<double>(0, 1);
 
     // Initialising cells:
     initialiseCellVector();
@@ -52,8 +54,8 @@ void World::writePositionsToCSV(std::ofstream& csvFile) {
         csvFile << cellAgentVector[i].getID() << ",";
         csvFile << cellAgentVector[i].getX() << ",";
         csvFile << cellAgentVector[i].getY() << ","; 
-        csvFile << cellAgentVector[i].getHeading(); 
-        csvFile << "\n";
+        csvFile << cellAgentVector[i].getHeading() << ","; 
+        csvFile << cellAgentVector[i].getInhibitionRate() << "\n"; 
     }
 }
 
@@ -72,7 +74,15 @@ void World::writeMatrixToCSV(std::ofstream& matrixFile) {
 // Initialisation Functions:
 void World::initialiseCellVector() {
     for (int i = 0; i < numberOfCells; ++i) {
-        cellAgentVector.push_back(initialiseCell(i));
+        // Initialising cell:
+        CellAgent newCell{initialiseCell(i)};
+
+        // Putting cell into count matrix:
+        std::array<int, 2> initialIndex{getIndexFromLocation(newCell.getPosition())};
+        ecmField.addToCellCount(initialIndex[0], initialIndex[1]);
+
+        // Adding newly initialised cell to CellVector:
+        cellAgentVector.push_back(newCell);
     }
 }
 
@@ -82,8 +92,19 @@ CellAgent World::initialiseCell(int setCellID) {
     double startY{positionDistribution(yPositionGenerator)};
     double startHeading{headingDistribution(headingGenerator)};
     unsigned int setCellSeed{seedDistribution(cellSeedGenerator)};
+    double inhibitionBoolean{contactInhibitionDistribution(contactInhibitionGenerator)};
 
-    return CellAgent(startX, startY, startHeading, setCellSeed, setCellID, 15, 5, 10);
+    double setInhibitionRate;
+    if (inhibitionBoolean < 0.5) {
+        setInhibitionRate = 0.1;
+    } else {
+        setInhibitionRate = 0.9;
+    }
+
+    return CellAgent(
+        startX, startY, startHeading, setCellSeed, setCellID, 2, 1, 3,
+        setInhibitionRate
+    );
 }
 
 // Simulation functions:
@@ -110,10 +131,14 @@ void World::runCellStep(CellAgent& actingCell) {
         startIndex[0], startIndex[1], actingCell.getHeading()
     );
 
-    // Calculate and set effects of world on cell:
+    // Calculate and set effects of world on cell heading:
     actingCell.setDirectionalInfluence(angle, intensity);
 
+    // Determine contact status of cell (i.e. cells in Moore neighbourhood of current cell):
+    actingCell.setContactStatus(ecmField.getCellContactState(startIndex[0], startIndex[1]));
+
     // Take step:
+    ecmField.subtractFromCellCount(startIndex[0], startIndex[1]);
     actingCell.takeRandomStep();
 
     // Calculate and set effects of cell on world:
@@ -122,6 +147,10 @@ void World::runCellStep(CellAgent& actingCell) {
 
     // Rollover the cell if out of bounds:
     actingCell.setPosition(rollPosition(cellFinish));
+
+    // Set new count:
+    std::array<int, 2> endIndex{getIndexFromLocation(rollPosition(cellFinish))};
+    ecmField.addToCellCount(endIndex[0], endIndex[1]);
 }
 
 void World::setMovementOnMatrix(
@@ -177,10 +206,10 @@ std::tuple<double, double> World::rollPosition(std::tuple<double, double> positi
     double yPosition = std::get<1>(position);
 
     // Dealing with OOB in the negative numbers:
-    if (xPosition < 0) {
+    while (xPosition < 0) {
         xPosition = worldSideLength + xPosition;
     }
-    if (yPosition < 0) {
+    while (yPosition < 0) {
         yPosition = worldSideLength + yPosition;
     }
 
