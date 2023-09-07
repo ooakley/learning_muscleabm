@@ -10,8 +10,9 @@ ECMField::ECMField(int setElements)
     : elementCount{setElements}
     , ecmHeadingMatrix{boostMatrix::zero_matrix<double>(elementCount, elementCount)}
     , ecmPresentMatrix{boostMatrix::zero_matrix<bool>(elementCount, elementCount)}
-    , cellCountMatrix{boostMatrix::zero_matrix<int>(elementCount, elementCount)}
-    , matrixPersistence{0.98}
+    , cellType0CountMatrix{boostMatrix::zero_matrix<int>(elementCount, elementCount)}
+    , cellType1CountMatrix{boostMatrix::zero_matrix<int>(elementCount, elementCount)}
+    , matrixPersistence{0.8}
 {
 }
 
@@ -30,7 +31,7 @@ bool ECMField::getMatrixPresent(int i, int j) {
 
 std::tuple<double, double> ECMField::getAverageDeltaHeadingAroundIndex(
     int i, int j, double cellHeading
-) 
+)
 {
     std::array<int, 3> rowScan = {i-1, i, i+1};
     std::array<int, 3> columnScan = {j-1, j, j+1};
@@ -73,12 +74,12 @@ std::tuple<double, double> ECMField::getAverageDeltaHeadingAroundIndex(
     return {angleAverage, angleIntensity};
 }
 
-boostMatrix::matrix<bool> ECMField::getCellContactState(int i, int j) {
+boostMatrix::matrix<bool> ECMField::getCellTypeContactState(int i, int j, int cellType) {
     // Asserting counting is working as expected:
-    assert(cellCountMatrix(i, j) >= 1);
+    assert((cellType0CountMatrix(i, j) >= 1 ) || (cellType1CountMatrix(i, j) >= 1));
 
     // Instantiating contact matrix:
-    boostMatrix::matrix<bool> contactState{boostMatrix::zero_matrix<bool>(3, 3)};
+    boostMatrix::matrix<bool> cellTypeContactState{boostMatrix::zero_matrix<bool>(3, 3)};
 
     // Checking for cells in adjacent spaces:
     std::array<int, 3> rowScan = {i-1, i, i+1};
@@ -91,11 +92,10 @@ boostMatrix::matrix<bool> ECMField::getCellContactState(int i, int j) {
         for (auto & column : columnScan)
         {
             int safeColumn{rollOverIndex(column)};
-            // Checking for presence of other cells:
-            if (cellCountMatrix(safeRow, safeColumn) > 0) {
-                contactState(k, l) = true;
+            if (cellType == 0) {
+                cellTypeContactState(k, l) = bool(cellType0CountMatrix(safeRow, safeColumn) > 0);
             } else {
-                contactState(k, l) = false;
+                cellTypeContactState(k, l) =  bool(cellType1CountMatrix(safeRow, safeColumn) > 0);
             }
 
             // Incrementing column index for contact matrix:
@@ -105,9 +105,8 @@ boostMatrix::matrix<bool> ECMField::getCellContactState(int i, int j) {
         // Incrementing row index for contact matrix:
         k++;
     }
-    return contactState;
+    return cellTypeContactState;
 }
-
 
 // Setters:
 void ECMField::setSubMatrix(int i, int j, double heading) {
@@ -126,13 +125,22 @@ void ECMField::setSubMatrix(int i, int j, double heading) {
     }
 }
 
-void ECMField::addToCellCount(int i, int j) {
-    cellCountMatrix(i, j) = cellCountMatrix(i, j) + 1;
+void ECMField::addToCellCount(int i, int j, int cellType) {
+    if (cellType == 0) {
+        cellType0CountMatrix(i, j) = cellType0CountMatrix(i, j) + 1;
+    } else {
+        cellType1CountMatrix(i, j) = cellType1CountMatrix(i, j) + 1;
+    }
 }
 
-void ECMField::subtractFromCellCount(int i, int j) {
-    cellCountMatrix(i, j) = cellCountMatrix(i, j) - 1;
-    assert(cellCountMatrix(i, j) >= 0);
+void ECMField::subtractFromCellCount(int i, int j, int cellType) {
+    if (cellType == 0) {
+        cellType0CountMatrix(i, j) = cellType0CountMatrix(i, j) - 1;
+        assert(cellType0CountMatrix(i, j) >= 0);
+    } else {
+        cellType1CountMatrix(i, j) = cellType1CountMatrix(i, j) - 1;
+        assert(cellType1CountMatrix(i, j) >= 0);
+    }
 }
 
 // Private member functions:

@@ -8,8 +8,9 @@ public:
     // Constructor and intialisation:
     CellAgent(
         double startX, double startY, double startHeading,
-        unsigned int setCellSeed, int setCellID,
-        double setWbLambda, double setAlpha, double setBeta, double setInhibition
+        unsigned int setCellSeed, int setCellID, int setCellType,
+        double setWbK, double setAlpha, double setBeta,
+        double setHomotypicInhibition, double setHeterotypicInhibiton
     );
 
     // Getters:
@@ -18,12 +19,13 @@ public:
     std::tuple<double, double> getPosition();
     double getID();
     double getHeading();
-    double getInhibitionRate();
+    double getHomotypicInhibitionRate();
+    double getCellType();
 
     // Setters:
     void setDirectionalInfluence(double newDirectionalInfluence, double newDirectionalIntensity);
     void setPosition(std::tuple<double, double> newPosition);
-    void setContactStatus(boostMatrix::matrix<bool> stateToSet);
+    void setContactStatus(boostMatrix::matrix<bool> stateToSet, int cellType);
 
     // Simulation code:
     void takeRandomStep();
@@ -42,20 +44,19 @@ private:
     double instantaneousSpeed;
     double directionalInfluence; // -pi <= theta < pi
     double directionalIntensity; // 0 <= I < 1
-    boostMatrix::matrix<bool> cellContactState;
 
     // Speed-persistence relationship constants:
-    double alphaForVonMisesXC;
-    double betaForWeibullXC;
+    double alphaForVonMisesXCorr;
+    double betaForWeibullXCorr;
 
     // Weibull sampling for step size:
     std::mt19937 generatorWeibull;
-    double lambdaWeibull;
+    double kWeibull;
 
     // We need to use a special distribution (von Mises) to sample from a random
     // direction over a circle - unfortunately not included in std
 
-    // Member variables for von Mises sampling:
+    // Member variables for von Mises sampling for directional step size:
     std::mt19937 generatorU1, generatorU2, generatorB;
     std::uniform_real_distribution<double> uniformDistribution;
     std::bernoulli_distribution bernoulliDistribution;
@@ -65,10 +66,17 @@ private:
     std::mt19937 generatorCornerCorrection;
     std::mt19937 generatorForInhibitionRate;
     std::uniform_real_distribution<double> angleUniformDistribution;
-    double inhibitionRate;
+    boostMatrix::matrix<bool> cellType0ContactState;
+    boostMatrix::matrix<bool> cellType1ContactState;
+    double homotypicInhibitionRate;
+    double heterotypicInhibitionRate;
+    int cellType;
 
     // Generator for selecting for environmental influence:
     std::mt19937 generatorInfluence;
+
+    // Collision detection behaviour:
+    bool checkForCollisions();
 
     // Member functions for von Mises sampling:
     double sampleVonMises(double kappa);

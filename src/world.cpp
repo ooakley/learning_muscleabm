@@ -55,7 +55,7 @@ void World::writePositionsToCSV(std::ofstream& csvFile) {
         csvFile << cellAgentVector[i].getX() << ",";
         csvFile << cellAgentVector[i].getY() << ","; 
         csvFile << cellAgentVector[i].getHeading() << ","; 
-        csvFile << cellAgentVector[i].getInhibitionRate() << "\n"; 
+        csvFile << cellAgentVector[i].getCellType() << "\n"; 
     }
 }
 
@@ -79,7 +79,7 @@ void World::initialiseCellVector() {
 
         // Putting cell into count matrix:
         std::array<int, 2> initialIndex{getIndexFromLocation(newCell.getPosition())};
-        ecmField.addToCellCount(initialIndex[0], initialIndex[1]);
+        ecmField.addToCellCount(initialIndex[0], initialIndex[1], newCell.getCellType());
 
         // Adding newly initialised cell to CellVector:
         cellAgentVector.push_back(newCell);
@@ -94,16 +94,11 @@ CellAgent World::initialiseCell(int setCellID) {
     unsigned int setCellSeed{seedDistribution(cellSeedGenerator)};
     double inhibitionBoolean{contactInhibitionDistribution(contactInhibitionGenerator)};
 
-    double setInhibitionRate;
-    if (inhibitionBoolean < 0.5) {
-        setInhibitionRate = 0.1;
-    } else {
-        setInhibitionRate = 0.9;
-    }
-
     return CellAgent(
-        startX, startY, startHeading, setCellSeed, setCellID, 2, 1, 3,
-        setInhibitionRate
+        startX, startY, startHeading,
+        setCellSeed, setCellID, int(inhibitionBoolean < 0),
+        3, 1, 1,
+        0.7, 0.7
     );
 }
 
@@ -135,10 +130,17 @@ void World::runCellStep(CellAgent& actingCell) {
     actingCell.setDirectionalInfluence(angle, intensity);
 
     // Determine contact status of cell (i.e. cells in Moore neighbourhood of current cell):
-    actingCell.setContactStatus(ecmField.getCellContactState(startIndex[0], startIndex[1]));
+    // Cell type 0:
+    actingCell.setContactStatus(
+        ecmField.getCellTypeContactState(startIndex[0], startIndex[1], 0), 0
+    );
+    // Cell type 1:
+    actingCell.setContactStatus(
+        ecmField.getCellTypeContactState(startIndex[0], startIndex[1], 1), 1
+    );
 
     // Take step:
-    ecmField.subtractFromCellCount(startIndex[0], startIndex[1]);
+    ecmField.subtractFromCellCount(startIndex[0], startIndex[1], actingCell.getCellType());
     actingCell.takeRandomStep();
 
     // Calculate and set effects of cell on world:
@@ -150,7 +152,7 @@ void World::runCellStep(CellAgent& actingCell) {
 
     // Set new count:
     std::array<int, 2> endIndex{getIndexFromLocation(rollPosition(cellFinish))};
-    ecmField.addToCellCount(endIndex[0], endIndex[1]);
+    ecmField.addToCellCount(endIndex[0], endIndex[1], actingCell.getCellType());
 }
 
 void World::setMovementOnMatrix(

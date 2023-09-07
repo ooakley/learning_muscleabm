@@ -44,8 +44,8 @@ int main(int argc, char** argv) {
         matrixFile.open(matrixFilename);
 
         // Running simulation:
-        World mainWorld{World(superIteration, 1000, 32, 200)};
-        for (int i = 0; i < 1000; ++i) {
+        World mainWorld{World(superIteration, 1000, 32, 250)};
+        for (int i = 0; i < 3000; ++i) {
             mainWorld.runSimulationStep();
             mainWorld.writePositionsToCSV(csvFile);
             mainWorld.writeMatrixToCSV(matrixFile);
