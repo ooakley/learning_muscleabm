@@ -36,6 +36,7 @@ CellAgent::CellAgent(
     , directionalIntensity{0}
     , cellType0ContactState{boostMatrix::zero_matrix<bool>(3, 3)}
     , cellType1ContactState{boostMatrix::zero_matrix<bool>(3, 3)}
+    , localHeadingState{boostMatrix::zero_matrix<double>(3, 3)}
     , cellSeed{setCellSeed}
     , cellID{setCellID}
     , cellType{setCellType}
@@ -101,6 +102,14 @@ double CellAgent::getCellType() {
     return cellType;
 }
 
+double CellAgent::getDirectionalInfluence() {
+    return directionalInfluence;
+}
+
+double CellAgent::getDirectionalIntensity() {
+    return directionalIntensity;
+}
+
 // Setters:
 void CellAgent::setDirectionalInfluence
 (
@@ -122,6 +131,10 @@ void CellAgent::setContactStatus(boostMatrix::matrix<bool> stateToSet, int cellT
     } else {
         cellType1ContactState = stateToSet;
     }
+}
+
+void CellAgent::setLocalHeadingState(boostMatrix::matrix<double> stateToSet) {
+    localHeadingState = stateToSet;
 }
 
 // Simulation code:
@@ -160,7 +173,7 @@ void CellAgent::takeRandomStep() {
 
     // Defining distribution and sampling step size:
     std::weibull_distribution<double> weibullDistribution;
-    double lambdaWeibull{7.5*exp(-betaForWeibullXCorr*abs(angleDelta)) + 1e-5};
+    double lambdaWeibull{2*exp(-betaForWeibullXCorr*abs(angleDelta)) + 1e-5};
 
     weibullDistribution = std::weibull_distribution<double>(kWeibull, lambdaWeibull);
     instantaneousSpeed = weibullDistribution(generatorWeibull);
@@ -193,15 +206,24 @@ bool CellAgent::checkForCollisions() {
         if (skipCollision) {return false;}
     }
 
+    // Calculate correction for relative cell angles:
+    double otherCellHeading{localHeadingState(iContact, jContact)};
+    double angularDistance{calculateMinimumAngularDistance(heading, otherCellHeading)};
+    double angularCorrectionFactor{pow(cos(angularDistance), 2) * 2};
+
     // Calculate homotypic / heterotypic interactions:
     std::array<bool, 2> cellTypeContacts{type0Contact, type1Contact};
     if (cellTypeContacts[cellType]) {
         // Do homotypic interaction if present:
-        if (uniformDistribution(generatorForInhibitionRate) < homotypicInhibitionRate) {
+        double effectiveHomotypicInhibition{(homotypicInhibitionRate*angularCorrectionFactor)+0.25};
+        if (uniformDistribution(generatorForInhibitionRate) < effectiveHomotypicInhibition) {
             return true;
         }
     } else if (cellTypeContacts[abs(cellType - 1)]) {
         // Do heterotypic interaction if no homotypic interaction:
+        double effectiveHeterotypicInhibition{
+            (heterotypicInhibitionRate*angularCorrectionFactor)+0.25
+        };
         if (uniformDistribution(generatorForInhibitionRate) < heterotypicInhibitionRate) {
             return true;
         }
@@ -255,4 +277,27 @@ double CellAgent::angleMod(double angle) {
     while (angle < -M_PI) {angle += 2*M_PI;};
     while (angle >= M_PI) {angle -= 2*M_PI;};
     return angle;
+}
+
+double CellAgent::calculateMinimumAngularDistance(double headingA, double headingB) {
+    // Calculating change in theta:
+    double deltaHeading{headingA - headingB};
+    while (deltaHeading <= -M_PI) {deltaHeading += M_PI;}
+    while (deltaHeading > M_PI) {deltaHeading -= M_PI;}
+
+    double flippedHeading;
+    if (deltaHeading < 0) {
+        flippedHeading = M_PI + deltaHeading;
+    } else {
+        flippedHeading = -(M_PI - deltaHeading);
+    }
+
+    // Selecting smallest change in theta and ensuring correct range:
+    if (abs(deltaHeading) < abs(flippedHeading)) {
+        assert((abs(deltaHeading) <= M_PI/2));
+        return deltaHeading;
+    } else {
+        assert((abs(flippedHeading) <= M_PI/2));
+        return flippedHeading;
+    };
 }

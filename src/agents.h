@@ -21,11 +21,14 @@ public:
     double getHeading();
     double getHomotypicInhibitionRate();
     double getCellType();
+    double getDirectionalInfluence();
+    double getDirectionalIntensity();
 
     // Setters:
     void setDirectionalInfluence(double newDirectionalInfluence, double newDirectionalIntensity);
     void setPosition(std::tuple<double, double> newPosition);
     void setContactStatus(boostMatrix::matrix<bool> stateToSet, int cellType);
+    void setLocalHeadingState(boostMatrix::matrix<double> stateToSet);
 
     // Simulation code:
     void takeRandomStep();
@@ -68,6 +71,7 @@ private:
     std::uniform_real_distribution<double> angleUniformDistribution;
     boostMatrix::matrix<bool> cellType0ContactState;
     boostMatrix::matrix<bool> cellType1ContactState;
+    boostMatrix::matrix<double> localHeadingState;
     double homotypicInhibitionRate;
     double heterotypicInhibitionRate;
     int cellType;
@@ -83,5 +87,6 @@ private:
 
     // Effectively a utility function for calculating the modulus of angles:
     double angleMod(double angle);
+    double calculateMinimumAngularDistance(double headingA, double headingB);
 
 };

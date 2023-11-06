@@ -13,11 +13,12 @@ public:
     bool getMatrixPresent(int i, int j);
     std::tuple<double, double> getAverageDeltaHeadingAroundIndex(int i, int j, double cellHeading);
     boostMatrix::matrix<bool> getCellTypeContactState(int i, int j, int cellType);
+    boostMatrix::matrix<double> getLocalHeadingState(int i, int j);
 
     // Setters:
     void setSubMatrix(int i, int j, double heading);
-    void addToCellCount(int i, int j, int cellType);
-    void subtractFromCellCount(int i, int j, int cellType);
+    void setCellPresence(int i, int j, int cellType, double cellHeading);
+    void removeCellPresence(int i, int j, int cellType);
 
 private:
     // Simulation properties of matrix:
@@ -29,6 +30,7 @@ private:
     boostMatrix::matrix<bool> ecmPresentMatrix;
     boostMatrix::matrix<int> cellType0CountMatrix;
     boostMatrix::matrix<int> cellType1CountMatrix;
+    boostMatrix::matrix<double> cellHeadingMatrix;
 
     // Simulation functions:
     void addToMatrix(int i, int j, double heading);

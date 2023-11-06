@@ -12,7 +12,8 @@ ECMField::ECMField(int setElements)
     , ecmPresentMatrix{boostMatrix::zero_matrix<bool>(elementCount, elementCount)}
     , cellType0CountMatrix{boostMatrix::zero_matrix<int>(elementCount, elementCount)}
     , cellType1CountMatrix{boostMatrix::zero_matrix<int>(elementCount, elementCount)}
-    , matrixPersistence{0.8}
+    , cellHeadingMatrix{boostMatrix::zero_matrix<double>(elementCount, elementCount)}
+    , matrixPersistence{0.999}
 {
 }
 
@@ -108,6 +109,36 @@ boostMatrix::matrix<bool> ECMField::getCellTypeContactState(int i, int j, int ce
     return cellTypeContactState;
 }
 
+boostMatrix::matrix<double> ECMField::getLocalHeadingState(int i, int j) {
+    // Asserting counting is working as expected:
+    assert((cellType0CountMatrix(i, j) >= 1 ) || (cellType1CountMatrix(i, j) >= 1));
+
+    // Instantiating heading matrix:
+    boostMatrix::matrix<double> localHeadingState{boostMatrix::zero_matrix<double>(3, 3)};
+
+    // Checking for cells in adjacent spaces:
+    std::array<int, 3> rowScan = {i-1, i, i+1};
+    std::array<int, 3> columnScan = {j-1, j, j+1};
+    int k{0}; 
+    for (auto & row : rowScan)
+    {
+        int safeRow{rollOverIndex(row)};
+        int l{0};
+        for (auto & column : columnScan)
+        {
+            int safeColumn{rollOverIndex(column)};
+            localHeadingState(k, l) = cellHeadingMatrix(safeRow, safeColumn);
+
+            // Incrementing column index for contact matrix:
+            l++;
+        }
+
+        // Incrementing row index for contact matrix:
+        k++;
+    }
+    return localHeadingState;
+}
+
 // Setters:
 void ECMField::setSubMatrix(int i, int j, double heading) {
     std::array<int, 3> rowScan = {i-1, i, i+1};
@@ -125,15 +156,20 @@ void ECMField::setSubMatrix(int i, int j, double heading) {
     }
 }
 
-void ECMField::addToCellCount(int i, int j, int cellType) {
+void ECMField::setCellPresence(int i, int j, int cellType, double cellHeading) {
+    // Adding to cell count matrices:
     if (cellType == 0) {
         cellType0CountMatrix(i, j) = cellType0CountMatrix(i, j) + 1;
     } else {
         cellType1CountMatrix(i, j) = cellType1CountMatrix(i, j) + 1;
     }
+
+    // Placing into cell heading matrix:
+    cellHeadingMatrix(i, j) = cellHeading;
 }
 
-void ECMField::subtractFromCellCount(int i, int j, int cellType) {
+void ECMField::removeCellPresence(int i, int j, int cellType) {
+    // Removing from cell count matrices:
     if (cellType == 0) {
         cellType0CountMatrix(i, j) = cellType0CountMatrix(i, j) - 1;
         assert(cellType0CountMatrix(i, j) >= 0);
@@ -141,6 +177,7 @@ void ECMField::subtractFromCellCount(int i, int j, int cellType) {
         cellType1CountMatrix(i, j) = cellType1CountMatrix(i, j) - 1;
         assert(cellType1CountMatrix(i, j) >= 0);
     }
+
 }
 
 // Private member functions:

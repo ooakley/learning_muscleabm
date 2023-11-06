@@ -55,6 +55,8 @@ void World::writePositionsToCSV(std::ofstream& csvFile) {
         csvFile << cellAgentVector[i].getX() << ",";
         csvFile << cellAgentVector[i].getY() << ","; 
         csvFile << cellAgentVector[i].getHeading() << ","; 
+        csvFile << cellAgentVector[i].getDirectionalInfluence() << ",";
+        csvFile << cellAgentVector[i].getDirectionalIntensity() << ",";
         csvFile << cellAgentVector[i].getCellType() << "\n"; 
     }
 }
@@ -79,7 +81,10 @@ void World::initialiseCellVector() {
 
         // Putting cell into count matrix:
         std::array<int, 2> initialIndex{getIndexFromLocation(newCell.getPosition())};
-        ecmField.addToCellCount(initialIndex[0], initialIndex[1], newCell.getCellType());
+        ecmField.setCellPresence(
+            initialIndex[0], initialIndex[1],
+            newCell.getCellType(), newCell.getHeading()
+        );
 
         // Adding newly initialised cell to CellVector:
         cellAgentVector.push_back(newCell);
@@ -96,10 +101,12 @@ CellAgent World::initialiseCell(int setCellID) {
 
     return CellAgent(
         startX, startY, startHeading,
-        setCellSeed, setCellID, int(inhibitionBoolean < 0),
-        3, 1, 1,
-        0.7, 0.7
+        setCellSeed, setCellID, int(inhibitionBoolean < 0.5),
+        3, 3, 0.5,
+        1, 1.5
     );
+    // Higher alpha = higher concentration
+    // Higher beta = lower lambda
 }
 
 // Simulation functions:
@@ -138,9 +145,13 @@ void World::runCellStep(CellAgent& actingCell) {
     actingCell.setContactStatus(
         ecmField.getCellTypeContactState(startIndex[0], startIndex[1], 1), 1
     );
+    // Local heading state:
+    actingCell.setLocalHeadingState(
+        ecmField.getLocalHeadingState(startIndex[0], startIndex[1])
+    );
 
     // Take step:
-    ecmField.subtractFromCellCount(startIndex[0], startIndex[1], actingCell.getCellType());
+    ecmField.removeCellPresence(startIndex[0], startIndex[1], actingCell.getCellType());
     actingCell.takeRandomStep();
 
     // Calculate and set effects of cell on world:
@@ -152,7 +163,10 @@ void World::runCellStep(CellAgent& actingCell) {
 
     // Set new count:
     std::array<int, 2> endIndex{getIndexFromLocation(rollPosition(cellFinish))};
-    ecmField.addToCellCount(endIndex[0], endIndex[1], actingCell.getCellType());
+    ecmField.setCellPresence(
+        endIndex[0], endIndex[1],
+        actingCell.getCellType(), actingCell.getHeading()
+    );
 }
 
 void World::setMovementOnMatrix(

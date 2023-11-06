@@ -20,7 +20,7 @@ int main(int argc, char** argv) {
     }
 
     // Running mulitple simulations:
-    for (int superIteration = 0; superIteration < 1; ++superIteration) {
+    for (int superIteration = 0; superIteration < 5; ++superIteration) {
         // Getting correct width string representation:
         std::stringstream iterationStringStream;
         iterationStringStream << std::setw(3) << std::setfill('0') << superIteration;
@@ -44,7 +44,7 @@ int main(int argc, char** argv) {
         matrixFile.open(matrixFilename);
 
         // Running simulation:
-        World mainWorld{World(superIteration, 1000, 32, 250)};
+        World mainWorld{World(superIteration, 1000, 32, 400)};
         for (int i = 0; i < 3000; ++i) {
             mainWorld.runSimulationStep();
             mainWorld.writePositionsToCSV(csvFile);
