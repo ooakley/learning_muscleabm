@@ -13,7 +13,9 @@ public:
     bool getMatrixPresent(int i, int j);
     std::tuple<double, double> getAverageDeltaHeadingAroundIndex(int i, int j, double cellHeading);
     boostMatrix::matrix<bool> getCellTypeContactState(int i, int j, int cellType);
-    boostMatrix::matrix<double> getLocalHeadingState(int i, int j);
+    boostMatrix::matrix<double> getLocalCellHeadingState(int i, int j);
+    boostMatrix::matrix<double> getLocalMatrixHeading(int i, int j);
+    boostMatrix::matrix<bool> getLocalMatrixPresence(int i, int j);
 
     // Setters:
     void setSubMatrix(int i, int j, double heading);

@@ -4,29 +4,35 @@
 class CellAgentTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        double startX{0}, startY{0}, startHeading{0}, setWbK{3}, setAlpha{1}, setBeta{1};
+        double startX{0}, startY{0}, startHeading{0}, setWbK{3}, setKappa{1};
         // Basic cell agent:
         cellAgent = new CellAgent(
             startX, startY, startHeading,
             0, 1, 1,
-            setWbK, setAlpha, setBeta,
-            1, 0.2
+            setWbK, setKappa,
+            1, 0.2,
+            0.4, 0.75,
+            1, 1
         );
 
         // Cell agent with the same random seed:
         cellAgentAlt = new CellAgent(
             startX, startY, startHeading,
             0, 1, 1,
-            setWbK, setAlpha, setBeta,
-            1, 0.2
+            setWbK, setKappa,
+            1, 0.2,
+            0.4, 0.75,
+            1, 1
         );
 
         // Cell agent with a different random seed:
         cellAgentDifferent = new CellAgent(
             startX, startY, startHeading,
             1, 1, 1,
-            setWbK, setAlpha, setBeta,
-            1, 0.2
+            setWbK, setKappa,
+            1, 0.2,
+            0.4, 0.75,
+            1, 1
         );
     }
 

@@ -1,8 +1,16 @@
 cmake_minimum_required(VERSION 3.25.2)
 project(cell_abm)
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_WARN_DEPRECATED FALSE)
+add_definitions("-DBOOST_ALLOW_DEPRECATED_HEADERS")
+add_definitions("-DBOOST_BIND_GLOBAL_PLACEHOLDERS")
 enable_testing()
+
+add_compile_options(
+    -Werror
+    -Wno-deprecated-declarations
+)
 
 # Ensuring GoogleTest is Present
 include(FetchContent)
@@ -13,7 +21,7 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(googletest)
 
 # Ensuring Boost is present:
-find_package(Boost COMPONENTS regex system filesystem REQUIRED)
+find_package(Boost COMPONENTS regex system filesystem program_options REQUIRED)
 message(STATUS ${Boost_INCLUDE_DIRS})
 set(Boost_INCLUDE_DIRS /usr/local/Cellar/boost/1.82.0_1/include)
 message(STATUS ${Boost_INCLUDE_DIRS})

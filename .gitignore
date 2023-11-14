@@ -37,3 +37,4 @@ build/
 # Output data:
 *.csv
 fileOutputs/*
+fileOutputs_old/*

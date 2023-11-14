@@ -14,7 +14,8 @@ World::World
     int setWorldSeed,
     double setWorldSideLength,
     int setECMElementCount,
-    int setNumberOfCells
+    int setNumberOfCells,
+    CellParameters setCellParameters
 )
     : worldSeed{setWorldSeed}
     , worldSideLength{setWorldSideLength}
@@ -23,6 +24,7 @@ World::World
     , ecmField{ECMField(countECMElement)}
     , numberOfCells{setNumberOfCells}
     , simulationTime{0}
+    , cellParameters{setCellParameters}
 {
     // Initialising randomness:
     seedGenerator = std::mt19937(worldSeed);
@@ -54,9 +56,13 @@ void World::writePositionsToCSV(std::ofstream& csvFile) {
         csvFile << cellAgentVector[i].getID() << ",";
         csvFile << cellAgentVector[i].getX() << ",";
         csvFile << cellAgentVector[i].getY() << ","; 
-        csvFile << cellAgentVector[i].getHeading() << ","; 
+        csvFile << cellAgentVector[i].getPolarity() << ",";
+        csvFile << cellAgentVector[i].getPolarityExtent() << ",";
         csvFile << cellAgentVector[i].getDirectionalInfluence() << ",";
         csvFile << cellAgentVector[i].getDirectionalIntensity() << ",";
+        csvFile << cellAgentVector[i].getActinFlow() << ",";
+        csvFile << cellAgentVector[i].getMovementDirection() << ",";
+        csvFile << cellAgentVector[i].getDirectionalShift() << ",";
         csvFile << cellAgentVector[i].getCellType() << "\n"; 
     }
 }
@@ -83,7 +89,7 @@ void World::initialiseCellVector() {
         std::array<int, 2> initialIndex{getIndexFromLocation(newCell.getPosition())};
         ecmField.setCellPresence(
             initialIndex[0], initialIndex[1],
-            newCell.getCellType(), newCell.getHeading()
+            newCell.getCellType(), newCell.getPolarity()
         );
 
         // Adding newly initialised cell to CellVector:
@@ -101,9 +107,11 @@ CellAgent World::initialiseCell(int setCellID) {
 
     return CellAgent(
         startX, startY, startHeading,
-        setCellSeed, setCellID, int(inhibitionBoolean < 0.5),
-        3, 3, 0.5,
-        1, 1.5
+        setCellSeed, setCellID, int(inhibitionBoolean < 0),
+        cellParameters.wbK, cellParameters.kappa,
+        cellParameters.homotypicInhibition, cellParameters.heterotypicInhibition,
+        cellParameters.polarityPersistence, cellParameters.polarityTurningCoupling,
+        cellParameters.flowScaling, cellParameters.flowPolarityCoupling
     );
     // Higher alpha = higher concentration
     // Higher beta = lower lambda
@@ -127,14 +135,24 @@ void World::runCellStep(CellAgent& actingCell) {
     std::tuple<double, double> cellStart{actingCell.getPosition()};
     std::array<int, 2> startIndex{getIndexFromLocation(cellStart)};
 
-    // Getting headings of ECM surrounding cell:
-    double angle, intensity;
-    std::tie(angle, intensity) = ecmField.getAverageDeltaHeadingAroundIndex(
-        startIndex[0], startIndex[1], actingCell.getHeading()
+    // // Setting cell percepts:
+
+    // Setting percepts of matrix:
+    actingCell.setLocalMatrixHeading(
+        ecmField.getLocalMatrixHeading(startIndex[0], startIndex[1])
+    );
+    actingCell.setLocalMatrixPresence(
+        ecmField.getLocalMatrixPresence(startIndex[0], startIndex[1])
     );
 
-    // Calculate and set effects of world on cell heading:
-    actingCell.setDirectionalInfluence(angle, intensity);
+    // if (actingCell.getID() == 1) {
+    //     double angle, intensity;
+    //     std::tie(angle, intensity) = ecmField.getAverageDeltaHeadingAroundIndex(
+    //         startIndex[0], startIndex[1], actingCell.getPolarity()
+    //     );
+    //     std::cout << angle << " -- " << intensity << "\n";
+    // }
+
 
     // Determine contact status of cell (i.e. cells in Moore neighbourhood of current cell):
     // Cell type 0:
@@ -145,18 +163,18 @@ void World::runCellStep(CellAgent& actingCell) {
     actingCell.setContactStatus(
         ecmField.getCellTypeContactState(startIndex[0], startIndex[1], 1), 1
     );
-    // Local heading state:
-    actingCell.setLocalHeadingState(
-        ecmField.getLocalHeadingState(startIndex[0], startIndex[1])
+    // Local cell heading state:
+    actingCell.setLocalCellHeadingState(
+        ecmField.getLocalCellHeadingState(startIndex[0], startIndex[1])
     );
 
-    // Take step:
+    // // Run cell intrinsic movement:
     ecmField.removeCellPresence(startIndex[0], startIndex[1], actingCell.getCellType());
     actingCell.takeRandomStep();
 
     // Calculate and set effects of cell on world:
     std::tuple<double, double> cellFinish{actingCell.getPosition()};
-    setMovementOnMatrix(cellStart, cellFinish, actingCell.getHeading());
+    setMovementOnMatrix(cellStart, cellFinish, actingCell.getMovementDirection());
 
     // Rollover the cell if out of bounds:
     actingCell.setPosition(rollPosition(cellFinish));
@@ -165,7 +183,7 @@ void World::runCellStep(CellAgent& actingCell) {
     std::array<int, 2> endIndex{getIndexFromLocation(rollPosition(cellFinish))};
     ecmField.setCellPresence(
         endIndex[0], endIndex[1],
-        actingCell.getCellType(), actingCell.getHeading()
+        actingCell.getCellType(), actingCell.getPolarity()
     );
 }
 

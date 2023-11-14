@@ -3,6 +3,12 @@
 #include "agents.h"
 #include "ecm.h"
 
+// Structure to store necessary parameters for the simulation:
+struct CellParameters {
+    float wbK, kappa, homotypicInhibition, heterotypicInhibition,
+    polarityPersistence, polarityTurningCoupling, flowScaling, flowPolarityCoupling;
+};
+
 class World {
 public:
     // Constructor and intialisation:
@@ -11,7 +17,8 @@ public:
         int setWorldSeed,
         double setWorldSideLength,
         int setECMElementCount,
-        int setNumberOfCells
+        int setNumberOfCells,
+        CellParameters setCellParameters
     );
 
     // Getters:
@@ -36,6 +43,7 @@ private:
     // Complex objects from our libraries:
     std::vector<CellAgent> cellAgentVector;
     ECMField ecmField;
+    CellParameters cellParameters;
 
     // Cell population characteristics:
     int numberOfCells;

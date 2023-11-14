@@ -9,26 +9,44 @@ public:
     CellAgent(
         double startX, double startY, double startHeading,
         unsigned int setCellSeed, int setCellID, int setCellType,
-        double setWbK, double setAlpha, double setBeta,
-        double setHomotypicInhibition, double setHeterotypicInhibiton
+        double setWbK, double setKappa,
+        double setHomotypicInhibition, double setHeterotypicInhibiton,
+        double setPolarityPersistence, double setPolarityTurningCoupling,
+        double setFlowScaling, double setFlowPolarityCoupling
     );
 
     // Getters:
+    // Getters for values that shouldn't change:
+    double getID();
+    double getHomotypicInhibitionRate();
+    double getCellType();
+
+    // Persistent variable getters: (these variables represent aspects of the cell's "memory")
     double getX();
     double getY();
     std::tuple<double, double> getPosition();
-    double getID();
-    double getHeading();
-    double getHomotypicInhibitionRate();
-    double getCellType();
+    double getPolarity();
+    double getPolarityExtent();
+    std::vector<double> getAttachmentHistory();
+
+    // Instantaneous variable getters: (these variables are updated each timestep,
+    // and represent the cell's percepts/actions)
+    double getMovementDirection();
+    double getActinFlow();
     double getDirectionalInfluence();
     double getDirectionalIntensity();
+    double getAverageAttachmentHeading();
+    double getDirectionalShift();
 
     // Setters:
-    void setDirectionalInfluence(double newDirectionalInfluence, double newDirectionalIntensity);
+    // Setters for simulation (moving cells around etc.):
     void setPosition(std::tuple<double, double> newPosition);
+    void setLocalCellHeadingState(boostMatrix::matrix<double> stateToSet);
+
+    // Setters for simulating cell perception (e.g. updating cell percepts):
+    void setLocalMatrixHeading(boostMatrix::matrix<double> matrixToSet);
+    void setLocalMatrixPresence(boostMatrix::matrix<bool> matrixToSet);
     void setContactStatus(boostMatrix::matrix<bool> stateToSet, int cellType);
-    void setLocalHeadingState(boostMatrix::matrix<double> stateToSet);
 
     // Simulation code:
     void takeRandomStep();
@@ -40,21 +58,42 @@ private:
     std::mt19937 seedGenerator;
     std::uniform_int_distribution<unsigned int> seedDistribution;
 
+    // Whether to simulate matrix interactions:
+    bool thereIsMatrixInteraction;
+
     // Position and physical characteristics:
     double x;
     double y;
-    double heading;
-    double instantaneousSpeed;
+    double polarityX;
+    double polarityY;
+    std::vector<double> attachmentHistory;
+    double kappa;
+    double polarityPersistence;
+    double polarityTurningCoupling;
+    double flowPolarityCoupling;
+    double flowScaling;
+
+    // Properties calculated each timestep:
+    double movementDirection;
+    double actinFlow;
     double directionalInfluence; // -pi <= theta < pi
     double directionalIntensity; // 0 <= I < 1
+    double directionalShift; // -pi <= theta < pi
 
-    // Speed-persistence relationship constants:
-    double alphaForVonMisesXCorr;
-    double betaForWeibullXCorr;
+    // Percepts:
+    boostMatrix::matrix<double> localMatrixHeading;
+    boostMatrix::matrix<bool> localMatrixPresence;
+
+    boostMatrix::matrix<bool> cellType0ContactState;
+    boostMatrix::matrix<bool> cellType1ContactState;
+    boostMatrix::matrix<double> localCellHeadingState;
 
     // Weibull sampling for step size:
     std::mt19937 generatorWeibull;
     double kWeibull;
+
+    std::tuple<double, double> getAverageDeltaHeading();
+    double calculateCellDeltaTowardsECM(double ecmHeading, double cellHeading);
 
     // We need to use a special distribution (von Mises) to sample from a random
     // direction over a circle - unfortunately not included in std
@@ -69,9 +108,6 @@ private:
     std::mt19937 generatorCornerCorrection;
     std::mt19937 generatorForInhibitionRate;
     std::uniform_real_distribution<double> angleUniformDistribution;
-    boostMatrix::matrix<bool> cellType0ContactState;
-    boostMatrix::matrix<bool> cellType1ContactState;
-    boostMatrix::matrix<double> localHeadingState;
     double homotypicInhibitionRate;
     double heterotypicInhibitionRate;
     int cellType;
@@ -88,5 +124,6 @@ private:
     // Effectively a utility function for calculating the modulus of angles:
     double angleMod(double angle);
     double calculateMinimumAngularDistance(double headingA, double headingB);
-
+    double findPolarityDirection();
+    double findPolarityExtent();
 };
