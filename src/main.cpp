@@ -10,10 +10,6 @@
 #include "boost/filesystem/fstream.hpp"
 #include "boost/program_options.hpp"
 
-#include "boost/uuid/uuid.hpp"
-#include "boost/uuid/uuid_generators.hpp"
-#include "boost/uuid/uuid_io.hpp"
-
 #include "world.h"
 
 namespace boostfs = boost::filesystem;
@@ -78,14 +74,11 @@ int main(int argc, char** argv) {
         )
     ;
 
-    // Declare the variables map object:
+    // Parse the variables from the command line:
     po::variables_map vm;
-
-    // Run parsing:
     try {
         // Parse the command line arguments
         po::store(po::parse_command_line(argc, argv, desc), vm);
-
         // Notify if there are any unrecognized options
         po::notify(vm);
     } catch (const std::exception& e) {
@@ -105,9 +98,6 @@ int main(int argc, char** argv) {
         commandString.append(argv[i]).append("");
     };
     std::cout << commandString << "\n";
-    // boost::uuids::string_generator gen;
-    // boost::uuids::uuid generatedUUID = gen(commandString);
-    // std::string stringUUID{boost::uuids::to_string(generatedUUID)};
 
     // Generating subdirectory to store simulation results:
     std::string subdirectoryPath{directoryPath + commandString + "/"};
@@ -140,7 +130,7 @@ int main(int argc, char** argv) {
         matrixFile.open(matrixFilename);
 
         // Running simulation:
-        World mainWorld{World(superIteration, worldSize, 32, numberOfCells, cellParams)};
+        World mainWorld{World(superIteration, worldSize, gridSize, numberOfCells, cellParams)};
         for (int i = 0; i < 1000; ++i) {
             mainWorld.runSimulationStep();
             mainWorld.writePositionsToCSV(csvFile);
