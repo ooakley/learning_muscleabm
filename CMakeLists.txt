@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.25.2)
+cmake_minimum_required(VERSION 3.24.3)
 project(cell_abm)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -8,7 +8,6 @@ add_definitions("-DBOOST_BIND_GLOBAL_PLACEHOLDERS")
 enable_testing()
 
 add_compile_options(
-    -Werror
     -Wno-deprecated-declarations
 )
 
