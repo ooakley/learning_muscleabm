@@ -6,12 +6,12 @@ GRIDSEARCH = {
     "numberOfCells": [150, 150, 1],
     "worldSize": [1024, 1024, 1],
     "gridSize": [32, 32, 1],
-    "wbK": [0.5, 2, 3],
-    "kappa": [1, 4, 3],
+    "wbK": [1, 1, 1],
+    "kappa": [3, 3, 1],
     "homotypicInhibition": [0.4, 0.6, 2],
     "heterotypicInhibition": [0.8, 0.9, 2],
-    "polarityPersistence": [0.2, 0.95, 3],
-    "polarityTurningCoupling": [0.1, 0.9, 3],
+    "polarityPersistence": [0.3, 0.95, 4],
+    "polarityTurningCoupling": [0.1, 0.9, 4],
     "flowScaling": [0.5, 4, 3],
     "flowPolarityCoupling": [0.2, 2, 3],
 }
@@ -53,7 +53,7 @@ def main():
 
         # Writing gridsearch values:
         for i, argtuple in enumerate(argument_grid):
-            f.write(f"{i},")
+            f.write(f"{i+1},")
             for argument_value in argtuple:
                 f.write(f"{argument_value},")
             f.write("\n")
