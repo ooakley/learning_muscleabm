@@ -20,9 +20,9 @@ def main():
     # Generate the grid search variables using the most unholy list comprehension I have written:
     argument_grid = [
         (
-            superIterationCount, numberOfCells, worldSize, gridSize, wbK, kappa, homotypicInhibition,
-            heterotypicInhibition, polarityPersistence, polarityTurningCoupling, flowScaling,
-            flowPolarityCoupling 
+            int(superIterationCount), int(numberOfCells), int(worldSize), int(gridSize),
+            wbK, kappa, homotypicInhibition, heterotypicInhibition, polarityPersistence,
+            polarityTurningCoupling, flowScaling, flowPolarityCoupling 
         ) \
         for superIterationCount in np.linspace(*GRIDSEARCH["superIterationCount"]) \
         for numberOfCells in np.linspace(*GRIDSEARCH["numberOfCells"]) \
@@ -44,18 +44,22 @@ def main():
     with open('gridsearch.txt', 'w') as f:
         # Writing column names:
         header_string = ""
-        header_string += "array_id,"
+        header_string += "array_id\t"
         for argument_name in GRIDSEARCH.keys():
             header_string += argument_name
-            header_string += ","
+            header_string += "\t"
         header_string += "\n"
         f.write(header_string)
 
         # Writing gridsearch values:
         for i, argtuple in enumerate(argument_grid):
+<<<<<<< HEAD
             f.write(f"{i+1},")
+=======
+            f.write(f"{i}\t")
+>>>>>>> bf09d54ccade163391cf894a1e036c572f4a374a
             for argument_value in argtuple:
-                f.write(f"{argument_value},")
+                f.write(f"{argument_value}\t")
             f.write("\n")
 
     return None
