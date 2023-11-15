@@ -44,22 +44,19 @@ def main():
     with open('gridsearch.txt', 'w') as f:
         # Writing column names:
         header_string = ""
-        header_string += "array_id\t"
+        header_string += "array_id"
         for argument_name in GRIDSEARCH.keys():
-            header_string += argument_name
             header_string += "\t"
+            header_string += argument_name
         header_string += "\n"
         f.write(header_string)
 
         # Writing gridsearch values:
         for i, argtuple in enumerate(argument_grid):
-<<<<<<< HEAD
-            f.write(f"{i+1},")
-=======
-            f.write(f"{i}\t")
->>>>>>> bf09d54ccade163391cf894a1e036c572f4a374a
+            f.write(f"{i+1}")
             for argument_value in argtuple:
-                f.write(f"{argument_value}\t")
+                f.write("\t")
+                f.write(f"{argument_value}")
             f.write("\n")
 
     return None

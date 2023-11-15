@@ -19,7 +19,7 @@ namespace po = boost::program_options;
 Hello! There are a lot of command line arguments, for which I apologise. It makes
 parallelisation easier. If you'd just like to run the simulation, here's what you can paste into
 the terminal after compiling the code:
-./main --superIterationCount 5 --numberOfCells 200 --worldSize 1000 --gridSize 32 \
+./main --jobArrayID 0 --superIterationCount 5 --numberOfCells 200 --worldSize 1000 --gridSize 32 \
     --wbK 1.0 --kappa 2.5 --homotypicInhibition 0.8 --heterotypicInhibition 0.5 \
     --polarityPersistence 0.9 --polarityTurningCoupling 0.6 --flowScaling 1.2 \
     --flowPolarityCoupling 0.7
@@ -27,6 +27,7 @@ the terminal after compiling the code:
 
 int main(int argc, char** argv) {
     // Declaring variables to be parsed:
+    int jobArrayID;
     int superIterationCount;
     int numberOfCells;
     int worldSize;
@@ -36,6 +37,9 @@ int main(int argc, char** argv) {
     // Parsing variables from the command line:
     po::options_description desc("Parameters to be set for the simulation.");
     desc.add_options()
+        ("jobArrayID", po::value<int>(&jobArrayID)->required(),
+            "ID of the job array, to be referenced against gridsearch.txt. Ignore if not using array."
+        )
         ("superIterationCount", po::value<int>(&superIterationCount)->required(),
             "Number of iterations with same parameters to run, each with a different seed."
         )
@@ -92,15 +96,8 @@ int main(int argc, char** argv) {
         boostfs::create_directory(directoryPath);
     }
 
-    // Generating simulation parameter id and run history .txt file:
-    std::string commandString{""};
-    for (int i = 1; i < argc; ++i) {
-        commandString.append(argv[i]).append("");
-    };
-    std::cout << commandString << "\n";
-
     // Generating subdirectory to store simulation results:
-    std::string subdirectoryPath{directoryPath + commandString + "/"};
+    std::string subdirectoryPath{directoryPath + std::to_string(jobArrayID) + "/"};
     if (!boostfs::exists(subdirectoryPath)) {
         boostfs::create_directory(subdirectoryPath);
     }
