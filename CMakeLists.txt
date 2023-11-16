@@ -8,7 +8,7 @@ add_definitions("-DBOOST_BIND_GLOBAL_PLACEHOLDERS")
 enable_testing()
 
 add_compile_options(
-    -Wno-deprecated-declarations
+  -Wno-deprecated-declarations
 )
 
 # Ensuring GoogleTest is Present
