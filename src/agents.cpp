@@ -244,7 +244,7 @@ bool CellAgent::checkForCollisions() {
     // Calculate correction for relative cell angles:
     double otherCellHeading{localCellHeadingState(iContact, jContact)};
     double angularDistance{calculateMinimumAngularDistance(findPolarityDirection(), otherCellHeading)};
-    double angularCorrectionFactor{pow(sin(angularDistance), 2) * 2};
+    double angularCorrectionFactor{pow(sin(angularDistance), 2)};
 
     // Calculate homotypic / heterotypic interactions:
     std::array<bool, 2> cellTypeContacts{type0Contact, type1Contact};

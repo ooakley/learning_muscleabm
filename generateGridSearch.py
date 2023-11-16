@@ -8,12 +8,12 @@ GRIDSEARCH = {
     "gridSize": [32, 32, 1],
     "wbK": [1, 1, 1],
     "kappa": [3, 3, 1],
-    "homotypicInhibition": [0.4, 0.6, 2],
-    "heterotypicInhibition": [0.8, 0.9, 2],
-    "polarityPersistence": [0.3, 0.95, 4],
+    "homotypicInhibition": [0.2, 0.8, 4],
+    "heterotypicInhibition": [0, 0, 1],
+    "polarityPersistence": [0.1, 0.9, 4],
     "polarityTurningCoupling": [0.1, 0.9, 4],
-    "flowScaling": [0.5, 4, 3],
-    "flowPolarityCoupling": [0.2, 2, 3],
+    "flowScaling": [1, 4, 4],
+    "flowPolarityCoupling": [0.8, 2, 4],
 }
 
 def main():
