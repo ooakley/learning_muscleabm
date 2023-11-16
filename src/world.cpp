@@ -77,6 +77,11 @@ void World::writeMatrixToCSV(std::ofstream& matrixFile) {
             matrixFile << ecmField.getHeading(i, j) << ",";
         }
     }
+    for (int i = 0; i < countECMElement; i++) {
+        for (int j = 0; j < countECMElement; j++) {
+            matrixFile << ecmField.getMatrixPresent(i, j) << ",";
+        }
+    }
 }
 
 // Setters:
@@ -145,16 +150,6 @@ void World::runCellStep(CellAgent& actingCell) {
     actingCell.setLocalMatrixHeading(
         ecmField.getLocalMatrixHeading(startIndex[0], startIndex[1])
     );
-
-    if (simulationTime == 0) {
-        boostMatrix::matrix<bool> test{ecmField.getLocalMatrixPresence(startIndex[0], startIndex[1])};
-        for (unsigned int i = 0; i < test.size1(); ++i) {
-            for (unsigned int j = 0; j < test.size2(); ++j) {
-                std::cout << test(i, j) << "\n";
-                assert(!test(i, j)); 
-            }
-        }
-    }  
 
     actingCell.setLocalMatrixPresence(
         ecmField.getLocalMatrixPresence(startIndex[0], startIndex[1])

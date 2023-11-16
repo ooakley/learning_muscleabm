@@ -248,6 +248,7 @@ void ECMField::addToMatrix(int i, int j, double cellHeading) {
         return;
     };
 
+    assert(ecmPresentMatrix(i, j) != 0);
     // Calculating delta between cell heading and ecm heading:
     double currentECMHeading{ecmHeadingMatrix(i, j)};
     double smallestDeltaInECM{calculateECMDeltaTowardsCell(currentECMHeading, cellHeading)};

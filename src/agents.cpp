@@ -31,7 +31,7 @@ CellAgent::CellAgent(
     double setPolarityPersistence, double setPolarityTurningCoupling,
     double setFlowScaling, double setFlowPolarityCoupling
     )
-    : thereIsMatrixInteraction{true}
+    : thereIsMatrixInteraction{false}
     , x{startX}
     , y{startY}
     , polarityX{0}
@@ -203,7 +203,7 @@ void CellAgent::takeRandomStep() {
     y = y + dy;
 
     // // Update polarity based on movement direction and actin flow:
-    double polarityChangeExtent{std::tanh(actinFlow*flowPolarityCoupling)};
+    double polarityChangeExtent{tanh(actinFlow*flowPolarityCoupling)};
     double polarityChangeX{polarityChangeExtent*cos(movementDirection)};
     double polarityChangeY{polarityChangeExtent*sin(movementDirection)};
 
@@ -211,7 +211,7 @@ void CellAgent::takeRandomStep() {
     double newPolarityY{polarityPersistence*polarityY + (1-polarityPersistence)*polarityChangeY};
 
     // Clamping polarity components to [-1, 1] (while preserving direction):
-    double newPolarityExtent = sqrt(pow(newPolarityX, 2) + pow(newPolarityY, 2));
+    double newPolarityExtent{sqrt(pow(newPolarityX, 2) + pow(newPolarityY, 2))};
     assert(newPolarityExtent <= 1);
     double direction{atan2(newPolarityY, newPolarityX)};
     polarityX = newPolarityExtent * cos(direction);
