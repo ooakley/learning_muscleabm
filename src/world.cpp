@@ -218,7 +218,7 @@ void World::setMovementOnMatrix(
     }
 
     // Setting blocks to heading:
-    for (const auto& block : blocksToSet) {
+    for (auto& block : blocksToSet) {
         ecmField.setSubMatrix(block[0], block[1], cellHeading);
     }
 
