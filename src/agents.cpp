@@ -388,7 +388,7 @@ double CellAgent::calculateCellDeltaTowardsECM(double ecmHeading, double cellHea
 
     // Calculating change in theta (ECM is direction agnostic so we have to reverse it):
     double deltaHeading{ecmHeading - cellHeading};
-    while (deltaHeading <= -M_PI) {deltaHeading += M_PI;}
+    // while (deltaHeading <= -M_PI) {deltaHeading += M_PI;}
     while (deltaHeading > M_PI) {deltaHeading -= M_PI;}
 
     double flippedHeading;

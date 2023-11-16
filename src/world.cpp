@@ -8,6 +8,10 @@
 #include <cmath>
 #include <tuple>
 
+#include <boost/numeric/ublas/matrix.hpp>
+
+namespace boostMatrix = boost::numeric::ublas;
+
 // Constructor and intialisation:
 World::World
 (
@@ -141,6 +145,17 @@ void World::runCellStep(CellAgent& actingCell) {
     actingCell.setLocalMatrixHeading(
         ecmField.getLocalMatrixHeading(startIndex[0], startIndex[1])
     );
+
+    if (simulationTime == 0) {
+        boostMatrix::matrix<bool> test{ecmField.getLocalMatrixPresence(startIndex[0], startIndex[1])};
+        for (unsigned int i = 0; i < test.size1(); ++i) {
+            for (unsigned int j = 0; j < test.size2(); ++j) {
+                std::cout << test(i, j) << "\n";
+                assert(!test(i, j)); 
+            }
+        }
+    }  
+
     actingCell.setLocalMatrixPresence(
         ecmField.getLocalMatrixPresence(startIndex[0], startIndex[1])
     );
