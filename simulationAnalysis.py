@@ -49,18 +49,20 @@ def find_persistence_time(trajectory_dataframe):
         particle_directions = np.array(
             trajectory_dataframe[trajectory_dataframe["particle"] == particle]["movement_direction"]
         )
+
+        direction_differences = np.subtract.outer(particle_directions, particle_directions)
+        direction_differences[direction_differences < -np.pi] += 2*np.pi
+        direction_differences[direction_differences > np.pi] -= 2*np.pi
+        direction_differences = np.abs(direction_differences)
+
         persistence_time_list = []
-        for i in range(len(particle_directions)):
-            starting_angle = particle_directions[i]
-            for j in range(len(particle_directions[i:])):
-                angle_difference = starting_angle - particle_directions[i+j]
-                while angle_difference < -np.pi:
-                    angle_difference += 2*np.pi
-                while angle_difference > np.pi:
-                    angle_difference -= 2*np.pi
-                if np.abs(angle_difference) >= np.pi/2:
-                    persistence_time_list.append(j)
-                    break
+        for timestep in range(len(particle_directions)):
+            subsequent_directions = direction_differences[timestep, timestep:]
+            persistence_time = np.argmax(subsequent_directions > np.pi/2)
+            if persistence_time == 0:
+                continue
+            persistence_time_list.append(persistence_time)
+
         pt_list.append(np.mean(np.log(persistence_time_list)))
 
     return pt_list
