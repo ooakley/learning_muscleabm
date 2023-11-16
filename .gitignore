@@ -38,4 +38,5 @@ build/
 *.csv
 fileOutputs/*
 fileOutputs_old/*
+fileOutputsServer/*
 gridsearch.txt
