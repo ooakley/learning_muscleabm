@@ -9,7 +9,10 @@
 
 #include <boost/numeric/ublas/matrix.hpp>
 namespace boostMatrix = boost::numeric::ublas;
+using std::atan2;
+
 typedef std::vector<std::tuple<int, int>> vectorOfTuples;
+
 vectorOfTuples HEADING_CONTACT_MAPPING{
     std::tuple<int, int>{1, 0},
     std::tuple<int, int>{0, 0},

@@ -4,6 +4,7 @@
 
 #include <iostream>
 namespace boostMatrix = boost::numeric::ublas;
+using std::atan2;
 
 // Constructor:
 ECMField::ECMField(int setElements)
