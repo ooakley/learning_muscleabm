@@ -116,7 +116,7 @@ CellAgent World::initialiseCell(int setCellID) {
 
     return CellAgent(
         startX, startY, startHeading,
-        setCellSeed, setCellID, int(inhibitionBoolean < 0),
+        setCellSeed, setCellID, int(inhibitionBoolean < 0.5),
         cellParameters.wbK, cellParameters.kappa,
         cellParameters.homotypicInhibition, cellParameters.heterotypicInhibition,
         cellParameters.polarityPersistence, cellParameters.polarityTurningCoupling,

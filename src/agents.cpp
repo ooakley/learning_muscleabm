@@ -34,11 +34,11 @@ CellAgent::CellAgent(
     double setPolarityPersistence, double setPolarityTurningCoupling,
     double setFlowScaling, double setFlowPolarityCoupling
     )
-    : thereIsMatrixInteraction{false}
+    : thereIsMatrixInteraction{true}
     , x{startX}
     , y{startY}
-    , polarityX{0}
-    , polarityY{0}
+    , polarityX{0.001 * cos(startHeading)}
+    , polarityY{0.001 * sin(startHeading)}
     , actinFlow{0}
     , flowPolarityCoupling{setFlowPolarityCoupling}
     , flowScaling{setFlowScaling}
@@ -84,7 +84,6 @@ CellAgent::CellAgent(
     generatorForInhibitionRate = std::mt19937(seedDistribution(seedGenerator));
     angleUniformDistribution = std::uniform_real_distribution<double>(-M_PI, M_PI);
 }
-
 // Public Definitions:
 
 // Getters:
@@ -153,7 +152,7 @@ void CellAgent::takeRandomStep() {
     //     std::cout << relativeECMDirection << " ~~~~ " << ecmCoherence << "\n";
     // }
 
-    // Sample von mises distribution and update attachment history:
+    // Sample von mises distribution:
     double angleDelta = sampleVonMises(kappa);
     double vonMisesMean{0};
     if (uniformDistribution(generatorInfluence) < directionalIntensity) {
@@ -161,10 +160,14 @@ void CellAgent::takeRandomStep() {
     }
     directionalShift = angleMod(angleDelta + vonMisesMean);
 
-    movementDirection = angleMod(
-        findPolarityDirection() + 
-        (1-(findPolarityExtent()*polarityTurningCoupling))*directionalShift
-    );
+    // Finding angle mean of current polarity and proposed movement direction:
+    double proposedMovementDirection = angleMod(findPolarityDirection() + directionalShift);
+    double shiftWeighting{1-(findPolarityExtent()*polarityTurningCoupling)};
+
+    double movX{shiftWeighting*cos(proposedMovementDirection) + (1-shiftWeighting)*polarityX};
+    double movY{shiftWeighting*sin(proposedMovementDirection) + (1-shiftWeighting)*polarityY};
+
+    movementDirection = atan2(movY, movX);
 
     // double newAttachmentDirection = angleMod(findPolarityDirection() + angleDelta);
     // attachmentHistory.insert(attachmentHistory.begin(), newAttachmentDirection);
@@ -175,8 +178,8 @@ void CellAgent::takeRandomStep() {
     // // Calculate movement direction using polarity-weighted average of attachments:
     // movementDirection = getAverageAttachmentHeading();
 
-    double collisionRepolarisation{-0.05}; // [-1, 1]
-    double repolarisationRate{0.9}; // [0, 1]
+    double collisionRepolarisation{0.75}; // [-1, 1]
+    double repolarisationRate{0.5}; // [0, 1]
 
     // // Calculating actin flow:
     // Calculate weibull lambda based on absolute value of polarity:
@@ -247,7 +250,7 @@ bool CellAgent::checkForCollisions() {
     // Calculate correction for relative cell angles:
     double otherCellHeading{localCellHeadingState(iContact, jContact)};
     double angularDistance{calculateMinimumAngularDistance(findPolarityDirection(), otherCellHeading)};
-    double angularCorrectionFactor{pow(sin(angularDistance), 2)};
+    double angularCorrectionFactor{pow(cos(angularDistance), 2)};
 
     // Calculate homotypic / heterotypic interactions:
     std::array<bool, 2> cellTypeContacts{type0Contact, type1Contact};
@@ -413,10 +416,8 @@ double CellAgent::calculateCellDeltaTowardsECM(double ecmHeading, double cellHea
 
 double CellAgent::findPolarityDirection() {
     if ((polarityY == 0) & (polarityX == 0)) {
-        double randomHeading{angleUniformDistribution(generatorAngleUniform)};
-        polarityX = 0.001 * cos(randomHeading);
-        polarityY = 0.001 * sin(randomHeading);
-        return atan2(polarityY, polarityX);
+        assert(false);
+        return 0;
     } else {
         return atan2(polarityY, polarityX);
     };
