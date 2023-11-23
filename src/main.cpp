@@ -133,6 +133,11 @@ int main(int argc, char** argv) {
             mainWorld.writePositionsToCSV(csvFile);
             mainWorld.writeMatrixToCSV(matrixFile);
         }
+        
+        // We need to close files to flush remaining outputs to buffer.
+        csvFile.close();
+        matrixFile.close();
+
     }
 
     return 0;
