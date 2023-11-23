@@ -33,6 +33,7 @@ World::World
     // Initialising randomness:
     seedGenerator = std::mt19937(worldSeed);
     seedDistribution = std::uniform_int_distribution<unsigned int>(0, UINT32_MAX);
+    std::cout << seedDistribution(seedGenerator) << "\n";
 
     // Initialising generators for cell seeds:
     shuffleGenerator = std::mt19937(seedDistribution(seedGenerator));
