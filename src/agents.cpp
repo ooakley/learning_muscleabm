@@ -385,6 +385,7 @@ std::tuple<double, double> CellAgent::getAverageDeltaHeading() {
 
     assert(abs(sineMean) <= 1);
     assert(abs(cosineMean) <= 1);
+    assert(sineMean != 0 & cosineMean != 0);
     double angleAverage{atan2(sineMean, cosineMean)};
     double angleIntensity{sqrt(pow(sineMean, 2) + pow(cosineMean, 2))};
     return {angleAverage, angleIntensity};

@@ -2,7 +2,7 @@
 #SBATCH --job-name=simulation
 #SBATCH --ntasks=1
 #SBATCH --partition=cpu
-#SBATCH --time=5:00:00
+#SBATCH --time=6:00:00
 #SBATCH --cpus-per-task=1
 #SBATCH --array=1-1024
 

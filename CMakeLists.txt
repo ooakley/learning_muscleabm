@@ -8,11 +8,17 @@ add_definitions("-DBOOST_ALLOW_DEPRECATED_HEADERS")
 add_definitions("-DBOOST_BIND_GLOBAL_PLACEHOLDERS")
 enable_testing()
 
-set(CMAKE_CXX_CLANG_TIDY
-  clang-tidy;
-  -format-style='file';
-  -header-filter=${CMAKE_CURRENT_SOURCE_DIR};
-)
+# Enable Clang Tidy only if using Clang
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+  message(STATUS "Using Clang compiler, so we enable clang-tidy...")
+  set(CMAKE_CXX_CLANG_TIDY
+    clang-tidy;
+    -format-style='file';
+    -header-filter=${CMAKE_CURRENT_SOURCE_DIR};
+  )
+else()
+  message(STATUS "Not using Clang, so we can skip clang-tidy...")
+endif()
 
 add_compile_options(
   -Wno-deprecated-declarations

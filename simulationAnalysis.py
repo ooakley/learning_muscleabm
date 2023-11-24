@@ -12,11 +12,12 @@ SIMULATION_OUTPUTS_FOLDER = "./fileOutputs/"
 CSV_COLUMN_NAMES = [
     "frame", "particle", "x", "y", "orientation",
     "polarity_extent", "percept_direction", "percept_intensity",
-    "actin_flow", "movement_direction", "turning_angle", "contact_inhibition"
+    "actin_flow", "movement_direction", "turning_angle", "sampled_angle", "contact_inhibition"
 ]
 GRID_SIZE = 32
 AREA_SIZE = 1024
 TIMESTEPS = 1000
+TIMESTEP_WIDTH = 400
 
 
 def parse_arguments():
@@ -67,6 +68,77 @@ def find_persistence_time(trajectory_dataframe):
 
     return pt_list
 
+
+def plot_superiteration(trajectory_list, matrix_list, timestep, iteration, ax):
+    # Accessing and formatting relevant dataframe:
+    trajectory_dataframe = trajectory_list[iteration]
+    x_mask = (trajectory_dataframe["x"] > 10) & (trajectory_dataframe["x"] < AREA_SIZE - 10)
+    y_mask = (trajectory_dataframe["y"] > 10) & (trajectory_dataframe["y"] < AREA_SIZE - 10)
+    full_mask = x_mask & y_mask
+    rollover_skipped_df = trajectory_dataframe[full_mask]
+    timeframe_mask = (rollover_skipped_df["frame"] > timestep - TIMESTEP_WIDTH) & (rollover_skipped_df["frame"] <= timestep)
+    timepoint_mask = rollover_skipped_df["frame"] == timestep
+    ci_lookup = trajectory_dataframe[trajectory_dataframe["frame"] == 1]
+    unstacked_dataframe = rollover_skipped_df[timeframe_mask].set_index(['particle', 'frame'])[['x', 'y']].unstack()
+
+    # Setting up matrix plotting:
+    tile_width = AREA_SIZE / GRID_SIZE
+    X = np.arange(0, AREA_SIZE, tile_width) + (tile_width / 2)
+    Y = np.arange(0, AREA_SIZE, tile_width) + (tile_width / 2)
+    X, Y = np.meshgrid(X, Y)
+
+    matrix = matrix_list[iteration][0, :, :]
+    U = np.cos(matrix)
+    V = -np.sin(matrix)
+
+    # Setting up plot
+    colour_list = ['r', 'g']
+
+    # Plotting particle trajectories:
+    for i, trajectory in unstacked_dataframe.iterrows():
+        identity = int(ci_lookup[ci_lookup["particle"] == i]["contact_inhibition"].iloc[0])
+        ax.plot(trajectory['x'], trajectory['y'],
+            c=colour_list[identity], alpha=0.4
+        )
+
+    # Plotting background matrix:
+    ax.quiver(X, Y, U, V, [matrix], cmap='twilight', pivot='mid', scale=75, headwidth=0, headlength=0, headaxislength=0, alpha=0.5)
+
+    # Plotting cells & their directions:
+    type0_mask = rollover_skipped_df['contact_inhibition'][timepoint_mask] == 0
+    type1_mask = rollover_skipped_df['contact_inhibition'][timepoint_mask] == 1
+    x_pos = rollover_skipped_df['x'][timepoint_mask]
+    y_pos = rollover_skipped_df['y'][timepoint_mask]
+    x_heading = np.cos(rollover_skipped_df['orientation'][timepoint_mask])
+    y_heading = - np.sin(rollover_skipped_df['orientation'][timepoint_mask])
+    heading_list = rollover_skipped_df['orientation'][timepoint_mask]
+    
+    ax.quiver(
+        x_pos[type0_mask], y_pos[type0_mask], x_heading[type0_mask], y_heading[type0_mask],
+        pivot='mid', scale=75, color='r'
+    )
+    ax.quiver(
+        x_pos[type1_mask], y_pos[type1_mask], x_heading[type1_mask], y_heading[type1_mask],
+        pivot='mid', scale=75, color='g'
+    )
+    ax.set_xlim(0, AREA_SIZE)
+    ax.set_ylim(0, AREA_SIZE)
+    ax.invert_yaxis()
+    ax.set_axis_off()
+
+
+def plot_trajectories(subdirectory_path, trajectory_list, matrix_list):
+    fig, axs = plt.subplots(3, 3, figsize=(10, 10))
+    count = 0
+    for i in range(3):
+        for j in range(3):
+            plot_superiteration(trajectory_list, matrix_list, 999, count, axs[i, j])
+            count += 1
+
+    fig.tight_layout()
+    fig.savefig(os.path.join(subdirectory_path, "trajectories.png"))
+
+
 def main():
     # Parsing command line arguments:
     args = parse_arguments()
@@ -80,17 +152,23 @@ def main():
     output_files = os.listdir(subdirectory_path)
 
     matrix_list = []
+    trajectory_list = []
     sub_dataframes = []
     for seed in range(10):
         # Reading trajectory information:
         csv_filename = f"positions_seed{seed:03d}.csv"
         csv_filepath = os.path.join(subdirectory_path, csv_filename)
         trajectory_dataframe = pd.read_csv(csv_filepath, index_col=None, header=None, names=CSV_COLUMN_NAMES)
-        
+        trajectory_list.append(trajectory_dataframe)
+
         # Calculating derived statistics:
         rmsd_list = find_average_rmsd(trajectory_dataframe)
         pt_list = find_persistence_time(trajectory_dataframe)
-        persistence_speed_corrcoef, p_val = scipy.stats.pearsonr(rmsd_list, pt_list)
+        try:
+            persistence_speed_corrcoef, p_val = scipy.stats.pearsonr(rmsd_list, pt_list)
+        except:
+            persistence_speed_corrcoef = np.nan
+            p_val = np.nan
 
         # Saving to dataframe row:
         new_info = pd.DataFrame(
@@ -111,7 +189,7 @@ def main():
         matrix_filename = f"matrix_seed{seed:03d}.txt"
         matrix_filepath = os.path.join(subdirectory_path, matrix_filename)
         matrix = read_matrix_into_numpy(matrix_filepath)
-        matrix_list.append(matrix[-1, 0, :, :])
+        matrix_list.append(matrix[-1, :, :, :])
 
     # Generating full dataframe and saving to subdirectory:
     summary_dataframe = pd.concat(sub_dataframes).reset_index().drop(columns=["index", "level_0"])
@@ -123,9 +201,13 @@ def main():
     distributions = []
     bins = np.arange(0, np.pi, 0.05)
     for matrix in matrix_list:
-        ax.hist(matrix.flatten(), bins=bins, alpha=0.3, density=True)
+        secreted_matrix = matrix[0, :, :][np.nonzero(matrix[1, :, :])]
+        ax.hist(secreted_matrix.flatten(), bins=bins, alpha=0.3, density=True)
     fig.tight_layout()
     fig.savefig(os.path.join(subdirectory_path, "matrix_orientation.png"))
+
+    # Plotting trajectories:
+    plot_trajectories(subdirectory_path, trajectory_list, matrix_list)
 
 if __name__ == "__main__":
     main()
