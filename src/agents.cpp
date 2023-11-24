@@ -269,7 +269,7 @@ bool CellAgent::checkForCollisions() {
         double effectiveHeterotypicInhibition{
             (heterotypicInhibitionRate*angularCorrectionFactor)
         };
-        if (uniformDistribution(generatorForInhibitionRate) < heterotypicInhibitionRate) {
+        if (uniformDistribution(generatorForInhibitionRate) < effectiveHeterotypicInhibition) {
             return true;
         }
     }
@@ -305,7 +305,7 @@ double CellAgent::sampleVonMises(double kappa) {
             angleSampled = true;
             int angleSign{(2*B) - 1};
             sampledVonMises = angleSign * acos(f);
-            break;
+            continue;
         }
 
         bool logCondition{(log(c/U2) + 1 - c) > 0};
