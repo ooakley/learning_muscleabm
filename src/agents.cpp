@@ -34,7 +34,7 @@ CellAgent::CellAgent(
     double setPolarityPersistence, double setPolarityTurningCoupling,
     double setFlowScaling, double setFlowPolarityCoupling
     )
-    : thereIsMatrixInteraction{false}
+    : thereIsMatrixInteraction{true}
     , x{startX}
     , y{startY}
     , polarityX{0.001 * cos(startHeading)}

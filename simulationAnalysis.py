@@ -69,11 +69,11 @@ def find_persistence_time(trajectory_dataframe):
     return pt_list
 
 
-def plot_superiteration(timestep, iteration, ax):
+def plot_superiteration(trajectory_list, matrix_list, timestep, iteration, ax):
     # Accessing and formatting relevant dataframe:
     trajectory_dataframe = trajectory_list[iteration]
-    x_mask = (trajectory_dataframe["x"] > 10) & (trajectory_dataframe["x"] < GRID_LENGTH - 10)
-    y_mask = (trajectory_dataframe["y"] > 10) & (trajectory_dataframe["y"] < GRID_LENGTH - 10)
+    x_mask = (trajectory_dataframe["x"] > 10) & (trajectory_dataframe["x"] < AREA_SIZE - 10)
+    y_mask = (trajectory_dataframe["y"] > 10) & (trajectory_dataframe["y"] < AREA_SIZE - 10)
     full_mask = x_mask & y_mask
     rollover_skipped_df = trajectory_dataframe[full_mask]
     timeframe_mask = (rollover_skipped_df["frame"] > timestep - TIMESTEP_WIDTH) & (rollover_skipped_df["frame"] <= timestep)
@@ -82,13 +82,12 @@ def plot_superiteration(timestep, iteration, ax):
     unstacked_dataframe = rollover_skipped_df[timeframe_mask].set_index(['particle', 'frame'])[['x', 'y']].unstack()
 
     # Setting up matrix plotting:
-    tile_width = GRID_LENGTH / GRID_SIZE
-    X = np.arange(0, GRID_LENGTH, tile_width) + (tile_width / 2)
-    Y = np.arange(0, GRID_LENGTH, tile_width) + (tile_width / 2)
+    tile_width = AREA_SIZE / GRID_SIZE
+    X = np.arange(0, AREA_SIZE, tile_width) + (tile_width / 2)
+    Y = np.arange(0, AREA_SIZE, tile_width) + (tile_width / 2)
     X, Y = np.meshgrid(X, Y)
 
-    ecm_matrix = matrix_list[iteration]
-    matrix = ecm_matrix[timestep, 0, :, :]
+    matrix = matrix_list[iteration][0, :, :]
     U = np.cos(matrix)
     V = -np.sin(matrix)
 
@@ -122,18 +121,18 @@ def plot_superiteration(timestep, iteration, ax):
         x_pos[type1_mask], y_pos[type1_mask], x_heading[type1_mask], y_heading[type1_mask],
         pivot='mid', scale=75, color='g'
     )
-    ax.set_xlim(0, GRID_LENGTH)
-    ax.set_ylim(0, GRID_LENGTH)
+    ax.set_xlim(0, AREA_SIZE)
+    ax.set_ylim(0, AREA_SIZE)
     ax.invert_yaxis()
     ax.set_axis_off()
 
 
-def plot_trajectories(subdirectory_path):
+def plot_trajectories(subdirectory_path, trajectory_list, matrix_list):
     fig, axs = plt.subplots(3, 3, figsize=(10, 10))
     count = 0
     for i in range(3):
         for j in range(3):
-            plot_superiteration(999, count, axs[i, j])
+            plot_superiteration(trajectory_list, matrix_list, 999, count, axs[i, j])
             count += 1
 
     fig.tight_layout()
@@ -190,7 +189,7 @@ def main():
         matrix_filename = f"matrix_seed{seed:03d}.txt"
         matrix_filepath = os.path.join(subdirectory_path, matrix_filename)
         matrix = read_matrix_into_numpy(matrix_filepath)
-        matrix_list.append(matrix[-1, 0, :, :])
+        matrix_list.append(matrix[-1, :, :, :])
 
     # Generating full dataframe and saving to subdirectory:
     summary_dataframe = pd.concat(sub_dataframes).reset_index().drop(columns=["index", "level_0"])
@@ -202,12 +201,13 @@ def main():
     distributions = []
     bins = np.arange(0, np.pi, 0.05)
     for matrix in matrix_list:
-        ax.hist(matrix.flatten(), bins=bins, alpha=0.3, density=True)
+        secreted_matrix = matrix[0, :, :][np.nonzero(matrix[1, :, :])]
+        ax.hist(secreted_matrix.flatten(), bins=bins, alpha=0.3, density=True)
     fig.tight_layout()
     fig.savefig(os.path.join(subdirectory_path, "matrix_orientation.png"))
 
     # Plotting trajectories:
-    plot_trajectories(subdirectory_path)
+    plot_trajectories(subdirectory_path, trajectory_list, matrix_list)
 
 if __name__ == "__main__":
     main()
