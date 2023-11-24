@@ -8,6 +8,12 @@ add_definitions("-DBOOST_ALLOW_DEPRECATED_HEADERS")
 add_definitions("-DBOOST_BIND_GLOBAL_PLACEHOLDERS")
 enable_testing()
 
+set(CMAKE_CXX_CLANG_TIDY
+  clang-tidy;
+  -format-style='file';
+  -header-filter=${CMAKE_CURRENT_SOURCE_DIR};
+)
+
 add_compile_options(
   -Wno-deprecated-declarations
 )
@@ -21,7 +27,7 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(googletest)
 
 # Ensuring Boost is present:
-set(Boost_INCLUDE_DIR /Users/eloaklo/boost_1_83_0)
+set(Boost_INCLUDE_DIR /usr/local/Cellar/boost/1.83.0/include)
 find_package(Boost COMPONENTS regex system filesystem program_options REQUIRED)
 message(STATUS ${Boost_INCLUDE_DIR})
 include_directories(${Boost_INCLUDE_DIR})

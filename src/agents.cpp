@@ -264,7 +264,7 @@ bool CellAgent::checkForCollisions() {
         if (uniformDistribution(generatorForInhibitionRate) < effectiveHomotypicInhibition) {
             return true;
         }
-    } else if (cellTypeContacts[abs(cellType - 1)]) {
+    } else if (cellTypeContacts[std::abs(cellType - 1)]) {
         // Do heterotypic interaction if no homotypic interaction:
         double effectiveHeterotypicInhibition{
             (heterotypicInhibitionRate*angularCorrectionFactor)
@@ -338,11 +338,11 @@ double CellAgent::calculateMinimumAngularDistance(double headingA, double headin
     }
 
     // Selecting smallest change in theta and ensuring correct range:
-    if (abs(deltaHeading) < abs(flippedHeading)) {
-        assert((abs(deltaHeading) <= M_PI/2));
+    if (std::abs(deltaHeading) < std::abs(flippedHeading)) {
+        assert((std::abs(deltaHeading) <= M_PI/2));
         return deltaHeading;
     } else {
-        assert((abs(flippedHeading) <= M_PI/2));
+        assert((std::abs(flippedHeading) <= M_PI/2));
         return flippedHeading;
     };
 }
@@ -409,11 +409,11 @@ double CellAgent::calculateCellDeltaTowardsECM(double ecmHeading, double cellHea
     };
 
     // Selecting smallest change in theta and ensuring correct range:
-    if (abs(deltaHeading) < abs(flippedHeading)) {
-        assert((abs(deltaHeading) <= M_PI/2));
+    if (std::abs(deltaHeading) < std::abs(flippedHeading)) {
+        assert((std::abs(deltaHeading) <= M_PI/2));
         return deltaHeading;
     } else {
-        assert((abs(flippedHeading) <= M_PI/2));
+        assert((std::abs(flippedHeading) <= M_PI/2));
         return flippedHeading;
     };
 }
@@ -446,8 +446,8 @@ double CellAgent::getAverageAttachmentHeading() {
     sineMean /= 5;
     cosineMean /= 5;
 
-    assert(abs(sineMean) <= 1);
-    assert(abs(cosineMean) <= 1);
+    assert(std::abs(sineMean) <= 1);
+    assert(std::abs(cosineMean) <= 1);
     double angleAverage{atan2(sineMean, cosineMean)};
     return angleAverage;
 }

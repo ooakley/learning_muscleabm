@@ -69,8 +69,8 @@ std::tuple<double, double> ECMField::getAverageDeltaHeadingAroundIndex(
     sineMean /= 9;
     cosineMean /= 9;
 
-    assert(abs(sineMean) <= 1);
-    assert(abs(cosineMean) <= 1);
+    assert(std::abs(sineMean) <= 1);
+    assert(std::abs(cosineMean) <= 1);
     double angleAverage{atan2(sineMean, cosineMean)};
     double angleIntensity{sqrt(pow(sineMean, 2) + pow(cosineMean, 2))};
     return {angleAverage, angleIntensity};
@@ -302,11 +302,11 @@ double ECMField::calculateCellDeltaTowardsECM(double ecmHeading, double cellHead
     }
 
     // Selecting smallest change in theta and ensuring correct range:
-    if (abs(deltaHeading) < abs(flippedHeading)) {
-        assert((abs(deltaHeading) <= M_PI/2));
+    if (std::abs(deltaHeading) < std::abs(flippedHeading)) {
+        assert((std::abs(deltaHeading) <= M_PI/2));
         return deltaHeading;
     } else {
-        assert((abs(flippedHeading) <= M_PI/2));
+        assert((std::abs(flippedHeading) <= M_PI/2));
         return flippedHeading;
     }; 
 }
@@ -328,11 +328,11 @@ double ECMField::calculateECMDeltaTowardsCell(double ecmHeading, double cellHead
     }
 
     // Selecting smallest change in theta and ensuring correct range:
-    if (abs(deltaHeading) < abs(flippedHeading)) {
-        assert((abs(deltaHeading) <= M_PI/2));
+    if (std::abs(deltaHeading) < std::abs(flippedHeading)) {
+        assert((std::abs(deltaHeading) <= M_PI/2));
         return deltaHeading;
     } else {
-        assert((abs(flippedHeading) <= M_PI/2));
+        assert((std::abs(flippedHeading) <= M_PI/2));
         return flippedHeading;
     }; 
 }
