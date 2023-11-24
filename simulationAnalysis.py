@@ -27,9 +27,9 @@ def parse_arguments():
 
 
 def read_matrix_into_numpy(filename, grid_size=GRID_SIZE, timesteps=TIMESTEPS):
-    number_of_elements = (grid_size**2)*timesteps
+    number_of_elements = (grid_size**2)*timesteps*2
     flattened_matrix = np.loadtxt(filename, delimiter=',', usecols=range(number_of_elements))
-    return np.reshape(flattened_matrix, (timesteps, grid_size, grid_size), order='C')
+    return np.reshape(flattened_matrix, (timesteps, 2, grid_size, grid_size), order='C')
 
 
 def find_average_rmsd(trajectory_dataframe):
@@ -86,7 +86,7 @@ def main():
         csv_filename = f"positions_seed{seed:03d}.csv"
         csv_filepath = os.path.join(subdirectory_path, csv_filename)
         trajectory_dataframe = pd.read_csv(csv_filepath, index_col=None, header=None, names=CSV_COLUMN_NAMES)
-
+        
         # Calculating derived statistics:
         rmsd_list = find_average_rmsd(trajectory_dataframe)
         pt_list = find_persistence_time(trajectory_dataframe)
@@ -111,7 +111,7 @@ def main():
         matrix_filename = f"matrix_seed{seed:03d}.txt"
         matrix_filepath = os.path.join(subdirectory_path, matrix_filename)
         matrix = read_matrix_into_numpy(matrix_filepath)
-        matrix_list.append(matrix[-1, :, :])
+        matrix_list.append(matrix[-1, 0, :, :])
 
     # Generating full dataframe and saving to subdirectory:
     summary_dataframe = pd.concat(sub_dataframes).reset_index().drop(columns=["index", "level_0"])

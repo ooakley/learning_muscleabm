@@ -14,7 +14,7 @@ ECMField::ECMField(int setElements)
     , cellType0CountMatrix{boostMatrix::zero_matrix<int>(elementCount, elementCount)}
     , cellType1CountMatrix{boostMatrix::zero_matrix<int>(elementCount, elementCount)}
     , cellHeadingMatrix{boostMatrix::zero_matrix<double>(elementCount, elementCount)}
-    , matrixPersistence{0.99}
+    , matrixPersistence{1}
 {
 }
 

@@ -68,6 +68,7 @@ void World::writePositionsToCSV(std::ofstream& csvFile) {
         csvFile << cellAgentVector[i].getActinFlow() << ",";
         csvFile << cellAgentVector[i].getMovementDirection() << ",";
         csvFile << cellAgentVector[i].getDirectionalShift() << ",";
+        csvFile << cellAgentVector[i].getSampledAngle() << ",";
         csvFile << cellAgentVector[i].getCellType() << "\n"; 
     }
 }

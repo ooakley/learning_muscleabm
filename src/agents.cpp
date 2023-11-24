@@ -59,6 +59,7 @@ CellAgent::CellAgent(
     , kWeibull{setWbK}
     , homotypicInhibitionRate{setHomotypicInhibition}
     , heterotypicInhibitionRate{setHeterotypicInhibition}
+    , sampledAngle{0}
 {
     // Initialising randomness:
     seedGenerator = std::mt19937(cellSeed);
@@ -107,6 +108,8 @@ double CellAgent::getActinFlow() {return actinFlow;}
 double CellAgent::getDirectionalInfluence() {return directionalInfluence;}
 double CellAgent::getDirectionalIntensity() {return directionalIntensity;}
 double CellAgent::getDirectionalShift() {return directionalShift;}
+double CellAgent::getSampledAngle() {return sampledAngle;}
+
 
 // Setters:
 void CellAgent::setPosition(std::tuple<double, double> newPosition) {
@@ -154,6 +157,7 @@ void CellAgent::takeRandomStep() {
 
     // Sample von mises distribution:
     double angleDelta = sampleVonMises(kappa);
+    sampledAngle = angleDelta;
     double vonMisesMean{0};
     if (uniformDistribution(generatorInfluence) < directionalIntensity) {
         vonMisesMean = directionalInfluence;

@@ -37,6 +37,8 @@ public:
     double getDirectionalIntensity();
     double getAverageAttachmentHeading();
     double getDirectionalShift();
+    double getSampledAngle();
+
 
     // Setters:
     // Setters for simulation (moving cells around etc.):
@@ -79,6 +81,7 @@ private:
     double directionalInfluence; // -pi <= theta < pi
     double directionalIntensity; // 0 <= I < 1
     double directionalShift; // -pi <= theta < pi
+    double sampledAngle;
 
     // Percepts:
     boostMatrix::matrix<double> localMatrixHeading;
