@@ -10,7 +10,6 @@
 
 #include <boost/numeric/ublas/matrix.hpp>
 
-namespace boostMatrix = boost::numeric::ublas;
 
 // Constructor and intialisation:
 World::World

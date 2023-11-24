@@ -3,9 +3,16 @@ project(cell_abm)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_WARN_DEPRECATED FALSE)
+
 add_definitions("-DBOOST_ALLOW_DEPRECATED_HEADERS")
 add_definitions("-DBOOST_BIND_GLOBAL_PLACEHOLDERS")
 enable_testing()
+
+set(CMAKE_CXX_CLANG_TIDY
+  clang-tidy;
+  -format-style='file';
+  -header-filter=${CMAKE_CURRENT_SOURCE_DIR};
+)
 
 add_compile_options(
   -Wno-deprecated-declarations
@@ -20,12 +27,10 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(googletest)
 
 # Ensuring Boost is present:
+set(Boost_INCLUDE_DIR /usr/local/Cellar/boost/1.83.0/include)
 find_package(Boost COMPONENTS regex system filesystem program_options REQUIRED)
-message(STATUS ${Boost_INCLUDE_DIRS})
-set(Boost_INCLUDE_DIRS /usr/local/Cellar/boost/1.82.0_1/include)
-message(STATUS ${Boost_INCLUDE_DIRS})
-
-include_directories(${Boost_INCLUDE_DIRS})
+message(STATUS ${Boost_INCLUDE_DIR})
+include_directories(${Boost_INCLUDE_DIR})
 
 # Putting together the main executable & building relevant libraries:
 add_subdirectory(src)

@@ -40,3 +40,5 @@ fileOutputs/*
 fileOutputs_old/*
 fileOutputsServer/*
 gridsearch.txt
+.vscode/*
+.cache/*
