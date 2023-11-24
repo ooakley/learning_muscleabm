@@ -24,7 +24,6 @@ FetchContent_MakeAvailable(googletest)
 set(Boost_INCLUDE_DIR /Users/eloaklo/boost_1_83_0)
 find_package(Boost COMPONENTS regex system filesystem program_options REQUIRED)
 message(STATUS ${Boost_INCLUDE_DIR})
-
 include_directories(${Boost_INCLUDE_DIR})
 
 # Putting together the main executable & building relevant libraries:
