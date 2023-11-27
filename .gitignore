@@ -36,9 +36,7 @@ build/
 
 # Output data:
 *.csv
-fileOutputs/*
-fileOutputs_old/*
-fileOutputsServer/*
+fileOutputs*
 gridsearch.txt
 .vscode/*
 .cache/*

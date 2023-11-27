@@ -38,7 +38,7 @@ def find_average_rmsd(trajectory_dataframe):
     rmsd_list = []
     for particle in particles:
         particle_dataframe = trajectory_dataframe[trajectory_dataframe["particle"] == particle]
-        rmsd_list.append(np.mean(particle_dataframe["actin_flow"]) * 0.3264 / 5)
+        rmsd_list.append(np.mean(particle_dataframe["actin_flow"]))
     return rmsd_list
 
 
@@ -152,6 +152,7 @@ def main():
     output_files = os.listdir(subdirectory_path)
 
     matrix_list = []
+    particle_rmsd_list = []
     trajectory_list = []
     sub_dataframes = []
     for seed in range(10):
@@ -163,6 +164,7 @@ def main():
 
         # Calculating derived statistics:
         rmsd_list = find_average_rmsd(trajectory_dataframe)
+        particle_rmsd_list.extend(rmsd_list)
         pt_list = find_persistence_time(trajectory_dataframe)
         try:
             persistence_speed_corrcoef, p_val = scipy.stats.pearsonr(rmsd_list, pt_list)
@@ -195,6 +197,10 @@ def main():
     summary_dataframe = pd.concat(sub_dataframes).reset_index().drop(columns=["index", "level_0"])
     print(summary_dataframe)
     summary_dataframe.to_csv(os.path.join(subdirectory_path, "summary.csv"))
+
+    # Saving particle speed distributions to subdirectory:
+    particle_rmsd_df = pd.DataFrame({"particle_rmsd": particle_rmsd_list})
+    particle_rmsd_df.to_csv(os.path.join(subdirectory_path, "speeds.csv"))
 
     # Plotting final orientations of the matrix:
     fig, ax = plt.subplots(figsize=(7, 4))
