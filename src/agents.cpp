@@ -37,8 +37,8 @@ CellAgent::CellAgent(
     : thereIsMatrixInteraction{true}
     , x{startX}
     , y{startY}
-    , polarityX{0.0001 * cos(startHeading)}
-    , polarityY{0.0001 * sin(startHeading)}
+    , polarityX{1e-5 * cos(startHeading)}
+    , polarityY{1e-5 * sin(startHeading)}
     , polarityPersistence{setPolarityPersistence}
     , polarityTurningCoupling{setPolarityTurningCoupling}
     , flowPolarityCoupling{setFlowPolarityCoupling}
@@ -87,6 +87,9 @@ CellAgent::CellAgent(
     generatorCornerCorrection = std::mt19937(seedDistribution(seedGenerator));
     generatorForInhibitionRate = std::mt19937(seedDistribution(seedGenerator));
     angleUniformDistribution = std::uniform_real_distribution<double>(-M_PI, M_PI);
+
+    // Generator for finding random angle after loss of polarisation:
+    generatorRandomRepolarisation = std::mt19937(seedDistribution(seedGenerator));
 }
 // Public Definitions:
 
@@ -421,8 +424,10 @@ double CellAgent::calculateCellDeltaTowardsECM(double ecmHeading, double cellHea
 
 double CellAgent::findPolarityDirection() {
     if ((polarityY == 0) & (polarityX == 0)) {
-        assert(false);
-        return 0;
+        double newAngle{angleUniformDistribution(generatorRandomRepolarisation)};
+        polarityX = cos(newAngle) * 1e-5;
+        polarityY = sin(newAngle) * 1e-5;
+        return newAngle;
     } else {
         return std::atan2(polarityY, polarityX);
     };

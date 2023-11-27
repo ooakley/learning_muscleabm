@@ -121,6 +121,9 @@ private:
     // Generator for selecting for environmental influence:
     std::mt19937 generatorInfluence;
 
+    // Generator for finding random angle after loss of movement polarisation:
+    std::mt19937 generatorRandomRepolarisation;
+
     // Collision detection behaviour:
     bool checkForCollisions();
 
