@@ -9,7 +9,8 @@ add_definitions("-DBOOST_BIND_GLOBAL_PLACEHOLDERS")
 enable_testing()
 
 # Enable Clang Tidy only if using Clang
-if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+message(STATUS "${CMAKE_CXX_COMPILER_ID}")
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
   message(STATUS "Using Clang compiler, so we enable clang-tidy...")
   set(CMAKE_CXX_CLANG_TIDY
     clang-tidy;

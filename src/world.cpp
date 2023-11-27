@@ -18,14 +18,17 @@ World::World
     double setWorldSideLength,
     int setECMElementCount,
     int setNumberOfCells,
+    float setCellTypeProportions,
+    float setMatrixPersistence,
     CellParameters setCellParameters
 )
     : worldSeed{setWorldSeed}
     , worldSideLength{setWorldSideLength}
     , countECMElement{setECMElementCount}
     , lengthECMElement{worldSideLength/countECMElement}
-    , ecmField{ECMField(countECMElement)}
+    , ecmField{ECMField(countECMElement, setMatrixPersistence)}
     , numberOfCells{setNumberOfCells}
+    , cellTypeProportions{setCellTypeProportions}
     , simulationTime{0}
     , cellParameters{setCellParameters}
 {
@@ -117,11 +120,12 @@ CellAgent World::initialiseCell(int setCellID) {
 
     return CellAgent(
         startX, startY, startHeading,
-        setCellSeed, setCellID, int(inhibitionBoolean < 0.5),
+        setCellSeed, setCellID, int(inhibitionBoolean < cellTypeProportions),
         cellParameters.wbK, cellParameters.kappa,
         cellParameters.homotypicInhibition, cellParameters.heterotypicInhibition,
         cellParameters.polarityPersistence, cellParameters.polarityTurningCoupling,
-        cellParameters.flowScaling, cellParameters.flowPolarityCoupling
+        cellParameters.flowScaling, cellParameters.flowPolarityCoupling,
+        cellParameters.collisionRepolarisation, cellParameters.repolarisationRate
     );
     // Higher alpha = higher concentration
     // Higher beta = lower lambda

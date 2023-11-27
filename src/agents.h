@@ -12,7 +12,8 @@ public:
         double setWbK, double setKappa,
         double setHomotypicInhibition, double setHeterotypicInhibiton,
         double setPolarityPersistence, double setPolarityTurningCoupling,
-        double setFlowScaling, double setFlowPolarityCoupling
+        double setFlowScaling, double setFlowPolarityCoupling,
+        double setCollisionRepolarisation, double setRepolarisationRate
     );
 
     // Getters:
@@ -74,6 +75,8 @@ private:
     double polarityTurningCoupling;
     double flowPolarityCoupling;
     double flowScaling;
+    double collisionRepolarisation;
+    double repolarisationRate;
 
     // Properties calculated each timestep:
     double movementDirection;

@@ -9,7 +9,6 @@
 
 #include <boost/numeric/ublas/matrix.hpp>
 namespace boostMatrix = boost::numeric::ublas;
-using std::atan2;
 
 typedef std::vector<std::tuple<int, int>> vectorOfTuples;
 
@@ -32,34 +31,38 @@ CellAgent::CellAgent(
     double setWbK, double setKappa,
     double setHomotypicInhibition, double setHeterotypicInhibition,
     double setPolarityPersistence, double setPolarityTurningCoupling,
-    double setFlowScaling, double setFlowPolarityCoupling
+    double setFlowScaling, double setFlowPolarityCoupling,
+    double setCollisionRepolarisation, double setRepolarisationRate
     )
     : thereIsMatrixInteraction{true}
     , x{startX}
     , y{startY}
-    , polarityX{0.001 * cos(startHeading)}
-    , polarityY{0.001 * sin(startHeading)}
-    , actinFlow{0}
-    , flowPolarityCoupling{setFlowPolarityCoupling}
-    , flowScaling{setFlowScaling}
+    , polarityX{0.0001 * cos(startHeading)}
+    , polarityY{0.0001 * sin(startHeading)}
     , polarityPersistence{setPolarityPersistence}
     , polarityTurningCoupling{setPolarityTurningCoupling}
-    , attachmentHistory{std::vector<double>(0, 0.0)}
+    , flowPolarityCoupling{setFlowPolarityCoupling}
+    , flowScaling{setFlowScaling}
+    , collisionRepolarisation{setCollisionRepolarisation}
+    , repolarisationRate{setRepolarisationRate}
+    , movementDirection{0}
+    , actinFlow{0}
+    , directionalInfluence{0}
+    , directionalIntensity{0}
+    , directionalShift{0}
+    , sampledAngle{0}
     , kappa{setKappa}
     , localMatrixHeading{boostMatrix::zero_matrix<double>(3, 3)}
     , localMatrixPresence{boostMatrix::zero_matrix<bool>(3, 3)}
-    , directionalInfluence{M_PI}
-    , directionalIntensity{0}
     , cellType0ContactState{boostMatrix::zero_matrix<bool>(3, 3)}
     , cellType1ContactState{boostMatrix::zero_matrix<bool>(3, 3)}
     , localCellHeadingState{boostMatrix::zero_matrix<double>(3, 3)}
     , cellSeed{setCellSeed}
     , cellID{setCellID}
-    , cellType{setCellType}
     , kWeibull{setWbK}
     , homotypicInhibitionRate{setHomotypicInhibition}
     , heterotypicInhibitionRate{setHeterotypicInhibition}
-    , sampledAngle{0}
+    , cellType{setCellType}
 {
     // Initialising randomness:
     seedGenerator = std::mt19937(cellSeed);
@@ -171,7 +174,7 @@ void CellAgent::takeRandomStep() {
     double movX{shiftWeighting*cos(proposedMovementDirection) + (1-shiftWeighting)*polarityX};
     double movY{shiftWeighting*sin(proposedMovementDirection) + (1-shiftWeighting)*polarityY};
 
-    movementDirection = atan2(movY, movX);
+    movementDirection = std::atan2(movY, movX);
 
     // double newAttachmentDirection = angleMod(findPolarityDirection() + angleDelta);
     // attachmentHistory.insert(attachmentHistory.begin(), newAttachmentDirection);
@@ -181,9 +184,6 @@ void CellAgent::takeRandomStep() {
     // std::cout << attachmentHistory[0] << "\n";
     // // Calculate movement direction using polarity-weighted average of attachments:
     // movementDirection = getAverageAttachmentHeading();
-
-    double collisionRepolarisation{0.75}; // [-1, 1]
-    double repolarisationRate{0.5}; // [0, 1]
 
     // // Calculating actin flow:
     // Calculate weibull lambda based on absolute value of polarity:
@@ -223,7 +223,7 @@ void CellAgent::takeRandomStep() {
     // Clamping polarity components to [-1, 1] (while preserving direction):
     double newPolarityExtent{sqrt(pow(newPolarityX, 2) + pow(newPolarityY, 2))};
     assert(newPolarityExtent <= 1);
-    double direction{atan2(newPolarityY, newPolarityX)};
+    double direction{std::atan2(newPolarityY, newPolarityX)};
     polarityX = newPolarityExtent * cos(direction);
     polarityY = newPolarityExtent * sin(direction);
 }
@@ -386,7 +386,7 @@ std::tuple<double, double> CellAgent::getAverageDeltaHeading() {
     assert(abs(sineMean) <= 1);
     assert(abs(cosineMean) <= 1);
     assert(sineMean != 0 & cosineMean != 0);
-    double angleAverage{atan2(sineMean, cosineMean)};
+    double angleAverage{std::atan2(sineMean, cosineMean)};
     double angleIntensity{sqrt(pow(sineMean, 2) + pow(cosineMean, 2))};
     return {angleAverage, angleIntensity};
 }
@@ -424,7 +424,7 @@ double CellAgent::findPolarityDirection() {
         assert(false);
         return 0;
     } else {
-        return atan2(polarityY, polarityX);
+        return std::atan2(polarityY, polarityX);
     };
 };
 
@@ -449,6 +449,6 @@ double CellAgent::getAverageAttachmentHeading() {
 
     assert(std::abs(sineMean) <= 1);
     assert(std::abs(cosineMean) <= 1);
-    double angleAverage{atan2(sineMean, cosineMean)};
+    double angleAverage{std::atan2(sineMean, cosineMean)};
     return angleAverage;
 }
