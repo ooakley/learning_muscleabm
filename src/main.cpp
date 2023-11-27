@@ -27,11 +27,16 @@ the terminal after compiling the code:
 
 int main(int argc, char** argv) {
     // Declaring variables to be parsed:
+    // Simulation structural variables:
     int jobArrayID;
     int superIterationCount;
     int numberOfCells;
     int worldSize;
     int gridSize;
+    float cellTypeProportions;
+    float matrixPersistence;
+
+    // Cell behaviour parameters:
     CellParameters cellParams;
 
     // Parsing variables from the command line:
@@ -51,6 +56,12 @@ int main(int argc, char** argv) {
         )
         ("gridSize", po::value<int>(&gridSize)->required(),
             "Defines number of cells in grid that defines the ECM & cell interaction neighbourhood."
+        )
+        ("cellTypeProportions", po::value<float>(&cellTypeProportions)->required(),
+            "Proportion of cells that take type 0."
+        )
+        ("matrixPersistence", po::value<float>(&matrixPersistence)->required(),
+            "Stability of the matrix under reorientation by cell movement."
         )
         ("wbK", po::value<float>(&cellParams.wbK)->required(),
             "Weibull distribution k value."
@@ -74,7 +85,13 @@ int main(int argc, char** argv) {
             "The scaling between the amount of actin flow and the cell step size."
         )
         ("flowPolarityCoupling", po::value<float>(&cellParams.flowPolarityCoupling)->required(),
-            "Magnitude of the influence that actin flow has on polariy."
+            "Magnitude of the influence that actin flow has on polarity."
+        )
+        ("collisionRepolarisation", po::value<float>(&cellParams.collisionRepolarisation)->required(),
+            "Size of the repolarisation induced by collision."
+        )
+        ("repolarisationRate", po::value<float>(&cellParams.repolarisationRate)->required(),
+            "Rate at which collisions induce repolarisation."
         )
     ;
 
@@ -127,7 +144,17 @@ int main(int argc, char** argv) {
         matrixFile.open(matrixFilename);
 
         // Running simulation:
-        World mainWorld{World(superIteration, worldSize, gridSize, numberOfCells, cellParams)};
+        World mainWorld{
+            World(
+                superIteration,
+                worldSize,
+                gridSize,
+                numberOfCells,
+                cellTypeProportions,
+                matrixPersistence,
+                cellParams
+            )
+        };
         for (int i = 0; i < 1000; ++i) {
             mainWorld.runSimulationStep();
             mainWorld.writePositionsToCSV(csvFile);

@@ -12,7 +12,8 @@ public:
         double setWbK, double setKappa,
         double setHomotypicInhibition, double setHeterotypicInhibiton,
         double setPolarityPersistence, double setPolarityTurningCoupling,
-        double setFlowScaling, double setFlowPolarityCoupling
+        double setFlowScaling, double setFlowPolarityCoupling,
+        double setCollisionRepolarisation, double setRepolarisationRate
     );
 
     // Getters:
@@ -74,6 +75,8 @@ private:
     double polarityTurningCoupling;
     double flowPolarityCoupling;
     double flowScaling;
+    double collisionRepolarisation;
+    double repolarisationRate;
 
     // Properties calculated each timestep:
     double movementDirection;
@@ -117,6 +120,9 @@ private:
 
     // Generator for selecting for environmental influence:
     std::mt19937 generatorInfluence;
+
+    // Generator for finding random angle after loss of movement polarisation:
+    std::mt19937 generatorRandomRepolarisation;
 
     // Collision detection behaviour:
     bool checkForCollisions();

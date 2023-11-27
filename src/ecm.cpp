@@ -7,14 +7,14 @@ namespace boostMatrix = boost::numeric::ublas;
 using std::atan2;
 
 // Constructor:
-ECMField::ECMField(int setElements)
+ECMField::ECMField(int setElements, float setMatrixPersistence)
     : elementCount{setElements}
     , ecmHeadingMatrix{boostMatrix::zero_matrix<double>(elementCount, elementCount)}
     , ecmPresentMatrix{boostMatrix::zero_matrix<bool>(elementCount, elementCount)}
     , cellType0CountMatrix{boostMatrix::zero_matrix<int>(elementCount, elementCount)}
     , cellType1CountMatrix{boostMatrix::zero_matrix<int>(elementCount, elementCount)}
     , cellHeadingMatrix{boostMatrix::zero_matrix<double>(elementCount, elementCount)}
-    , matrixPersistence{0.99}
+    , matrixPersistence{setMatrixPersistence}
 {
 }
 

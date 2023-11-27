@@ -12,7 +12,8 @@ protected:
             setWbK, setKappa,
             1, 0.2,
             0.4, 0.75,
-            1, 1
+            1, 1,
+            0.5, 0.5
         );
 
         // Cell agent with the same random seed:
@@ -22,7 +23,8 @@ protected:
             setWbK, setKappa,
             1, 0.2,
             0.4, 0.75,
-            1, 1
+            1, 1,
+            0.5, 0.5
         );
 
         // Cell agent with a different random seed:
@@ -32,7 +34,8 @@ protected:
             setWbK, setKappa,
             1, 0.2,
             0.4, 0.75,
-            1, 1
+            1, 1,
+            0.5, 0.5
         );
     }
 

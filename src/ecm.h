@@ -5,7 +5,7 @@ namespace boostMatrix = boost::numeric::ublas;
 class ECMField{
 public:
     // Constructor:
-    ECMField(int setElements);
+    ECMField(int setElements, float setMatrixPersistence);
 
     // Getters:
     boostMatrix::matrix<double> getECMHeadingMatrix();
