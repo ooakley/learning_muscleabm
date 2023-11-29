@@ -10,14 +10,14 @@ GRIDSEARCH = {
     "matrixPersistence": [0.99, 0.99, 1],
     "wbK": [1, 1, 1],
     "kappa": [3, 3, 1],
-    "homotypicInhibition": [0.2, 0.8, 4],
+    "homotypicInhibition": [0.4, 0.8, 5],
     "heterotypicInhibition": [0, 0, 1],
     "polarityPersistence": [0.4, 0.6, 5],
     "polarityTurningCoupling": [0.7, 0.9, 5],
     "flowScaling": [2.5, 3.5, 5],
-    "flowPolarityCoupling": [0.4, 8, 5],
-    "collisionRepolarisation": [0, 0, 1],
-    "repolarisationRate": [1, 1, 1]
+    "flowPolarityCoupling": [0.4, 0.8, 5],
+    "collisionRepolarisation": [-0.15, -0.05, 2],
+    "repolarisationRate": [0.5, 0.5, 1]
 }
 
 def main():
