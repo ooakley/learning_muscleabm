@@ -93,9 +93,6 @@ CellAgent::CellAgent(
     // Generator for finding random angle after loss of polarisation:
     generatorRandomRepolarisation = std::mt19937(seedDistribution(seedGenerator));
 
-    if (cellType == 1) {
-        flowScaling = 2;
-    };
 }
 // Public Definitions:
 
