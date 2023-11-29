@@ -1,6 +1,7 @@
 #pragma once
 #include <random>
 #include <boost/numeric/ublas/matrix.hpp>
+#include <utility>
 namespace boostMatrix = boost::numeric::ublas;
 
 class CellAgent {
@@ -125,7 +126,7 @@ private:
     std::mt19937 generatorRandomRepolarisation;
 
     // Collision detection behaviour:
-    bool checkForCollisions();
+    std::pair<bool, double> checkForCollisions();
 
     // Member functions for von Mises sampling:
     double sampleVonMises(double kappa);
@@ -133,6 +134,7 @@ private:
     // Effectively a utility function for calculating the modulus of angles:
     double angleMod(double angle);
     double calculateMinimumAngularDistance(double headingA, double headingB);
+    double calculateAngularDistance(double headingA, double headingB);
     double findPolarityDirection();
     double findPolarityExtent();
 };

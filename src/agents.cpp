@@ -1,11 +1,13 @@
 #include "agents.h"
 
 #include <algorithm>
+#include <complex>
 #include <random>
 #include <cmath>
 #include <cassert>
 #include <limits>
 #include <iostream>
+#include <utility>
 
 #include <boost/numeric/ublas/matrix.hpp>
 namespace boostMatrix = boost::numeric::ublas;
@@ -90,6 +92,10 @@ CellAgent::CellAgent(
 
     // Generator for finding random angle after loss of polarisation:
     generatorRandomRepolarisation = std::mt19937(seedDistribution(seedGenerator));
+
+    if (cellType == 1) {
+        flowScaling = 2;
+    };
 }
 // Public Definitions:
 
@@ -143,6 +149,7 @@ void CellAgent::setLocalMatrixPresence(boostMatrix::matrix<bool> stateToSet) {
     localMatrixPresence = stateToSet;
 }
 
+
 // Simulation code:
 void CellAgent::takeRandomStep() {
     // // Calculating new attachment:
@@ -190,14 +197,18 @@ void CellAgent::takeRandomStep() {
 
     // // Calculating actin flow:
     // Calculate weibull lambda based on absolute value of polarity:
-    if (checkForCollisions()) {
+    std::pair<bool, double> collision{checkForCollisions()};
+    if (collision.first) {
         actinFlow = 0;
+        double effectiveRepolarisation{collisionRepolarisation * std::cos(collision.second)};
+        double effectiveRepolarisationRate{std::abs(repolarisationRate * std::cos(collision.second))};
+        double polarityChangeX{effectiveRepolarisation*cos(movementDirection)};
+        double polarityChangeY{effectiveRepolarisation*sin(movementDirection)};
 
-        double polarityChangeX{collisionRepolarisation*cos(movementDirection)};
-        double polarityChangeY{collisionRepolarisation*sin(movementDirection)};
-
-        polarityX = (1-repolarisationRate)*polarityX + repolarisationRate*polarityChangeX;
-        polarityY = (1-repolarisationRate)*polarityY + repolarisationRate*polarityChangeY;
+        polarityX = (1-effectiveRepolarisationRate)*polarityX +
+            effectiveRepolarisationRate*polarityChangeX;
+        polarityY = (1-effectiveRepolarisationRate)*polarityY +
+            effectiveRepolarisationRate*polarityChangeY;
 
         // Return without updating position - collision has occured at this point:    
         return;
@@ -231,8 +242,9 @@ void CellAgent::takeRandomStep() {
     polarityY = newPolarityExtent * sin(direction);
 }
 
+
 // Private functions for cell behaviour:
-bool CellAgent::checkForCollisions() {
+std::pair<bool, double> CellAgent::checkForCollisions() {
     // This checks for which cell in the Moore neighbourhood we need to query:
     int stateIndex{int(floor((movementDirection + M_PI + (M_PI/8)) / (M_PI / 4)))};
     int iContact{std::get<0>(HEADING_CONTACT_MAPPING[stateIndex])};
@@ -242,7 +254,7 @@ bool CellAgent::checkForCollisions() {
     bool type0Contact = cellType0ContactState(iContact, jContact);
     bool type1Contact = cellType1ContactState(iContact, jContact);
     if ((!type0Contact) && (!type1Contact)) {
-        return false;
+        return std::make_pair(false, 0);
     }
 
     // Calculate corner collision correction:
@@ -251,13 +263,13 @@ bool CellAgent::checkForCollisions() {
 
     if (isCorner) {
         bool skipCollision{uniformDistribution(generatorCornerCorrection) > cornerCorrectionFactor};
-        if (skipCollision) {return false;}
+        if (skipCollision) {return std::make_pair(false, 0);}
     }
 
     // Calculate correction for relative cell angles:
     double otherCellHeading{localCellHeadingState(iContact, jContact)};
     double angularDistance{calculateMinimumAngularDistance(findPolarityDirection(), otherCellHeading)};
-    double angularCorrectionFactor{pow(cos(angularDistance), 2)};
+    double angularCorrectionFactor{cos(angularDistance)};
 
     // Calculate homotypic / heterotypic interactions:
     std::array<bool, 2> cellTypeContacts{type0Contact, type1Contact};
@@ -265,7 +277,10 @@ bool CellAgent::checkForCollisions() {
         // Do homotypic interaction if present:
         double effectiveHomotypicInhibition{(homotypicInhibitionRate*angularCorrectionFactor)};
         if (uniformDistribution(generatorForInhibitionRate) < effectiveHomotypicInhibition) {
-            return true;
+            double headingDistance{calculateAngularDistance(
+                findPolarityDirection(), otherCellHeading
+            )};
+            return std::make_pair(true, headingDistance);
         }
     } else if (cellTypeContacts[std::abs(cellType - 1)]) {
         // Do heterotypic interaction if no homotypic interaction:
@@ -273,13 +288,17 @@ bool CellAgent::checkForCollisions() {
             (heterotypicInhibitionRate*angularCorrectionFactor)
         };
         if (uniformDistribution(generatorForInhibitionRate) < effectiveHeterotypicInhibition) {
-            return true;
+            double headingDistance{calculateAngularDistance(
+                findPolarityDirection(), otherCellHeading
+            )};
+            return std::make_pair(true, headingDistance);
         }
     }
 
     // If no collision is ultimately calculated, return no collision:
-    return false;
+    return std::make_pair(false, 0);
 }
+
 
 double CellAgent::sampleVonMises(double kappa) {
     // See Efficient Simulation of the von Mises Distribution - Best & Fisher 1979
@@ -321,11 +340,22 @@ double CellAgent::sampleVonMises(double kappa) {
     return sampledVonMises;
 }
 
+
 double CellAgent::angleMod(double angle) {
     while (angle < -M_PI) {angle += 2*M_PI;};
     while (angle >= M_PI) {angle -= 2*M_PI;};
     return angle;
 }
+
+
+double CellAgent::calculateAngularDistance(double headingA, double headingB) {
+    // Calculating change in theta:
+    double deltaHeading{headingA - headingB};
+    while (deltaHeading <= -M_PI) {deltaHeading += 2*M_PI;}
+    while (deltaHeading > M_PI) {deltaHeading -= 2*M_PI;}
+    return deltaHeading;
+}
+
 
 double CellAgent::calculateMinimumAngularDistance(double headingA, double headingB) {
     // Calculating change in theta:
@@ -349,6 +379,7 @@ double CellAgent::calculateMinimumAngularDistance(double headingA, double headin
         return flippedHeading;
     };
 }
+
 
 std::tuple<double, double> CellAgent::getAverageDeltaHeading() {
     std::array<int, 3> rowScan = {0, 1, 2};
@@ -379,18 +410,18 @@ std::tuple<double, double> CellAgent::getAverageDeltaHeading() {
     double sineMean{0};
     double cosineMean{0};
     for (auto & heading : deltaHeadingVector) {
-        sineMean += sin(heading);
-        cosineMean += cos(heading);
+        sineMean += std::sin(heading);
+        cosineMean += std::cos(heading);
     }
 
     sineMean /= 9;
     cosineMean /= 9;
 
-    assert(abs(sineMean) <= 1);
-    assert(abs(cosineMean) <= 1);
+    assert(std::abs(sineMean) <= 1);
+    assert(std::abs(cosineMean) <= 1);
     assert(sineMean != 0 & cosineMean != 0);
     double angleAverage{std::atan2(sineMean, cosineMean)};
-    double angleIntensity{sqrt(pow(sineMean, 2) + pow(cosineMean, 2))};
+    double angleIntensity{std::sqrt(std::pow(sineMean, 2) + std::pow(cosineMean, 2))};
     return {angleAverage, angleIntensity};
 }
 
@@ -422,11 +453,12 @@ double CellAgent::calculateCellDeltaTowardsECM(double ecmHeading, double cellHea
     };
 }
 
+
 double CellAgent::findPolarityDirection() {
     if ((polarityY == 0) & (polarityX == 0)) {
         double newAngle{angleUniformDistribution(generatorRandomRepolarisation)};
-        polarityX = cos(newAngle) * 1e-5;
-        polarityY = sin(newAngle) * 1e-5;
+        polarityX = std::cos(newAngle) * 1e-5;
+        polarityY = std::sin(newAngle) * 1e-5;
         return newAngle;
     } else {
         return std::atan2(polarityY, polarityX);
@@ -435,7 +467,10 @@ double CellAgent::findPolarityDirection() {
 
 
 double CellAgent::findPolarityExtent() {
-    double polarityExtent{sqrt(pow(polarityX, 2) + pow(polarityY, 2))};
+    double polarityExtent{
+        std::sqrt(std::pow(polarityX, 2) +
+        std::pow(polarityY, 2)
+    )};
     assert(polarityExtent <= 1.0);
     return polarityExtent;
 };
@@ -445,8 +480,8 @@ double CellAgent::getAverageAttachmentHeading() {
     double sineMean{0};
     double cosineMean{0};
     for (auto & heading : attachmentHistory) {
-        sineMean += sin(heading);
-        cosineMean += cos(heading);
+        sineMean += std::sin(heading);
+        cosineMean += std::cos(heading);
     }
 
     sineMean /= 5;
