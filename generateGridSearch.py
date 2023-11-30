@@ -1,23 +1,24 @@
+import os
 import numpy as np
 
 # Defines the parameter ranges, with [start, stop, num_steps]:
 GRIDSEARCH = {
     "superIterationCount": [10, 10, 1],
     "numberOfCells": [200, 200, 1],
-    "worldSize": [1024, 1024, 1],
+    "worldSize": [2048, 2048, 1],
     "gridSize": [24, 32, 2],
     "cellTypeProportions": [0, 0, 1],
     "matrixPersistence": [0.99, 0.99, 1],
-    "wbK": [1, 1, 1],
-    "kappa": [3, 3, 1],
+    "wbK": [2, 2, 1],
+    "kappa": [2.5, 2.5, 1],
     "homotypicInhibition": [0.4, 0.8, 4],
     "heterotypicInhibition": [0, 0, 1],
-    "polarityPersistence": [0.4, 0.6, 4],
-    "polarityTurningCoupling": [0.7, 0.9, 4],
-    "flowScaling": [2.5, 3.5, 4],
-    "flowPolarityCoupling": [0.4, 0.8, 4],
+    "polarityPersistence": [0.2, 0.8, 4],
+    "polarityTurningCoupling": [0.1, 0.9, 4],
+    "flowScaling": [1, 2.5, 4],
+    "flowPolarityCoupling": [0.8, 3.5, 4],
     "collisionRepolarisation": [0, 0, 1],
-    "repolarisationRate": [0.5, 0.5, 1]
+    "repolarisationRate": [0.75, 0.75, 1]
 }
 
 def main():
@@ -50,8 +51,13 @@ def main():
 
     print(len(argument_grid))
 
+    # Generating directory and output gridsearch to that directory:
+    if not os.path.exists("fileOutputs"):
+        os.mkdir("fileOutputs")
+    output_filepath = os.path.join("fileOutputs", "gridsearch.txt")
+
     # Write the grid search variables to a file to be read by a job array on the cluster:
-    with open('gridsearch.txt', 'w') as f:
+    with open(output_filepath, 'w') as f:
         # Writing column names:
         header_string = ""
         header_string += "array_id"

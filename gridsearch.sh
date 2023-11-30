@@ -11,7 +11,7 @@
 # CMake/3.24.3-GCCcore-12.2.0
 
 # Specify the path to the config file
-config=./gridsearch.txt
+config=./fileOutputs/gridsearch.txt
 
 # Extracting argument names based on $SLURM_ARRAY_TASK_ID
 superIterationCount=$(awk -v array_id=$SLURM_ARRAY_TASK_ID '$1==array_id {print $2}' $config)
