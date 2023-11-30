@@ -11,7 +11,9 @@ def main():
     # Reading through all iterations:
     summary_dataframe_list = []
     speed_dataframe_list = []
-    for folder_id in range(1, 1025):
+    for folder_id in range(1, 2049):
+        if folder_id % 100 == 0:
+            print(folder_id)
         folder_path = os.path.join(SIMULATION_OUTPUTS_FOLDER, str(folder_id))
         summary_filepath = os.path.join(folder_path, "summary.csv")
         speeds_filepath = os.path.join(folder_path, "speeds.csv")

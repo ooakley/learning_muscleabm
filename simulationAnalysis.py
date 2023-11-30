@@ -14,9 +14,7 @@ CSV_COLUMN_NAMES = [
     "polarity_extent", "percept_direction", "percept_intensity",
     "actin_flow", "movement_direction", "turning_angle", "sampled_angle", "contact_inhibition"
 ]
-GRID_SIZE = 32
-AREA_SIZE = 1024
-TIMESTEPS = 1000
+
 TIMESTEP_WIDTH = 400
 
 
@@ -27,7 +25,7 @@ def parse_arguments():
     return args
 
 
-def read_matrix_into_numpy(filename, grid_size=GRID_SIZE, timesteps=TIMESTEPS):
+def read_matrix_into_numpy(filename, grid_size, timesteps):
     number_of_elements = (grid_size**2)*timesteps*2
     flattened_matrix = np.loadtxt(filename, delimiter=',', usecols=range(number_of_elements))
     return np.reshape(flattened_matrix, (timesteps, 2, grid_size, grid_size), order='C')
@@ -69,11 +67,11 @@ def find_persistence_time(trajectory_dataframe):
     return pt_list
 
 
-def plot_superiteration(trajectory_list, matrix_list, timestep, iteration, ax):
+def plot_superiteration(trajectory_list, matrix_list, area_size, grid_size, timestep, iteration, ax):
     # Accessing and formatting relevant dataframe:
     trajectory_dataframe = trajectory_list[iteration]
-    x_mask = (trajectory_dataframe["x"] > 10) & (trajectory_dataframe["x"] < AREA_SIZE - 10)
-    y_mask = (trajectory_dataframe["y"] > 10) & (trajectory_dataframe["y"] < AREA_SIZE - 10)
+    x_mask = (trajectory_dataframe["x"] > 10) & (trajectory_dataframe["x"] < area_size - 10)
+    y_mask = (trajectory_dataframe["y"] > 10) & (trajectory_dataframe["y"] < area_size - 10)
     full_mask = x_mask & y_mask
     rollover_skipped_df = trajectory_dataframe[full_mask]
     timeframe_mask = (rollover_skipped_df["frame"] > timestep - TIMESTEP_WIDTH) & (rollover_skipped_df["frame"] <= timestep)
@@ -82,9 +80,9 @@ def plot_superiteration(trajectory_list, matrix_list, timestep, iteration, ax):
     unstacked_dataframe = rollover_skipped_df[timeframe_mask].set_index(['particle', 'frame'])[['x', 'y']].unstack()
 
     # Setting up matrix plotting:
-    tile_width = AREA_SIZE / GRID_SIZE
-    X = np.arange(0, AREA_SIZE, tile_width) + (tile_width / 2)
-    Y = np.arange(0, AREA_SIZE, tile_width) + (tile_width / 2)
+    tile_width = area_size / grid_size
+    X = np.arange(0, area_size, tile_width) + (tile_width / 2)
+    Y = np.arange(0, area_size, tile_width) + (tile_width / 2)
     X, Y = np.meshgrid(X, Y)
 
     matrix = matrix_list[iteration][0, :, :]
@@ -121,18 +119,18 @@ def plot_superiteration(trajectory_list, matrix_list, timestep, iteration, ax):
         x_pos[type1_mask], y_pos[type1_mask], x_heading[type1_mask], y_heading[type1_mask],
         pivot='mid', scale=75, color='g'
     )
-    ax.set_xlim(0, AREA_SIZE)
-    ax.set_ylim(0, AREA_SIZE)
+    ax.set_xlim(0, area_size)
+    ax.set_ylim(0, area_size)
     ax.invert_yaxis()
     ax.set_axis_off()
 
 
-def plot_trajectories(subdirectory_path, trajectory_list, matrix_list):
+def plot_trajectories(subdirectory_path, trajectory_list, matrix_list, area_size, grid_size):
     fig, axs = plt.subplots(3, 3, figsize=(10, 10))
     count = 0
     for i in range(3):
         for j in range(3):
-            plot_superiteration(trajectory_list, matrix_list, 999, count, axs[i, j])
+            plot_superiteration(trajectory_list, matrix_list, area_size, grid_size, 999, count, axs[i, j])
             count += 1
 
     fig.tight_layout()
@@ -146,6 +144,10 @@ def main():
 
     # Getting simulation parameters:
     gridseach_dataframe = pd.read_csv("fileOutputs/gridsearch.txt", delimiter="\t")
+    gridsearch_row = gridseach_dataframe[gridseach_dataframe["array_id"] == args.folder_id]
+    GRID_SIZE = int(gridsearch_row["gridSize"])
+    AREA_SIZE = int(gridsearch_row["worldSize"])
+    TIMESTEPS = 1000
 
     # Finding specified simulation output files:
     subdirectory_path = os.path.join(SIMULATION_OUTPUTS_FOLDER, str(args.folder_id))
@@ -190,7 +192,7 @@ def main():
         # Reading final-step matrix information into list:
         matrix_filename = f"matrix_seed{seed:03d}.txt"
         matrix_filepath = os.path.join(subdirectory_path, matrix_filename)
-        matrix = read_matrix_into_numpy(matrix_filepath)
+        matrix = read_matrix_into_numpy(matrix_filepath, GRID_SIZE, TIMESTEPS)
         matrix_list.append(matrix[-1, :, :, :])
 
     # Generating full dataframe and saving to subdirectory:
@@ -213,7 +215,7 @@ def main():
     fig.savefig(os.path.join(subdirectory_path, "matrix_orientation.png"))
 
     # Plotting trajectories:
-    plot_trajectories(subdirectory_path, trajectory_list, matrix_list)
+    plot_trajectories(subdirectory_path, trajectory_list, matrix_list, AREA_SIZE, GRID_SIZE)
 
 if __name__ == "__main__":
     main()
