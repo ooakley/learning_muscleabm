@@ -183,22 +183,15 @@ void CellAgent::takeRandomStep() {
 
     movementDirection = std::atan2(movY, movX);
 
-    // double newAttachmentDirection = angleMod(findPolarityDirection() + angleDelta);
-    // attachmentHistory.insert(attachmentHistory.begin(), newAttachmentDirection);
-    // while (attachmentHistory.size() > 3) {
-    //     attachmentHistory.pop_back();
-    // }
-    // std::cout << attachmentHistory[0] << "\n";
-    // // Calculate movement direction using polarity-weighted average of attachments:
-    // movementDirection = getAverageAttachmentHeading();
-
     // // Calculating actin flow:
     // Calculate weibull lambda based on absolute value of polarity:
     std::pair<bool, double> collision{checkForCollisions()};
     if (collision.first) {
         actinFlow = 0;
         double effectiveRepolarisation{collisionRepolarisation * std::cos(collision.second)};
-        double effectiveRepolarisationRate{std::abs(repolarisationRate * std::cos(collision.second))};
+        double effectiveRepolarisationRate{
+            std::abs(repolarisationRate * std::cos(collision.second))
+        };
         double polarityChangeX{effectiveRepolarisation*cos(movementDirection)};
         double polarityChangeY{effectiveRepolarisation*sin(movementDirection)};
 
@@ -207,15 +200,15 @@ void CellAgent::takeRandomStep() {
         polarityY = (1-effectiveRepolarisationRate)*polarityY +
             effectiveRepolarisationRate*polarityChangeY;
 
-        // Return without updating position - collision has occured at this point:    
-        return;
-    } else {
-        double actinModulator{sqrt(pow(polarityX, 2) + pow(polarityY, 2)) * flowScaling};
-        std::weibull_distribution<double> weibullDistribution{
-            std::weibull_distribution<double>(kWeibull, actinModulator)
-        };
-        actinFlow = weibullDistribution(generatorWeibull);
     }
+
+    double actinModulator{
+        sqrt(pow(polarityX, 2) + pow(polarityY, 2)) * flowScaling
+    };
+    std::weibull_distribution<double> weibullDistribution{
+        std::weibull_distribution<double>(kWeibull, actinModulator)
+    };
+    actinFlow = weibullDistribution(generatorWeibull);
 
     // // Update position:
     double dx{actinFlow * cos(movementDirection)};
