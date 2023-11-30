@@ -155,7 +155,7 @@ int main(int argc, char** argv) {
                 cellParams
             )
         };
-        for (int i = 0; i < 1000; ++i) {
+        for (int i = 0; i < 144; ++i) {
             mainWorld.runSimulationStep();
             mainWorld.writePositionsToCSV(csvFile);
             mainWorld.writeMatrixToCSV(matrixFile);
