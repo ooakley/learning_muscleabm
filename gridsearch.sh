@@ -4,7 +4,7 @@
 #SBATCH --partition=cpu
 #SBATCH --time=6:00:00
 #SBATCH --cpus-per-task=1
-#SBATCH --array=1-2048
+#SBATCH --array=1-3125
 
 # Required lmod modules:
 # Boost/1.81.0-GCC-12.2.0

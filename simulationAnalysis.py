@@ -15,7 +15,7 @@ CSV_COLUMN_NAMES = [
     "actin_flow", "movement_direction", "turning_angle", "sampled_angle", "contact_inhibition"
 ]
 
-TIMESTEP_WIDTH = 400
+TIMESTEP_WIDTH = 576
 
 
 def parse_arguments():
@@ -36,7 +36,25 @@ def find_average_rmsd(trajectory_dataframe):
     rmsd_list = []
     for particle in particles:
         particle_dataframe = trajectory_dataframe[trajectory_dataframe["particle"] == particle]
-        rmsd_list.append(np.mean(particle_dataframe["actin_flow"]))
+        # Getting dx and dy, using these to calculate orientations and RMS displacements of
+        # particle over time. We shift by four as we simulate every timestep as 2.5 minutes, 
+        # but we capture image data every ten minutes:
+        dx = np.array(particle_dataframe.shift(4)['x'] - particle_dataframe['x'])
+        dy = np.array(particle_dataframe.shift(4)['y'] - particle_dataframe['y'])
+
+        # Correcting for periodic boundaries:
+        dx[dx > 1024] = dx[dx > 1024] - 2048
+        dx[dx < -1024] = dx[dx < -1024] + 2048
+
+        dy[dy > 1024] = dy[dy > 1024] - 2048
+        dy[dy < -1024] = dy[dy < -1024] + 2048
+
+        # orientation = np.arctan2(dy, dx)
+        instantaneous_speeds = np.sqrt(dx**2, dy**2)
+        instantaneous_speeds = instantaneous_speeds[~np.isnan(instantaneous_speeds)]
+
+        rmsd_list.append(np.mean(instantaneous_speeds))
+
     return rmsd_list
 
 
@@ -155,6 +173,7 @@ def main():
 
     matrix_list = []
     particle_rmsd_list = []
+    particle_pt_list = []
     trajectory_list = []
     sub_dataframes = []
     for seed in range(10):
@@ -167,7 +186,9 @@ def main():
         # Calculating derived statistics:
         rmsd_list = find_average_rmsd(trajectory_dataframe)
         particle_rmsd_list.extend(rmsd_list)
+
         pt_list = find_persistence_time(trajectory_dataframe)
+        particle_pt_list.extend(pt_list)
         try:
             persistence_speed_corrcoef, p_val = scipy.stats.pearsonr(rmsd_list, pt_list)
         except:
@@ -203,6 +224,9 @@ def main():
     # Saving particle speed distributions to subdirectory:
     particle_rmsd_df = pd.DataFrame({"particle_rmsd": particle_rmsd_list})
     particle_rmsd_df.to_csv(os.path.join(subdirectory_path, "speeds.csv"))
+
+    particle_pt_df = pd.DataFrame({"particle_persistence_time": particle_pt_list})
+    particle_pt_df.to_csv(os.path.join(subdirectory_path, "persistence_times.csv"))
 
     # Plotting final orientations of the matrix:
     fig, ax = plt.subplots(figsize=(7, 4))
