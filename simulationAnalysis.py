@@ -30,58 +30,49 @@ def read_matrix_into_numpy(filename, grid_size, timesteps):
     return np.reshape(flattened_matrix, (timesteps, 2, grid_size, grid_size), order='C')
 
 
-def find_average_rmsd(trajectory_dataframe):
-    particles = list(set(list(trajectory_dataframe["particle"])))
-    rmsd_list = []
-    for particle in particles:
-        particle_dataframe = trajectory_dataframe[trajectory_dataframe["particle"] == particle]
-        # Getting dx and dy, using these to calculate orientations and RMS displacements of
-        # particle over time. We shift by four as we simulate every timestep as 2.5 minutes, 
-        # but we capture image data every ten minutes:
-        dx = np.array(particle_dataframe.shift(4)['x'] - particle_dataframe['x'])
-        dy = np.array(particle_dataframe.shift(4)['y'] - particle_dataframe['y'])
+def find_persistence_time(orientation_array):
+    # Calculating all pairwise angular differences in orientation timeseries:
+    direction_differences = np.subtract.outer(orientation_array, orientation_array)
 
-        # Correcting for periodic boundaries:
-        dx[dx > 1024] = dx[dx > 1024] - 2048
-        dx[dx < -1024] = dx[dx < -1024] + 2048
+    # Ensuring distances are bounded between pi and -pi:
+    direction_differences[direction_differences < -np.pi] += 2*np.pi
+    direction_differences[direction_differences > np.pi] -= 2*np.pi
+    direction_differences = np.abs(direction_differences)
 
-        dy[dy > 1024] = dy[dy > 1024] - 2048
-        dy[dy < -1024] = dy[dy < -1024] + 2048
-
-        # orientation = np.arctan2(dy, dx)
-        instantaneous_speeds = np.sqrt(dx**2, dy**2)
-        instantaneous_speeds = instantaneous_speeds[~np.isnan(instantaneous_speeds)]
-
-        rmsd_list.append(np.mean(instantaneous_speeds))
-
-    return rmsd_list
-
-
-def find_persistence_time(trajectory_dataframe):
-    particles = list(set(list(trajectory_dataframe["particle"])))
+    # Calculating number of frames that it takes for the angle to change by pi/2 (90 degrees):
     pt_list = []
-
-    for particle in particles:
-        particle_directions = np.array(
-            trajectory_dataframe[trajectory_dataframe["particle"] == particle]["movement_direction"]
-        )
-
-        direction_differences = np.subtract.outer(particle_directions, particle_directions)
-        direction_differences[direction_differences < -np.pi] += 2*np.pi
-        direction_differences[direction_differences > np.pi] -= 2*np.pi
-        direction_differences = np.abs(direction_differences)
-
-        persistence_time_list = []
-        for timestep in range(len(particle_directions)):
-            subsequent_directions = direction_differences[timestep, timestep:]
-            persistence_time = np.argmax(subsequent_directions > np.pi/2)
-            if persistence_time == 0:
-                continue
-            persistence_time_list.append(persistence_time)
-
-        pt_list.append(np.mean(np.log(persistence_time_list)))
+    for timestep in range(orientation_array.shape[0]):
+        subsequent_directions = direction_differences[timestep, timestep:]
+        persistence_time = np.argmax(subsequent_directions > np.pi/2)
+        if persistence_time == 0:
+            continue
+        pt_list.append(persistence_time)
 
     return pt_list
+
+
+def analyse_particle(particle_dataframe):
+    # Getting dx and dy, using these to calculate orientations and RMS displacements of
+    # particle over time. We shift by four as we simulate every timestep as 2.5 minutes,
+    # but we capture image data every ten minutes:
+    dx = np.array(particle_dataframe.shift(4)['x'] - particle_dataframe['x'])
+    dy = np.array(particle_dataframe.shift(4)['y'] - particle_dataframe['y'])
+
+    # Correcting for periodic boundaries:
+    dx[dx > 1024] = dx[dx > 1024] - 2048
+    dx[dx < -1024] = dx[dx < -1024] + 2048
+
+    dy[dy > 1024] = dy[dy > 1024] - 2048
+    dy[dy < -1024] = dy[dy < -1024] + 2048
+
+    # Calculating particle's RMS displacement:
+    instantaneous_speeds = np.sqrt(dx**2, dy**2)
+    instantaneous_speeds = instantaneous_speeds[~np.isnan(instantaneous_speeds)]
+
+    # Calculating the particle's average persistence time:
+    orientation_timeseries = np.arctan2(dy, dx)
+
+    return np.mean(instantaneous_speeds), find_persistence_time(orientation_timeseries)
 
 
 def plot_superiteration(
@@ -195,12 +186,19 @@ def main():
         )
         trajectory_list.append(trajectory_dataframe)
 
-        # Calculating derived statistics:
-        rmsd_list = find_average_rmsd(trajectory_dataframe)
-        particle_rmsd_list.extend(rmsd_list)
+        # Analysing all particles:
+        particles = list(set(list(trajectory_dataframe["particle"])))
+        rmsd_list = []
+        pt_list = []
+        for particle in particles:
+            particle_dataframe = trajectory_dataframe[trajectory_dataframe["particle"] == particle]
+            rmsd, persistence_time = analyse_particle(particle_dataframe)
+            rmsd_list.append(rmsd_list), pt_list.append(persistence_time)
 
-        pt_list = find_persistence_time(trajectory_dataframe)
+        # Saving to per-particle dataframes:
+        particle_rmsd_list.extend(rmsd_list)
         particle_pt_list.extend(pt_list)
+
         try:
             persistence_speed_corrcoef, p_val = scipy.stats.pearsonr(rmsd_list, pt_list)
         except Exception as e:
