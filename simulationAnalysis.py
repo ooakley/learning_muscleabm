@@ -30,7 +30,7 @@ def read_matrix_into_numpy(filename, grid_size, timesteps):
     return np.reshape(flattened_matrix, (timesteps, 2, grid_size, grid_size), order='C')
 
 
-def find_persistence_time(orientation_array):
+def find_persistence_times(orientation_array):
     # Calculating all pairwise angular differences in orientation timeseries:
     direction_differences = np.subtract.outer(orientation_array, orientation_array)
 
@@ -68,11 +68,17 @@ def analyse_particle(particle_dataframe):
     # Calculating particle's RMS displacement:
     instantaneous_speeds = np.sqrt(dx**2, dy**2)
     instantaneous_speeds = instantaneous_speeds[~np.isnan(instantaneous_speeds)]
+    particle_rmsd = np.mean(instantaneous_speeds)
 
     # Calculating the particle's average persistence time:
     orientation_timeseries = np.arctan2(dy, dx)
+    persistence_times = find_persistence_times(orientation_timeseries)
+    if len(persistence_times) == 0:
+        particle_pt = np.inf
+    else:
+        particle_pt = np.mean(persistence_times)
 
-    return np.mean(instantaneous_speeds), find_persistence_time(orientation_timeseries)
+    return particle_rmsd, particle_pt
 
 
 def plot_superiteration(
@@ -149,7 +155,7 @@ def plot_trajectories(subdirectory_path, trajectory_list, matrix_list, area_size
     for i in range(3):
         for j in range(3):
             plot_superiteration(
-                trajectory_list, matrix_list, area_size, grid_size, 999, count, axs[i, j]
+                trajectory_list, matrix_list, area_size, grid_size, 575, count, axs[i, j]
             )
             count += 1
 
@@ -167,7 +173,7 @@ def main():
     gridsearch_row = gridseach_dataframe[gridseach_dataframe["array_id"] == args.folder_id]
     GRID_SIZE = int(gridsearch_row["gridSize"])
     AREA_SIZE = int(gridsearch_row["worldSize"])
-    TIMESTEPS = 1000
+    TIMESTEPS = 576
 
     # Finding specified simulation output files:
     subdirectory_path = os.path.join(SIMULATION_OUTPUTS_FOLDER, str(args.folder_id))
@@ -178,6 +184,7 @@ def main():
     trajectory_list = []
     sub_dataframes = []
     for seed in range(10):
+        print(f"Reading subiteration {seed}...")
         # Reading trajectory information:
         csv_filename = f"positions_seed{seed:03d}.csv"
         csv_filepath = os.path.join(subdirectory_path, csv_filename)
@@ -193,18 +200,17 @@ def main():
         for particle in particles:
             particle_dataframe = trajectory_dataframe[trajectory_dataframe["particle"] == particle]
             rmsd, persistence_time = analyse_particle(particle_dataframe)
-            rmsd_list.append(rmsd_list), pt_list.append(persistence_time)
+            rmsd_list.append(rmsd), pt_list.append(persistence_time)
 
         # Saving to per-particle dataframes:
         particle_rmsd_list.extend(rmsd_list)
         particle_pt_list.extend(pt_list)
 
-        try:
-            persistence_speed_corrcoef, p_val = scipy.stats.pearsonr(rmsd_list, pt_list)
-        except Exception as e:
-            print(e.message, e.args)
+        if np.any([element == np.inf for element in pt_list]):
             persistence_speed_corrcoef = np.nan
             p_val = np.nan
+        else:
+            persistence_speed_corrcoef, p_val = scipy.stats.pearsonr(rmsd_list, pt_list)
 
         # Saving to dataframe row:
         new_info = pd.DataFrame(
@@ -231,7 +237,6 @@ def main():
 
     # Generating full dataframe and saving to subdirectory:
     summary_dataframe = pd.concat(sub_dataframes).reset_index().drop(columns=["index", "level_0"])
-    print(summary_dataframe)
     summary_dataframe.to_csv(os.path.join(subdirectory_path, "summary.csv"))
 
     # Saving particle speed distributions to subdirectory:

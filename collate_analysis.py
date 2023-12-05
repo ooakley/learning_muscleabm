@@ -12,7 +12,7 @@ def main():
     # Reading through all iterations:
     summary_dataframe_list = []
     particle_dataframe_list = []
-    for folder_id in range(1, 3126):
+    for folder_id in range(1, 9375+1):
         if folder_id % 100 == 0:
             print(folder_id)
 
@@ -27,8 +27,7 @@ def main():
             # Reading in trajectory data:
             trajectory_data = pd.read_csv(summary_filepath, index_col=0)
             summary_dataframe_list.append(trajectory_data)
-        except Exception as e:
-            print(e.message, e.args)
+        except:
             print(f"Folder {folder_id} skipped...")
             continue
 

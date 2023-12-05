@@ -2,9 +2,9 @@
 #SBATCH --job-name=simulation
 #SBATCH --ntasks=1
 #SBATCH --partition=cpu
-#SBATCH --time=6:00:00
+#SBATCH --time=15:00
 #SBATCH --cpus-per-task=1
-#SBATCH --array=1-3125
+#SBATCH --array=1-9375
 
 # Required lmod modules:
 # Boost/1.81.0-GCC-12.2.0
@@ -40,3 +40,5 @@ repolarisationRate=$(awk -v array_id=$SLURM_ARRAY_TASK_ID '$1==array_id {print $
     --heterotypicInhibition $heterotypicInhibition --polarityPersistence $polarityPersistence --polarityTurningCoupling $polarityTurningCoupling \
     --flowScaling $flowScaling --flowPolarityCoupling $flowPolarityCoupling \
     --collisionRepolarisation $collisionRepolarisation --repolarisationRate $repolarisationRate
+
+python3 simulationAnalysis.py --folder_id $SLURM_ARRAY_TASK_ID
