@@ -34,7 +34,8 @@ CellAgent::CellAgent(
     double setHomotypicInhibition, double setHeterotypicInhibition,
     double setPolarityPersistence, double setPolarityTurningCoupling,
     double setFlowScaling, double setFlowPolarityCoupling,
-    double setCollisionRepolarisation, double setRepolarisationRate
+    double setCollisionRepolarisation, double setRepolarisationRate,
+    double setPolarityNoiseSigma
     )
     : thereIsMatrixInteraction{true}
     , x{startX}
@@ -47,6 +48,7 @@ CellAgent::CellAgent(
     , flowScaling{setFlowScaling}
     , collisionRepolarisation{setCollisionRepolarisation}
     , repolarisationRate{setRepolarisationRate}
+    , polarityNoiseSigma{setPolarityNoiseSigma}
     , movementDirection{0}
     , actinFlow{0}
     , directionalInfluence{0}
@@ -92,6 +94,12 @@ CellAgent::CellAgent(
 
     // Generator for finding random angle after loss of polarisation:
     generatorRandomRepolarisation = std::mt19937(seedDistribution(seedGenerator));
+
+    // Generator for polarity noise:
+    generatorPolarityNoiseX = std::mt19937(seedDistribution(seedGenerator));
+    generatorPolarityNoiseY = std::mt19937(seedDistribution(seedGenerator)); 
+    polarityNoiseDistribution = \
+        std::normal_distribution<double>(0, polarityNoiseSigma);
 
 }
 // Public Definitions:
@@ -224,12 +232,22 @@ void CellAgent::takeRandomStep() {
     double newPolarityX{polarityPersistence*polarityX + (1-polarityPersistence)*polarityChangeX};
     double newPolarityY{polarityPersistence*polarityY + (1-polarityPersistence)*polarityChangeY};
 
+    // Add white noise component to polarity:
+    double polarityNoiseX{polarityNoiseDistribution(generatorPolarityNoiseX)};
+    double polarityNoiseY{polarityNoiseDistribution(generatorPolarityNoiseY)};
+    newPolarityX = newPolarityX + polarityNoiseX;
+    newPolarityY = newPolarityY + polarityNoiseY;
+
     // Clamping polarity components to [-1, 1] (while preserving direction):
     double newPolarityExtent{sqrt(pow(newPolarityX, 2) + pow(newPolarityY, 2))};
+    if (newPolarityExtent > 1) {
+        newPolarityExtent = 1;
+    }
     assert(newPolarityExtent <= 1);
     double direction{std::atan2(newPolarityY, newPolarityX)};
     polarityX = newPolarityExtent * cos(direction);
     polarityY = newPolarityExtent * sin(direction);
+
 }
 
 

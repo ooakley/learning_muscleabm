@@ -14,7 +14,8 @@ public:
         double setHomotypicInhibition, double setHeterotypicInhibiton,
         double setPolarityPersistence, double setPolarityTurningCoupling,
         double setFlowScaling, double setFlowPolarityCoupling,
-        double setCollisionRepolarisation, double setRepolarisationRate
+        double setCollisionRepolarisation, double setRepolarisationRate,
+        double setPolarityNoiseSigma
     );
 
     // Getters:
@@ -78,6 +79,12 @@ private:
     double flowScaling;
     double collisionRepolarisation;
     double repolarisationRate;
+
+    // Infrastructure for additive polarisation noise:
+    double polarityNoiseSigma;
+    std::mt19937 generatorPolarityNoiseX;
+    std::mt19937 generatorPolarityNoiseY;
+    std::normal_distribution<double> polarityNoiseDistribution;
 
     // Properties calculated each timestep:
     double movementDirection;

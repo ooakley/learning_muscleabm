@@ -125,7 +125,8 @@ CellAgent World::initialiseCell(int setCellID) {
         cellParameters.homotypicInhibition, cellParameters.heterotypicInhibition,
         cellParameters.polarityPersistence, cellParameters.polarityTurningCoupling,
         cellParameters.flowScaling, cellParameters.flowPolarityCoupling,
-        cellParameters.collisionRepolarisation, cellParameters.repolarisationRate
+        cellParameters.collisionRepolarisation, cellParameters.repolarisationRate,
+        cellParameters.polarityNoiseSigma
     );
     // Higher alpha = higher concentration
     // Higher beta = lower lambda

@@ -20,9 +20,11 @@ Hello! There are a lot of command line arguments, for which I apologise. It make
 parallelisation easier. If you'd just like to run the simulation, here's what you can paste into
 the terminal after compiling the code:
 ./build/src/main --jobArrayID 0 --superIterationCount 5 --numberOfCells 200 --worldSize 1000 --gridSize 32 \
+    --cellTypeProportions 0 --matrixPersistence 0.95 \
     --wbK 1.0 --kappa 2.5 --homotypicInhibition 0.8 --heterotypicInhibition 0.5 \
     --polarityPersistence 0.9 --polarityTurningCoupling 0.6 --flowScaling 1.2 \
-    --flowPolarityCoupling 0.7
+    --flowPolarityCoupling 0.7 --collisionRepolarisation 0 --repolarisationRate 0.75 \
+    --polarityNoiseSigma 0.025
 */
 
 int main(int argc, char** argv) {
@@ -92,6 +94,9 @@ int main(int argc, char** argv) {
         )
         ("repolarisationRate", po::value<float>(&cellParams.repolarisationRate)->required(),
             "Rate at which collisions induce repolarisation."
+        )
+        ("polarityNoiseSigma", po::value<float>(&cellParams.repolarisationRate)->required(),
+            "Size of additive Gaussian noise to add to polarity at every timestep."
         )
     ;
 

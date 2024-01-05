@@ -7,7 +7,7 @@
 struct CellParameters {
     float wbK, kappa, homotypicInhibition, heterotypicInhibition,
     polarityPersistence, polarityTurningCoupling, flowScaling, flowPolarityCoupling,
-    collisionRepolarisation, repolarisationRate;
+    collisionRepolarisation, repolarisationRate, polarityNoiseSigma;
 };
 
 class World {

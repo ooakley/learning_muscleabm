@@ -21,6 +21,7 @@ GRIDSEARCH = {
     "repolarisationRate": [0.75, 0.75, 1]
 }
 
+
 def main():
     # Generate the grid search variables:
     argument_grid = [
