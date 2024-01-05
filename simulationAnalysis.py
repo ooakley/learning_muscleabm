@@ -7,6 +7,8 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
+from scipy.spatial import KDTree
+
 SIMULATION_OUTPUTS_FOLDER = "./fileOutputs/"
 CSV_COLUMN_NAMES = [
     "frame", "particle", "x", "y", "orientation",
@@ -66,7 +68,7 @@ def analyse_particle(particle_dataframe):
     dy[dy < -1024] = dy[dy < -1024] + 2048
 
     # Calculating particle's RMS displacement:
-    instantaneous_speeds = np.sqrt(dx**2, dy**2)
+    instantaneous_speeds = np.sqrt(dx**2 + dy**2)
     instantaneous_speeds = instantaneous_speeds[~np.isnan(instantaneous_speeds)]
     particle_rmsd = np.mean(instantaneous_speeds)
 
@@ -150,7 +152,7 @@ def plot_superiteration(
 
 
 def plot_trajectories(subdirectory_path, trajectory_list, matrix_list, area_size, grid_size):
-    fig, axs = plt.subplots(3, 3, figsize=(10, 10))
+    fig, axs = plt.subplots(3, 3, figsize=(7, 7))
     count = 0
     for i in range(3):
         for j in range(3):
@@ -181,6 +183,8 @@ def main():
     matrix_list = []
     particle_rmsd_list = []
     particle_pt_list = []
+    particle_neighbour_list = []
+    particle_seed_list = []
     trajectory_list = []
     sub_dataframes = []
     for seed in range(10):
@@ -202,9 +206,23 @@ def main():
             rmsd, persistence_time = analyse_particle(particle_dataframe)
             rmsd_list.append(rmsd), pt_list.append(persistence_time)
 
-        # Saving to per-particle dataframes:
+        # Getting nearest-neighbour distance distribution:
+        frames = np.array(list(set(list(trajectory_dataframe["frame"]))))
+        final_frame = np.max(frames)
+        final_frame_mask = trajectory_dataframe["frame"] == final_frame
+        final_frame_df = trajectory_dataframe[final_frame_mask]
+        x = np.array(final_frame_df['x'])
+        y = np.array(final_frame_df['y'])
+        positions = np.stack([x, y], axis=1)
+        neighbour_tree = KDTree(positions)
+        nn_distances, _ = neighbour_tree.query(positions, k=[2])
+        nn_distances = [distance[0] for distance in nn_distances]
+
+        # Saving to dataframes:
         particle_rmsd_list.extend(rmsd_list)
         particle_pt_list.extend(pt_list)
+        particle_neighbour_list.extend(nn_distances)
+        particle_seed_list.extend([seed] * len(rmsd_list))
 
         if np.any([element == np.inf for element in pt_list]):
             persistence_speed_corrcoef = np.nan
@@ -240,11 +258,15 @@ def main():
     summary_dataframe.to_csv(os.path.join(subdirectory_path, "summary.csv"))
 
     # Saving particle speed distributions to subdirectory:
-    particle_rmsd_df = pd.DataFrame({"particle_rmsd": particle_rmsd_list})
-    particle_rmsd_df.to_csv(os.path.join(subdirectory_path, "speeds.csv"))
-
-    particle_pt_df = pd.DataFrame({"particle_persistence_time": particle_pt_list})
-    particle_pt_df.to_csv(os.path.join(subdirectory_path, "persistence_times.csv"))
+    particle_dataframe = pd.DataFrame(
+        {
+            "particle_rmsd": particle_rmsd_list,
+            "particle_persistence_time": particle_pt_list,
+            "particle_nn_distance": particle_neighbour_list,
+            "seed": particle_seed_list
+        }
+    )
+    particle_dataframe.to_csv(os.path.join(subdirectory_path, "particle_data.csv"))
 
     # Plotting final orientations of the matrix:
     fig, ax = plt.subplots(figsize=(7, 4))

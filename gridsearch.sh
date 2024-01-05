@@ -4,7 +4,7 @@
 #SBATCH --partition=cpu
 #SBATCH --time=15:00
 #SBATCH --cpus-per-task=1
-#SBATCH --array=1-9375
+#SBATCH --array=1-6144
 
 # Required lmod modules:
 # Boost/1.81.0-GCC-12.2.0
@@ -12,6 +12,9 @@
 
 # Specify the path to the config file
 config=./fileOutputs/gridsearch.txt
+
+# SLURM_ARRAY_TASK_ID=$(($SLURM_ARRAY_TASK_ID+9999))
+# SLURM_ARRAY_TASK_ID=$(($SLURM_ARRAY_TASK_ID+19998))
 
 # Extracting argument names based on $SLURM_ARRAY_TASK_ID
 superIterationCount=$(awk -v array_id=$SLURM_ARRAY_TASK_ID '$1==array_id {print $2}' $config)
@@ -42,3 +45,6 @@ repolarisationRate=$(awk -v array_id=$SLURM_ARRAY_TASK_ID '$1==array_id {print $
     --collisionRepolarisation $collisionRepolarisation --repolarisationRate $repolarisationRate
 
 python3 simulationAnalysis.py --folder_id $SLURM_ARRAY_TASK_ID
+
+rm fileOutputs/$SLURM_ARRAY_TASK_ID/matrix_seed*
+rm fileOutputs/$SLURM_ARRAY_TASK_ID/positions_seed*
