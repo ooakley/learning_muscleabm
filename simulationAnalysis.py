@@ -88,8 +88,8 @@ def plot_superiteration(
 ):
     # Accessing and formatting relevant dataframe:
     trajectory_dataframe = trajectory_list[iteration]
-    x_mask = (trajectory_dataframe["x"] > 10) & (trajectory_dataframe["x"] < area_size - 10)
-    y_mask = (trajectory_dataframe["y"] > 10) & (trajectory_dataframe["y"] < area_size - 10)
+    x_mask = (trajectory_dataframe["x"] > 50) & (trajectory_dataframe["x"] < area_size - 50)
+    y_mask = (trajectory_dataframe["y"] > 50) & (trajectory_dataframe["y"] < area_size - 50)
     full_mask = x_mask & y_mask
     rollover_skipped_df = trajectory_dataframe[full_mask]
     timeframe_mask = \
@@ -118,7 +118,7 @@ def plot_superiteration(
         identity = int(ci_lookup[ci_lookup["particle"] == i]["contact_inhibition"].iloc[0])
         ax.plot(
             trajectory['x'], trajectory['y'],
-            c=colour_list[identity], alpha=0.4
+            c=colour_list[identity], alpha=0.4, linewidth=0.5
         )
 
     # Plotting background matrix:
@@ -152,7 +152,7 @@ def plot_superiteration(
 
 
 def plot_trajectories(subdirectory_path, trajectory_list, matrix_list, area_size, grid_size):
-    fig, axs = plt.subplots(3, 3, figsize=(7, 7))
+    fig, axs = plt.subplots(3, 3, figsize=(10, 10))
     count = 0
     for i in range(3):
         for j in range(3):
