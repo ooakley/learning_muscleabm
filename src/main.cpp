@@ -95,7 +95,7 @@ int main(int argc, char** argv) {
         ("repolarisationRate", po::value<float>(&cellParams.repolarisationRate)->required(),
             "Rate at which collisions induce repolarisation."
         )
-        ("polarityNoiseSigma", po::value<float>(&cellParams.repolarisationRate)->required(),
+        ("polarityNoiseSigma", po::value<float>(&cellParams.polarityNoiseSigma)->required(),
             "Size of additive Gaussian noise to add to polarity at every timestep."
         )
     ;

@@ -12,7 +12,7 @@ def main():
     # Reading through all iterations:
     summary_dataframe_list = []
     particle_dataframe_list = []
-    for folder_id in range(1, 25000+1):
+    for folder_id in range(1, 960+1):
         if folder_id % 100 == 0:
             print(folder_id)
 

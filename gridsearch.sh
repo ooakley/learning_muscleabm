@@ -4,7 +4,7 @@
 #SBATCH --partition=cpu
 #SBATCH --time=15:00
 #SBATCH --cpus-per-task=1
-#SBATCH --array=1-6144
+#SBATCH --array=1-960
 
 # Required lmod modules:
 # Boost/1.81.0-GCC-12.2.0
@@ -34,6 +34,7 @@ flowScaling=$(awk -v array_id=$SLURM_ARRAY_TASK_ID '$1==array_id {print $14}' $c
 flowPolarityCoupling=$(awk -v array_id=$SLURM_ARRAY_TASK_ID '$1==array_id {print $15}' $config)
 collisionRepolarisation=$(awk -v array_id=$SLURM_ARRAY_TASK_ID '$1==array_id {print $16}' $config)
 repolarisationRate=$(awk -v array_id=$SLURM_ARRAY_TASK_ID '$1==array_id {print $17}' $config)
+polarityNoiseSigma=$(awk -v array_id=$SLURM_ARRAY_TASK_ID '$1==array_id {print $18}' $config)
 
 # Running simulation with specified parameters:
 ./build/src/main --jobArrayID $SLURM_ARRAY_TASK_ID --superIterationCount $superIterationCount --numberOfCells $numberOfCells \
@@ -42,7 +43,8 @@ repolarisationRate=$(awk -v array_id=$SLURM_ARRAY_TASK_ID '$1==array_id {print $
     --wbK $wbK --kappa $kappa --homotypicInhibition $homotypicInhibition \
     --heterotypicInhibition $heterotypicInhibition --polarityPersistence $polarityPersistence --polarityTurningCoupling $polarityTurningCoupling \
     --flowScaling $flowScaling --flowPolarityCoupling $flowPolarityCoupling \
-    --collisionRepolarisation $collisionRepolarisation --repolarisationRate $repolarisationRate
+    --collisionRepolarisation $collisionRepolarisation --repolarisationRate $repolarisationRate \
+    --polarityNoiseSigma $polarityNoiseSigma
 
 python3 simulationAnalysis.py --folder_id $SLURM_ARRAY_TASK_ID
 

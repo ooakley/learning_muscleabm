@@ -45,20 +45,29 @@ def find_persistence_times(orientation_array):
     pt_list = []
     for timestep in range(orientation_array.shape[0]):
         subsequent_directions = direction_differences[timestep, timestep:]
-        persistence_time = np.argmax(subsequent_directions > np.pi/2)
-        if persistence_time == 0:
+        if np.count_nonzero(subsequent_directions > np.pi/2) == 0:
             continue
+        persistence_time = np.argmax(subsequent_directions > np.pi/2)
         pt_list.append(persistence_time)
 
     return pt_list
 
 
-def analyse_particle(particle_dataframe):
+def analyse_particle(particle_dataframe, rng):
     # Getting dx and dy, using these to calculate orientations and RMS displacements of
-    # particle over time. We shift by four as we simulate every timestep as 2.5 minutes,
+    # particle over time. We subsample by four as we simulate every timestep as 2.5 minutes,
     # but we capture image data every ten minutes:
-    dx = np.array(particle_dataframe.shift(4)['x'] - particle_dataframe['x'])
-    dy = np.array(particle_dataframe.shift(4)['y'] - particle_dataframe['y'])
+    sampled_xpos = np.array(particle_dataframe['x'])[::4]
+    sampled_ypos = np.array(particle_dataframe['y'])[::4]
+
+    # Adding measurement noise:
+    noise_x = rng.normal(0, 1e-5, len(sampled_xpos))
+    noise_y = rng.normal(0, 1e-5, len(sampled_ypos))
+    sampled_xpos = sampled_xpos + noise_x
+    sampled_ypos = sampled_ypos + noise_y
+
+    dx = np.diff(sampled_xpos)
+    dy = np.diff(sampled_ypos)
 
     # Correcting for periodic boundaries:
     dx[dx > 1024] = dx[dx > 1024] - 2048
@@ -76,6 +85,8 @@ def analyse_particle(particle_dataframe):
     orientation_timeseries = np.arctan2(dy, dx)
     persistence_times = find_persistence_times(orientation_timeseries)
     if len(persistence_times) == 0:
+        print(dx)
+        print(dy)
         particle_pt = np.inf
     else:
         particle_pt = np.mean(persistence_times)
@@ -180,6 +191,9 @@ def main():
     # Finding specified simulation output files:
     subdirectory_path = os.path.join(SIMULATION_OUTPUTS_FOLDER, str(args.folder_id))
 
+    # Defining and seeding RNG for measurement noise simulation:
+    rng = np.random.default_rng(0)
+
     matrix_list = []
     particle_rmsd_list = []
     particle_pt_list = []
@@ -203,7 +217,7 @@ def main():
         pt_list = []
         for particle in particles:
             particle_dataframe = trajectory_dataframe[trajectory_dataframe["particle"] == particle]
-            rmsd, persistence_time = analyse_particle(particle_dataframe)
+            rmsd, persistence_time = analyse_particle(particle_dataframe, rng)
             rmsd_list.append(rmsd), pt_list.append(persistence_time)
 
         # Getting nearest-neighbour distance distribution:
