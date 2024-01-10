@@ -31,22 +31,22 @@ def main():
             wbK, kappa, homotypicInhibition, heterotypicInhibition, polarityPersistence,
             polarityTurningCoupling, flowScaling, flowPolarityCoupling,
             collisionRepolarisation, repolarisationRate
-        ) \
-        for superIterationCount in np.linspace(*GRIDSEARCH["superIterationCount"]) \
-        for numberOfCells in np.linspace(*GRIDSEARCH["numberOfCells"]) \
-        for worldSize in np.linspace(*GRIDSEARCH["worldSize"]) \
-        for gridSize in np.linspace(*GRIDSEARCH["gridSize"]) \
-        for cellTypeProportions in np.linspace(*GRIDSEARCH["cellTypeProportions"]) \
-        for matrixPersistence in np.linspace(*GRIDSEARCH["matrixPersistence"]) \
-        for wbK in np.linspace(*GRIDSEARCH["wbK"]) \
-        for kappa in np.linspace(*GRIDSEARCH["kappa"]) \
-        for homotypicInhibition in np.linspace(*GRIDSEARCH["homotypicInhibition"]) \
-        for heterotypicInhibition in np.linspace(*GRIDSEARCH["heterotypicInhibition"]) \
-        for polarityPersistence in np.linspace(*GRIDSEARCH["polarityPersistence"]) \
-        for polarityTurningCoupling in np.linspace(*GRIDSEARCH["polarityTurningCoupling"]) \
-        for flowScaling in np.linspace(*GRIDSEARCH["flowScaling"]) \
-        for flowPolarityCoupling in np.linspace(*GRIDSEARCH["flowPolarityCoupling"]) \
-        for collisionRepolarisation in np.linspace(*GRIDSEARCH["collisionRepolarisation"]) \
+        )
+        for superIterationCount in np.linspace(*GRIDSEARCH["superIterationCount"])
+        for numberOfCells in np.linspace(*GRIDSEARCH["numberOfCells"])
+        for worldSize in np.linspace(*GRIDSEARCH["worldSize"])
+        for gridSize in np.linspace(*GRIDSEARCH["gridSize"])
+        for cellTypeProportions in np.linspace(*GRIDSEARCH["cellTypeProportions"])
+        for matrixPersistence in np.linspace(*GRIDSEARCH["matrixPersistence"])
+        for wbK in np.linspace(*GRIDSEARCH["wbK"])
+        for kappa in np.linspace(*GRIDSEARCH["kappa"])
+        for homotypicInhibition in np.linspace(*GRIDSEARCH["homotypicInhibition"])
+        for heterotypicInhibition in np.linspace(*GRIDSEARCH["heterotypicInhibition"])
+        for polarityPersistence in np.linspace(*GRIDSEARCH["polarityPersistence"])
+        for polarityTurningCoupling in np.linspace(*GRIDSEARCH["polarityTurningCoupling"])
+        for flowScaling in np.linspace(*GRIDSEARCH["flowScaling"])
+        for flowPolarityCoupling in np.linspace(*GRIDSEARCH["flowPolarityCoupling"])
+        for collisionRepolarisation in np.linspace(*GRIDSEARCH["collisionRepolarisation"])
         for repolarisationRate in np.linspace(*GRIDSEARCH["repolarisationRate"])
     ]
 
@@ -77,6 +77,7 @@ def main():
             f.write("\n")
 
     return None
+
 
 if __name__ == "__main__":
     main()
