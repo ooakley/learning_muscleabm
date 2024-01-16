@@ -8,19 +8,19 @@ GRIDSEARCH = {
     "worldSize": [2048, 2048, 1],
     "gridSize": [32, 32, 1],
     "cellTypeProportions": [0, 0, 1],
-    "matrixPersistence": [0.99, 0.99, 1],
+    "matrixPersistence": [0.8, 0.99, 4],
     "wbK": [1, 2.5, 4],
-    "kappa": [1.25, 3.75, 4],
+    "kappa": [1.25, 1.25, 1],
     "homotypicInhibition": [0.9, 0.9, 1],
     "heterotypicInhibition": [0, 0, 1],
-    "polarityPersistence": [0, 0.95, 4],
-    "polarityTurningCoupling": [0, 0.95, 4],
+    "polarityPersistence": [0.05, 0.95, 5],
+    "polarityTurningCoupling": [0.05, 0.95, 5],
     "flowScaling": [1.5, 1.5, 1],
     "flowPolarityCoupling": [1.5, 1.5, 1],
     "collisionRepolarisation": [0, 0, 1],
     "repolarisationRate": [0.75, 0.75, 1],
-    "polarityNoiseSigma": [0, 0.1, 3],
-    "scalingFactor": [4, 12, 4]
+    "polarityNoiseSigma": [0.005, 0.05, 3],
+    "scalingFactor": [3, 12, 6]
 }
 
 
@@ -33,12 +33,13 @@ def main():
             wbK, kappa, homotypicInhibition, heterotypicInhibition, polarityPersistence,
             polarityTurningCoupling, flowScaling * scalingFactor, flowPolarityCoupling / scalingFactor,
             collisionRepolarisation, repolarisationRate,
-            polarityNoiseSigma
+            polarityNoiseSigma, scalingFactor
         )
         for superIterationCount in np.linspace(*GRIDSEARCH["superIterationCount"])
         for numberOfCells in np.linspace(*GRIDSEARCH["numberOfCells"])
         for worldSize in np.linspace(*GRIDSEARCH["worldSize"])
         for gridSize in np.linspace(*GRIDSEARCH["gridSize"])
+        for scalingFactor in np.linspace(*GRIDSEARCH["scalingFactor"])
         for cellTypeProportions in np.linspace(*GRIDSEARCH["cellTypeProportions"])
         for matrixPersistence in np.linspace(*GRIDSEARCH["matrixPersistence"])
         for wbK in np.linspace(*GRIDSEARCH["wbK"])
@@ -52,7 +53,6 @@ def main():
         for collisionRepolarisation in np.linspace(*GRIDSEARCH["collisionRepolarisation"])
         for repolarisationRate in np.linspace(*GRIDSEARCH["repolarisationRate"])
         for polarityNoiseSigma in np.linspace(*GRIDSEARCH["polarityNoiseSigma"])
-        for scalingFactor in np.linspace(*GRIDSEARCH["scalingFactor"])
     ]
 
     print(len(argument_grid))
