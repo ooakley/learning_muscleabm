@@ -1,4 +1,5 @@
 import os
+import json
 import numpy as np
 
 # Defines the parameter ranges, with [start, stop, num_steps]:
@@ -31,7 +32,8 @@ def main():
             int(superIterationCount), int(numberOfCells), int(worldSize), int(gridSize),
             cellTypeProportions, matrixPersistence,
             wbK, kappa, homotypicInhibition, heterotypicInhibition, polarityPersistence,
-            polarityTurningCoupling, flowScaling * scalingFactor, flowPolarityCoupling / scalingFactor,
+            polarityTurningCoupling, flowScaling * scalingFactor,
+            flowPolarityCoupling / scalingFactor,
             collisionRepolarisation, repolarisationRate,
             polarityNoiseSigma
         )
@@ -80,6 +82,11 @@ def main():
                 f.write("\t")
                 f.write(f"{argument_value}")
             f.write("\n")
+
+    # Write up summary of gridsearch parameters:
+    summary_filepath = os.path.join("fileOutputs", "gridsearch_summary.json")
+    with open(summary_filepath, 'w') as writefile:
+        json.dump(GRIDSEARCH, writefile, indent=4)
 
     return None
 

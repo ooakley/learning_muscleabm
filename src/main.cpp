@@ -19,7 +19,7 @@ namespace po = boost::program_options;
 Hello! There are a lot of command line arguments, for which I apologise. It makes
 parallelisation easier. If you'd just like to run the simulation, here's what you can paste into
 the terminal after compiling the code:
-./build/src/main --jobArrayID 1 --superIterationCount 10 --numberOfCells 200 --worldSize 1000 --gridSize 32 \
+./build/src/main --jobArrayID 1 --superIterationCount 1 --timestepsToRun 576 --numberOfCells 200 --worldSize 1000 --gridSize 32 \
     --cellTypeProportions 0 --matrixPersistence 0.95 \
     --wbK 1.0 --kappa 2.5 --homotypicInhibition 0.8 --heterotypicInhibition 0.5 \
     --polarityPersistence 0.25 --polarityTurningCoupling 0.5 --flowScaling 8 \
@@ -32,6 +32,7 @@ int main(int argc, char** argv) {
     // Simulation structural variables:
     int jobArrayID;
     int superIterationCount;
+    int timeStepsToRun;
     int numberOfCells;
     int worldSize;
     int gridSize;
@@ -49,6 +50,9 @@ int main(int argc, char** argv) {
         )
         ("superIterationCount", po::value<int>(&superIterationCount)->required(),
             "Number of iterations with same parameters to run, each with a different seed."
+        )
+        ("timestepsToRun", po::value<int>(&timeStepsToRun)->required(),
+            "Number of timesteps of the simulation to run within in each iteration."
         )
         ("numberOfCells", po::value<int>(&numberOfCells)->required(),
             "Number of cells in the simulation."
@@ -160,7 +164,7 @@ int main(int argc, char** argv) {
                 cellParams
             )
         };
-        for (int i = 0; i < 576; ++i) {
+        for (int i = 0; i < timeStepsToRun; ++i) {
             mainWorld.runSimulationStep();
             mainWorld.writePositionsToCSV(csvFile);
             mainWorld.writeMatrixToCSV(matrixFile);
