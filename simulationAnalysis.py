@@ -104,10 +104,10 @@ def get_order_parameter(submatrix, presence_submatrix):
     # Masking for areas where the matrix is not present:
     presence_mask = presence_submatrix.flatten()
     presence_mask = np.concatenate([presence_mask[0:5], presence_mask[6:]])
-    angle_diff = angle_diff[presence_mask]
+    angle_diff = angle_diff[presence_mask.astype(bool)]
 
     if len(angle_diff) == 0:
-        return None
+        return np.nan
 
     # Taking angle modulus:
     angle_diff[angle_diff > np.pi/2] = angle_diff[angle_diff > np.pi/2] - np.pi
@@ -126,6 +126,9 @@ def get_summary_order_parameter(matrix):
             presence_submatrix = matrix[1, i-1:i+2, j-1:j+2]
             order_parameter = get_order_parameter(submatrix, presence_submatrix)
             order_parameters.append(order_parameter)
+
+    order_parameters = np.array(order_parameters)
+    order_parameters = order_parameters[~np.isnan(order_parameters)]
     return order_parameters
 
 
@@ -274,7 +277,7 @@ def main():
         matrix_list.append(matrix[-1, :, :, :])
 
         # Getting final-step order parameter:
-        order_parameter = np.mean(get_summary_order_parameter(matrix[-1, 0, :, :]))
+        order_parameter = np.mean(get_summary_order_parameter(matrix[-1, :, :, :]))
 
         # Saving to dataframes:
         particle_rmsd_list.extend(rmsd_list)
