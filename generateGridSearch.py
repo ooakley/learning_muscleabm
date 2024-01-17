@@ -9,19 +9,19 @@ GRIDSEARCH = {
     "worldSize": [2048, 2048, 1],
     "gridSize": [32, 32, 1],
     "cellTypeProportions": [0, 0, 1],
-    "matrixPersistence": [0.8, 0.99, 4],
-    "wbK": [1, 2.5, 4],
-    "kappa": [1.25, 1.25, 1],
+    "matrixPersistence": [0.99, 0.99, 1],
+    "wbK": [0.5, 2, 50],
+    "kappa": [0.5, 2, 50],
     "homotypicInhibition": [0.9, 0.9, 1],
     "heterotypicInhibition": [0, 0, 1],
-    "polarityPersistence": [0.05, 0.95, 5],
-    "polarityTurningCoupling": [0.05, 0.95, 5],
+    "polarityPersistence": [0.725, 0.725, 1],
+    "polarityTurningCoupling": [0.05, 0.05, 1],
     "flowScaling": [1.5, 1.5, 1],
     "flowPolarityCoupling": [1.5, 1.5, 1],
     "collisionRepolarisation": [0, 0, 1],
     "repolarisationRate": [0.75, 0.75, 1],
-    "polarityNoiseSigma": [0.005, 0.05, 3],
-    "scalingFactor": [3, 12, 6]
+    "polarityNoiseSigma": [0.0275, 0.0275, 1],
+    "scalingFactor": [4.8, 4.8, 1]
 }
 
 

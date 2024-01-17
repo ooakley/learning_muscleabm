@@ -4,7 +4,7 @@
 #SBATCH --partition=cpu
 #SBATCH --time=15:00
 #SBATCH --cpus-per-task=1
-#SBATCH --array=1-360
+#SBATCH --array=1-125
 
 # Required lmod modules:
 # Boost/1.81.0-GCC-12.2.0
@@ -39,6 +39,7 @@ simulate () {
 
     # Running simulation with specified parameters:
     ./build/src/main --jobArrayID $arrayid --superIterationCount $superIterationCount --numberOfCells $numberOfCells \
+        --timestepsToRun 576 \
         --worldSize $worldSize --gridSize $gridSize \
         --cellTypeProportions $cellTypeProportions --matrixPersistence $matrixPersistence \
         --wbK $wbK --kappa $kappa --homotypicInhibition $homotypicInhibition \

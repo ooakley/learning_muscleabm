@@ -17,6 +17,7 @@ CSV_COLUMN_NAMES = [
 ]
 
 TIMESTEP_WIDTH = 576
+GRID_SIZE = 32
 
 
 def parse_arguments():
@@ -92,6 +93,40 @@ def analyse_particle(particle_dataframe, rng):
         particle_pt = np.mean(persistence_times)
 
     return particle_rmsd, particle_pt
+
+
+def get_order_parameter(submatrix, presence_submatrix):
+    central_val = submatrix[1, 1]
+    comparators = submatrix.flatten()
+    comparators = np.concatenate([comparators[0:5], comparators[6:]])
+    angle_diff = comparators - central_val
+
+    # Masking for areas where the matrix is not present:
+    presence_mask = presence_submatrix.flatten()
+    presence_mask = np.concatenate([presence_mask[0:5], presence_mask[6:]])
+    angle_diff = angle_diff[presence_mask]
+
+    if len(angle_diff) == 0:
+        return None
+
+    # Taking angle modulus:
+    angle_diff[angle_diff > np.pi/2] = angle_diff[angle_diff > np.pi/2] - np.pi
+    angle_diff[angle_diff < -np.pi/2] = angle_diff[angle_diff < -np.pi/2] + np.pi
+
+    # Calculating order parameter:
+    order_parameter = np.mean(np.abs(angle_diff))
+    return order_parameter
+
+
+def get_summary_order_parameter(matrix):
+    order_parameters = []
+    for i in range(1, GRID_SIZE-1):
+        for j in range(1, GRID_SIZE-1):
+            submatrix = matrix[0, i-1:i+2, j-1:j+2]
+            presence_submatrix = matrix[1, i-1:i+2, j-1:j+2]
+            order_parameter = get_order_parameter(submatrix, presence_submatrix)
+            order_parameters.append(order_parameter)
+    return order_parameters
 
 
 def plot_superiteration(
@@ -232,6 +267,15 @@ def main():
         nn_distances, _ = neighbour_tree.query(positions, k=[2])
         nn_distances = [distance[0] for distance in nn_distances]
 
+        # Reading final-step matrix information into list:
+        matrix_filename = f"matrix_seed{seed:03d}.txt"
+        matrix_filepath = os.path.join(subdirectory_path, matrix_filename)
+        matrix = read_matrix_into_numpy(matrix_filepath, GRID_SIZE, TIMESTEPS)
+        matrix_list.append(matrix[-1, :, :, :])
+
+        # Getting final-step order parameter:
+        order_parameter = np.mean(get_summary_order_parameter(matrix[-1, 0, :, :]))
+
         # Saving to dataframes:
         particle_rmsd_list.extend(rmsd_list)
         particle_pt_list.extend(pt_list)
@@ -251,7 +295,8 @@ def main():
                 "mean_rmsd": [np.mean(rmsd_list)],
                 "mean_persistence_time": [np.mean(pt_list)],
                 "speed_persistence_correlation": [persistence_speed_corrcoef],
-                "speed_persistence_correlation_pval": [p_val]
+                "speed_persistence_correlation_pval": [p_val],
+                "order_parameter": [order_parameter]
             }
         )
         simulation_properties = copy.deepcopy(
@@ -260,12 +305,6 @@ def main():
         simulation_properties = simulation_properties.reset_index()
         iteration_row = pd.concat([simulation_properties, new_info], axis=1)
         sub_dataframes.append(iteration_row)
-
-        # Reading final-step matrix information into list:
-        matrix_filename = f"matrix_seed{seed:03d}.txt"
-        matrix_filepath = os.path.join(subdirectory_path, matrix_filename)
-        matrix = read_matrix_into_numpy(matrix_filepath, GRID_SIZE, TIMESTEPS)
-        matrix_list.append(matrix[-1, :, :, :])
 
     # Generating full dataframe and saving to subdirectory:
     summary_dataframe = pd.concat(sub_dataframes).reset_index().drop(columns=["index", "level_0"])
