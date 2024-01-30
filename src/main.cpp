@@ -19,12 +19,13 @@ namespace po = boost::program_options;
 Hello! There are a lot of command line arguments, for which I apologise. It makes
 parallelisation easier. If you'd just like to run the simulation, here's what you can paste into
 the terminal after compiling the code:
-./build/src/main --jobArrayID 1 --superIterationCount 1 --timestepsToRun 576 --numberOfCells 200 --worldSize 1000 --gridSize 32 \
-    --cellTypeProportions 0 --matrixPersistence 0.95 --matrixAdditionRate 0.05 \
-    --wbK 1.0 --kappa 2.5 --homotypicInhibition 0.8 --heterotypicInhibition 0.5 \
-    --polarityPersistence 0.25 --polarityTurningCoupling 0.5 --flowScaling 8 \
-    --flowPolarityCoupling 0.15 --collisionRepolarisation 0 --repolarisationRate 0.75 \
-    --polarityNoiseSigma 0.05
+./build/src/main --jobArrayID 1 --superIterationCount 10 --timestepsToRun 576 --numberOfCells 250 \ 
+    --worldSize 2048 --gridSize 32 \
+    --cellTypeProportions 0 --matrixAdditionRate 0.001 \
+    --wbK 1 --kappa 0 --matrixKappa 5 --homotypicInhibition 0.9 --heterotypicInhibition 0 \
+    --polarityPersistence 0.5 --polarityTurningCoupling 1 --flowScaling 2.5 \
+    --flowPolarityCoupling 0.5 --collisionRepolarisation 0 --repolarisationRate 0.95 \
+    --polarityNoiseSigma 0.01
 */
 
 int main(int argc, char** argv) {

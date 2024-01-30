@@ -9,19 +9,19 @@ GRIDSEARCH = {
     "worldSize": [2048, 2048, 1],
     "gridSize": [32, 32, 1],
     "cellTypeProportions": [0, 0, 1],
-    "matrixPersistence": [0.99, 0.99, 1],
-    "wbK": [0.5, 2, 50],
-    "kappa": [0.5, 2, 50],
+    "matrixAdditionRate": [0.0001, 0.0001, 1],
+    "wbK": [1, 1, 0],
+    "kappa": [0, 0, 1],
+    "matrixKappa": [0.5, 5, 50],
     "homotypicInhibition": [0.9, 0.9, 1],
     "heterotypicInhibition": [0, 0, 1],
     "polarityPersistence": [0.725, 0.725, 1],
-    "polarityTurningCoupling": [0.05, 0.05, 1],
+    "polarityTurningCoupling": [0.5, 5, 50],
     "flowScaling": [1.5, 1.5, 1],
     "flowPolarityCoupling": [1.5, 1.5, 1],
+    "polarityNoiseSigma": [0.0275, 0.0275, 1],
     "collisionRepolarisation": [0, 0, 1],
     "repolarisationRate": [0.75, 0.75, 1],
-    "polarityNoiseSigma": [0.0275, 0.0275, 1],
-    "scalingFactor": [4.8, 4.8, 1]
 }
 
 
@@ -30,31 +30,31 @@ def main():
     argument_grid = [
         (
             int(superIterationCount), int(numberOfCells), int(worldSize), int(gridSize),
-            cellTypeProportions, matrixPersistence,
-            wbK, kappa, homotypicInhibition, heterotypicInhibition, polarityPersistence,
-            polarityTurningCoupling, flowScaling * scalingFactor,
-            flowPolarityCoupling / scalingFactor,
-            collisionRepolarisation, repolarisationRate,
-            polarityNoiseSigma, scalingFactor
+            cellTypeProportions, matrixAdditionRate,
+            wbK, kappa, matrixKappa,
+            homotypicInhibition, heterotypicInhibition,
+            polarityPersistence, polarityTurningCoupling,
+            flowScaling, flowPolarityCoupling, polarityNoiseSigma,
+            collisionRepolarisation, repolarisationRate
         )
         for superIterationCount in np.linspace(*GRIDSEARCH["superIterationCount"])
         for numberOfCells in np.linspace(*GRIDSEARCH["numberOfCells"])
         for worldSize in np.linspace(*GRIDSEARCH["worldSize"])
         for gridSize in np.linspace(*GRIDSEARCH["gridSize"])
-        for scalingFactor in np.linspace(*GRIDSEARCH["scalingFactor"])
         for cellTypeProportions in np.linspace(*GRIDSEARCH["cellTypeProportions"])
-        for matrixPersistence in np.linspace(*GRIDSEARCH["matrixPersistence"])
+        for matrixAdditionRate in np.linspace(*GRIDSEARCH["matrixAdditionRate"])
         for wbK in np.linspace(*GRIDSEARCH["wbK"])
         for kappa in np.linspace(*GRIDSEARCH["kappa"])
+        for matrixKappa in np.linspace(*GRIDSEARCH["matrixKappa"])
         for homotypicInhibition in np.linspace(*GRIDSEARCH["homotypicInhibition"])
         for heterotypicInhibition in np.linspace(*GRIDSEARCH["heterotypicInhibition"])
         for polarityPersistence in np.linspace(*GRIDSEARCH["polarityPersistence"])
         for polarityTurningCoupling in np.linspace(*GRIDSEARCH["polarityTurningCoupling"])
         for flowScaling in np.linspace(*GRIDSEARCH["flowScaling"])
         for flowPolarityCoupling in np.linspace(*GRIDSEARCH["flowPolarityCoupling"])
+        for polarityNoiseSigma in np.linspace(*GRIDSEARCH["polarityNoiseSigma"])
         for collisionRepolarisation in np.linspace(*GRIDSEARCH["collisionRepolarisation"])
         for repolarisationRate in np.linspace(*GRIDSEARCH["repolarisationRate"])
-        for polarityNoiseSigma in np.linspace(*GRIDSEARCH["polarityNoiseSigma"])
     ]
 
     print(len(argument_grid))

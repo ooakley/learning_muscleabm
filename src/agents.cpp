@@ -226,7 +226,7 @@ void CellAgent::takeRandomStep() {
     double polarityChangeY{polarityChangeExtent*sin(movementDirection)};
 
     // Trying out extent-defined persistence:
-    double testPersistence{findPolarityExtent()};
+    // double testPersistence{findPolarityExtent()};
 
     double newPolarityX{polarityPersistence*polarityX + (1-polarityPersistence)*polarityChangeX};
     double newPolarityY{polarityPersistence*polarityY + (1-polarityPersistence)*polarityChangeY};
