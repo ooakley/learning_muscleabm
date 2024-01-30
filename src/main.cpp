@@ -20,7 +20,7 @@ Hello! There are a lot of command line arguments, for which I apologise. It make
 parallelisation easier. If you'd just like to run the simulation, here's what you can paste into
 the terminal after compiling the code:
 ./build/src/main --jobArrayID 1 --superIterationCount 1 --timestepsToRun 576 --numberOfCells 200 --worldSize 1000 --gridSize 32 \
-    --cellTypeProportions 0 --matrixPersistence 0.95 \
+    --cellTypeProportions 0 --matrixPersistence 0.95 --matrixAdditionRate 0.05 \
     --wbK 1.0 --kappa 2.5 --homotypicInhibition 0.8 --heterotypicInhibition 0.5 \
     --polarityPersistence 0.25 --polarityTurningCoupling 0.5 --flowScaling 8 \
     --flowPolarityCoupling 0.15 --collisionRepolarisation 0 --repolarisationRate 0.75 \
@@ -38,6 +38,7 @@ int main(int argc, char** argv) {
     int gridSize;
     float cellTypeProportions;
     float matrixPersistence;
+    float matrixAdditionRate;
 
     // Cell behaviour parameters:
     CellParameters cellParams;
@@ -66,14 +67,20 @@ int main(int argc, char** argv) {
         ("cellTypeProportions", po::value<float>(&cellTypeProportions)->required(),
             "Proportion of cells that take type 0."
         )
-        ("matrixPersistence", po::value<float>(&matrixPersistence)->required(),
+        // ("matrixPersistence", po::value<float>(&matrixPersistence)->required(),
+        //     "Stability of the matrix under reorientation by cell movement."
+        // )
+        ("matrixAdditionRate", po::value<float>(&matrixAdditionRate)->required(),
             "Stability of the matrix under reorientation by cell movement."
         )
         ("wbK", po::value<float>(&cellParams.wbK)->required(),
             "Weibull distribution k value."
         )
         ("kappa", po::value<float>(&cellParams.kappa)->required(),
-            "Von Mises distribution kappa value."
+            "Von Mises distribution kappa parameter for cell intrinsic change in polarity."
+        )
+        ("matrixKappa", po::value<float>(&cellParams.matrixKappa)->required(),
+            "Von Mises distribution kappa parameter for matrix induced change in polarity."
         )
         ("homotypicInhibition", po::value<float>(&cellParams.homotypicInhibition)->required(),
             "Homotypic inhibition rate."
@@ -161,6 +168,7 @@ int main(int argc, char** argv) {
                 numberOfCells,
                 cellTypeProportions,
                 matrixPersistence,
+                matrixAdditionRate,
                 cellParams
             )
         };

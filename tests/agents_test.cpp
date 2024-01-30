@@ -9,7 +9,7 @@ protected:
         cellAgent = new CellAgent(
             startX, startY, startHeading,
             0, 1, 1,
-            setWbK, setKappa,
+            setWbK, setKappa, 1.5,
             1, 0.2,
             0.4, 0.75,
             1, 1,
@@ -21,7 +21,7 @@ protected:
         cellAgentAlt = new CellAgent(
             startX, startY, startHeading,
             0, 1, 1,
-            setWbK, setKappa,
+            setWbK, setKappa, 1.5,
             1, 0.2,
             0.4, 0.75,
             1, 1,
@@ -33,7 +33,7 @@ protected:
         cellAgentDifferent = new CellAgent(
             startX, startY, startHeading,
             1, 1, 1,
-            setWbK, setKappa,
+            setWbK, setKappa, 1.5,
             1, 0.2,
             0.4, 0.75,
             1, 1,

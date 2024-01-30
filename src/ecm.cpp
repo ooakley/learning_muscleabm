@@ -7,14 +7,15 @@ namespace boostMatrix = boost::numeric::ublas;
 using std::atan2;
 
 // Constructor:
-ECMField::ECMField(int setElements, float setMatrixPersistence)
+ECMField::ECMField(int setElements, float setMatrixPersistence, float setMatrixAdditionRate)
     : elementCount{setElements}
     , ecmHeadingMatrix{boostMatrix::zero_matrix<double>(elementCount, elementCount)}
-    , ecmPresentMatrix{boostMatrix::zero_matrix<bool>(elementCount, elementCount)}
+    , ecmPresentMatrix{boostMatrix::zero_matrix<double>(elementCount, elementCount)}
     , cellType0CountMatrix{boostMatrix::zero_matrix<int>(elementCount, elementCount)}
     , cellType1CountMatrix{boostMatrix::zero_matrix<int>(elementCount, elementCount)}
     , cellHeadingMatrix{boostMatrix::zero_matrix<double>(elementCount, elementCount)}
     , matrixPersistence{setMatrixPersistence}
+    , matrixAdditionRate{setMatrixAdditionRate}
 {
 }
 
@@ -27,7 +28,7 @@ double ECMField::getHeading(int i, int j) {
     return ecmHeadingMatrix(i, j);
 }
 
-bool ECMField::getMatrixPresent(int i, int j) {
+double ECMField::getMatrixPresent(int i, int j) {
     return ecmPresentMatrix(i, j);
 }
 
@@ -241,30 +242,36 @@ void ECMField::removeCellPresence(int i, int j, int cellType) {
 // Simulation functions:
 void ECMField::addToMatrix(int i, int j, double cellHeading) {
     // If no matrix present, set to cellHeading:
-    if (ecmPresentMatrix(i, j) == false) {
+    if (ecmPresentMatrix(i, j) == 0) {
         double newECMHeading{cellHeading};
         if (newECMHeading < 0) {newECMHeading += M_PI;};
         ecmHeadingMatrix(i, j) = newECMHeading;
-        ecmPresentMatrix(i, j) = true;
+        ecmPresentMatrix(i, j) = matrixAdditionRate;
         return;
     };
 
     assert(ecmPresentMatrix(i, j) != 0);
+
     // Calculating delta between cell heading and ecm heading:
     double currentECMHeading{ecmHeadingMatrix(i, j)};
+    double currentECMDensity{ecmPresentMatrix(i, j)};
     double smallestDeltaInECM{calculateECMDeltaTowardsCell(currentECMHeading, cellHeading)};
     double propsedECMHeading{currentECMHeading + smallestDeltaInECM};
 
+    // Persistence weighting:
+    // double currentPersistence{currentECMDensity*matrixPersistence};
+
     // Calculaing weighted average of current and proposed ECM:
     double sineMean{0};
-    sineMean += matrixPersistence * sin(currentECMHeading);
-    sineMean += (1 - matrixPersistence) * sin(propsedECMHeading);
+    sineMean += currentECMDensity * std::sin(currentECMHeading);
+    sineMean += matrixAdditionRate * std::sin(propsedECMHeading);
 
     double cosineMean{0};
-    cosineMean += matrixPersistence * cos(currentECMHeading);
-    cosineMean += (1 - matrixPersistence) * cos(propsedECMHeading);
+    cosineMean += currentECMDensity * std::cos(currentECMHeading);
+    cosineMean += matrixAdditionRate * std::cos(propsedECMHeading);
 
-    double newECMHeading{atan2(sineMean, cosineMean)};
+    double newECMHeading{std::atan2(sineMean, cosineMean)};
+    double newECMDensity{std::sqrt(std::pow(sineMean, 2) + std::pow(cosineMean, 2))};
 
     // Ensuring ECM angles are not vectors:
     if (newECMHeading < 0) {newECMHeading += M_PI;};
@@ -272,8 +279,15 @@ void ECMField::addToMatrix(int i, int j, double cellHeading) {
     assert((newECMHeading >= 0) & (newECMHeading < M_PI));
 
     // Setting matrix values:
-    ecmPresentMatrix(i, j) = true;
+    if (newECMDensity > 1) {
+        newECMDensity = 1;
+    };
+    ecmPresentMatrix(i, j) = newECMDensity;
     ecmHeadingMatrix(i, j) = newECMHeading;
+}
+
+void ECMField::ageMatrix() {
+    ecmPresentMatrix = ecmPresentMatrix - 0.01*(ecmPresentMatrix);
 }
 
 // Utility functions:

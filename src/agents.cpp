@@ -30,7 +30,7 @@ vectorOfTuples HEADING_CONTACT_MAPPING{
 CellAgent::CellAgent(
     double startX, double startY, double startHeading,
     unsigned int setCellSeed, int setCellID, int setCellType,
-    double setWbK, double setKappa,
+    double setWbK, double setKappa, double setMatrixKappa,
     double setHomotypicInhibition, double setHeterotypicInhibition,
     double setPolarityPersistence, double setPolarityTurningCoupling,
     double setFlowScaling, double setFlowPolarityCoupling,
@@ -56,8 +56,9 @@ CellAgent::CellAgent(
     , directionalShift{0}
     , sampledAngle{0}
     , kappa{setKappa}
+    , matrixKappa{setMatrixKappa}
     , localMatrixHeading{boostMatrix::zero_matrix<double>(3, 3)}
-    , localMatrixPresence{boostMatrix::zero_matrix<bool>(3, 3)}
+    , localMatrixPresence{boostMatrix::zero_matrix<double>(3, 3)}
     , cellType0ContactState{boostMatrix::zero_matrix<bool>(3, 3)}
     , cellType1ContactState{boostMatrix::zero_matrix<bool>(3, 3)}
     , localCellHeadingState{boostMatrix::zero_matrix<double>(3, 3)}
@@ -169,30 +170,25 @@ void CellAgent::takeRandomStep() {
         directionalIntensity = ecmCoherence;
     }
 
-    // if (cellID == 1) {
-    //     std::cout << relativeECMDirection << " ~~~~ " << ecmCoherence << "\n";
-    // }
+    // Determine protrusion - polarity centered or ECM centered:
+    double thresholdValue{findPolarityExtent() / (findPolarityExtent() + directionalIntensity)};
+    double randomDeterminant{uniformDistribution(generatorInfluence)};
 
-    // Sample von mises distribution:
-    double angleDelta = sampleVonMises(kappa);
-    sampledAngle = angleDelta;
-    double vonMisesMean{0};
-    if (uniformDistribution(generatorInfluence) < directionalIntensity) {
-        vonMisesMean = directionalInfluence;
+    if (randomDeterminant < thresholdValue) {
+        double angleDelta = sampleVonMises(
+            kappa + findPolarityExtent()*polarityTurningCoupling
+        );
+        movementDirection = angleMod(findPolarityDirection() + angleDelta);
+    } else {
+        double angleDelta = sampleVonMises(
+            matrixKappa*directionalIntensity
+        );
+        movementDirection = angleMod(
+            findPolarityDirection() + directionalInfluence + angleDelta
+        );
     }
-    directionalShift = angleMod(angleDelta + vonMisesMean);
 
-    // Finding angle mean of current polarity and proposed movement direction:
-    double proposedMovementDirection = angleMod(findPolarityDirection() + directionalShift);
-    double shiftWeighting{1-(findPolarityExtent()*polarityTurningCoupling)};
-
-    double movX{shiftWeighting*cos(proposedMovementDirection) + (1-shiftWeighting)*polarityX};
-    double movY{shiftWeighting*sin(proposedMovementDirection) + (1-shiftWeighting)*polarityY};
-
-    movementDirection = std::atan2(movY, movX);
-
-    // // Calculating actin flow:
-    // Calculate weibull lambda based on absolute value of polarity:
+    // Determining collisions:
     std::pair<bool, double> collision{checkForCollisions()};
     if (collision.first) {
         actinFlow = 0;
@@ -207,27 +203,30 @@ void CellAgent::takeRandomStep() {
             effectiveRepolarisationRate*polarityChangeX;
         polarityY = (1-effectiveRepolarisationRate)*polarityY +
             effectiveRepolarisationRate*polarityChangeY;
-
     }
 
+    // Calculating actin flow in protrusion:
     double actinModulator{
-        sqrt(pow(polarityX, 2) + pow(polarityY, 2)) * flowScaling
-    };
+        1 - (findPolarityExtent() * flowPolarityCoupling)
+    }; // Calculate weibull lambda based on absolute value of polarity.
     std::weibull_distribution<double> weibullDistribution{
-        std::weibull_distribution<double>(kWeibull, actinModulator)
+        std::weibull_distribution<double>(actinModulator, 1.5)
     };
     actinFlow = weibullDistribution(generatorWeibull);
 
     // // Update position:
-    double dx{actinFlow * cos(movementDirection)};
-    double dy{actinFlow * sin(movementDirection)};
+    double dx{actinFlow * cos(movementDirection) * flowScaling};
+    double dy{actinFlow * sin(movementDirection) * flowScaling};
     x = x + dx;
     y = y + dy;
 
     // // Update polarity based on movement direction and actin flow:
-    double polarityChangeExtent{tanh(actinFlow*flowPolarityCoupling)};
+    double polarityChangeExtent{tanh(actinFlow)};
     double polarityChangeX{polarityChangeExtent*cos(movementDirection)};
     double polarityChangeY{polarityChangeExtent*sin(movementDirection)};
+
+    // Trying out extent-defined persistence:
+    double testPersistence{findPolarityExtent()};
 
     double newPolarityX{polarityPersistence*polarityX + (1-polarityPersistence)*polarityChangeX};
     double newPolarityY{polarityPersistence*polarityY + (1-polarityPersistence)*polarityChangeY};
@@ -395,33 +394,23 @@ std::tuple<double, double> CellAgent::getAverageDeltaHeading() {
     double polarityDirection{findPolarityDirection()};
 
     // Getting all headings:
-    std::vector<double> deltaHeadingVector;
+    double sineMean{0};
+    double cosineMean{0};
     for (auto & row : rowScan)
     {
         for (auto & column : columnScan)
         {
-            if (localMatrixPresence(row, column)) {
-                double ecmHeading{localMatrixHeading(row, column)};
-                deltaHeadingVector.push_back(
-                    calculateCellDeltaTowardsECM(ecmHeading, polarityDirection)
-                );
-            }
+            double ecmHeading{localMatrixHeading(row, column)};
+            double ecmDensity{localMatrixPresence(row, column)};
+            double deltaHeading{
+                calculateCellDeltaTowardsECM(ecmHeading, polarityDirection)
+            };
+            sineMean += std::sin(deltaHeading) * ecmDensity;
+            cosineMean += std::cos(deltaHeading) * ecmDensity;
         }
     }
 
-    // If no ECM present, return angle with no influence:
-    if (deltaHeadingVector.empty()) {
-        return {0, 0};
-    }
-
-    // Getting the angle average:
-    double sineMean{0};
-    double cosineMean{0};
-    for (auto & heading : deltaHeadingVector) {
-        sineMean += std::sin(heading);
-        cosineMean += std::cos(heading);
-    }
-
+    // Taking average:
     sineMean /= 9;
     cosineMean /= 9;
 
@@ -476,9 +465,11 @@ double CellAgent::findPolarityDirection() {
 
 double CellAgent::findPolarityExtent() {
     double polarityExtent{
-        std::sqrt(std::pow(polarityX, 2) +
-        std::pow(polarityY, 2)
-    )};
+        std::sqrt(
+            std::pow(polarityX, 2) +
+            std::pow(polarityY, 2)
+        )
+    };
     assert(polarityExtent <= 1.0);
     return polarityExtent;
 };
@@ -499,4 +490,4 @@ double CellAgent::getAverageAttachmentHeading() {
     assert(std::abs(cosineMean) <= 1);
     double angleAverage{std::atan2(sineMean, cosineMean)};
     return angleAverage;
-}
+};

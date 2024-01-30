@@ -20,13 +20,14 @@ World::World
     int setNumberOfCells,
     float setCellTypeProportions,
     float setMatrixPersistence,
+    float setMatrixAdditionRate,
     CellParameters setCellParameters
 )
     : worldSeed{setWorldSeed}
     , worldSideLength{setWorldSideLength}
     , countECMElement{setECMElementCount}
     , lengthECMElement{worldSideLength/countECMElement}
-    , ecmField{ECMField(countECMElement, setMatrixPersistence)}
+    , ecmField{ECMField(countECMElement, setMatrixPersistence, setMatrixAdditionRate)}
     , numberOfCells{setNumberOfCells}
     , cellTypeProportions{setCellTypeProportions}
     , simulationTime{0}
@@ -121,7 +122,7 @@ CellAgent World::initialiseCell(int setCellID) {
     return CellAgent(
         startX, startY, startHeading,
         setCellSeed, setCellID, int(inhibitionBoolean < cellTypeProportions),
-        cellParameters.wbK, cellParameters.kappa,
+        cellParameters.wbK, cellParameters.kappa, cellParameters.matrixKappa,
         cellParameters.homotypicInhibition, cellParameters.heterotypicInhibition,
         cellParameters.polarityPersistence, cellParameters.polarityTurningCoupling,
         cellParameters.flowScaling, cellParameters.flowPolarityCoupling,
@@ -141,6 +142,9 @@ void World::runSimulationStep() {
     for (int i = 0; i < numberOfCells; ++i) {
         runCellStep(cellAgentVector[i]);
     }
+
+    // Updating ECM:
+    // ecmField.ageMatrix();
 
     simulationTime += 1;
 }

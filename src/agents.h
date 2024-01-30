@@ -10,7 +10,7 @@ public:
     CellAgent(
         double startX, double startY, double startHeading,
         unsigned int setCellSeed, int setCellID, int setCellType,
-        double setWbK, double setKappa,
+        double setWbK, double setKappa, double setMatrixKappa,
         double setHomotypicInhibition, double setHeterotypicInhibiton,
         double setPolarityPersistence, double setPolarityTurningCoupling,
         double setFlowScaling, double setFlowPolarityCoupling,
@@ -73,6 +73,7 @@ private:
     double polarityY;
     std::vector<double> attachmentHistory;
     double kappa;
+    double matrixKappa;
     double polarityPersistence;
     double polarityTurningCoupling;
     double flowPolarityCoupling;
@@ -96,7 +97,7 @@ private:
 
     // Percepts:
     boostMatrix::matrix<double> localMatrixHeading;
-    boostMatrix::matrix<bool> localMatrixPresence;
+    boostMatrix::matrix<double> localMatrixPresence;
 
     boostMatrix::matrix<bool> cellType0ContactState;
     boostMatrix::matrix<bool> cellType1ContactState;

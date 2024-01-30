@@ -5,7 +5,7 @@
 
 // Structure to store necessary parameters for the simulation:
 struct CellParameters {
-    float wbK, kappa, homotypicInhibition, heterotypicInhibition,
+    float wbK, kappa, matrixKappa, homotypicInhibition, heterotypicInhibition,
     polarityPersistence, polarityTurningCoupling, flowScaling, flowPolarityCoupling,
     collisionRepolarisation, repolarisationRate, polarityNoiseSigma;
 };
@@ -21,6 +21,7 @@ public:
         int setNumberOfCells,
         float setCellTypeProportions,
         float setMatrixPersistence,
+        float setMatrixAdditionRate,
         CellParameters setCellParameters
     );
 
