@@ -1,6 +1,7 @@
 #pragma once
 #include <random>
 #include <boost/numeric/ublas/matrix.hpp>
+#include <boost/math/distributions/normal.hpp>
 #include <utility>
 namespace boostMatrix = boost::numeric::ublas;
 
@@ -103,8 +104,12 @@ private:
     boostMatrix::matrix<bool> cellType1ContactState;
     boostMatrix::matrix<double> localCellHeadingState;
 
-    // Weibull sampling for step size:
-    std::mt19937 generatorWeibull;
+    // Poisson sampling for step size:
+    std::mt19937 generatorProtrusion;
+
+    // Levy sampling for step size:
+    std::mt19937 generatorLevy;
+    boost::math::normal_distribution<> normalDistribution;
     double kWeibull;
 
     std::tuple<double, double> getAverageDeltaHeading();
@@ -138,6 +143,9 @@ private:
 
     // Member functions for von Mises sampling:
     double sampleVonMises(double kappa);
+
+    // Member functions for Levy sampling:
+    double sampleLevyDistribution(double mu, double c);
 
     // Effectively a utility function for calculating the modulus of angles:
     double angleMod(double angle);

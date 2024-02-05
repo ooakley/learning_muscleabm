@@ -10,6 +10,7 @@
 #include <utility>
 
 #include <boost/numeric/ublas/matrix.hpp>
+#include <boost/math/distributions/normal.hpp>
 namespace boostMatrix = boost::numeric::ublas;
 
 typedef std::vector<std::tuple<int, int>> vectorOfTuples;
@@ -84,8 +85,11 @@ CellAgent::CellAgent(
     uniformDistribution = std::uniform_real_distribution<double>(0, 1);
     bernoulliDistribution = std::bernoulli_distribution();
 
-    // Initialising Weibull distribution:
-    generatorWeibull = std::mt19937(seedDistribution(seedGenerator));
+    generatorProtrusion = std::mt19937(seedDistribution(seedGenerator));
+
+    // Initialising Levy distribution:
+    generatorLevy = std::mt19937(seedDistribution(seedGenerator));
+    boost::math::normal_distribution<> normalDistribution(0.0, 1.0);
 
     // Generators and distribution for contact inhibition calculations:
     generatorAngleUniform = std::mt19937(seedDistribution(seedGenerator));
@@ -206,13 +210,18 @@ void CellAgent::takeRandomStep() {
     }
 
     // Calculating actin flow in protrusion:
-    double actinModulator{
-        1 - (findPolarityExtent() * flowPolarityCoupling)
-    }; // Calculate weibull lambda based on absolute value of polarity.
-    std::weibull_distribution<double> weibullDistribution{
-        std::weibull_distribution<double>(actinModulator, 1.5)
-    };
-    actinFlow = weibullDistribution(generatorWeibull);
+
+    // std::weibull_distribution<double> weibullDistribution{
+    //     std::weibull_distribution<double>(actinModulatorK, actinModulatorLambda)
+    // };
+    // actinFlow = weibullDistribution(generatorWeibull);
+
+    // actinFlow = sampleLevyDistribution(0, 1);
+
+    std::poisson_distribution<int> protrusionDistribution(findPolarityExtent()*kWeibull);
+    int protrusionCount{protrusionDistribution(generatorProtrusion)};
+
+    actinFlow = protrusionCount;
 
     // // Update position:
     double dx{actinFlow * cos(movementDirection) * flowScaling};
@@ -221,7 +230,7 @@ void CellAgent::takeRandomStep() {
     y = y + dy;
 
     // // Update polarity based on movement direction and actin flow:
-    double polarityChangeExtent{tanh(actinFlow)};
+    double polarityChangeExtent{tanh(actinFlow*flowPolarityCoupling)};
     double polarityChangeX{polarityChangeExtent*cos(movementDirection)};
     double polarityChangeY{polarityChangeExtent*sin(movementDirection)};
 
@@ -345,6 +354,17 @@ double CellAgent::sampleVonMises(double kappa) {
         }
     }
     return sampledVonMises;
+}
+
+
+double CellAgent::sampleLevyDistribution(double mu, double c) {
+    double U{uniformDistribution(generatorLevy)};
+    std::cout << "Uniform sample: " << U << std::endl;
+    std::cout << "Percentile: " << 1 - U/2 << std::endl;
+    double ppf{boost::math::quantile(normalDistribution, 1 - U)};
+    std::cout << "PPF: " << ppf << std::endl;
+    double levyStepSize{mu + (c / (std::pow(ppf, 2)))};
+    return levyStepSize;
 }
 
 
