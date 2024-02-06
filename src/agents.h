@@ -51,7 +51,7 @@ public:
 
     // Setters for simulating cell perception (e.g. updating cell percepts):
     void setLocalMatrixHeading(boostMatrix::matrix<double> matrixToSet);
-    void setLocalMatrixPresence(boostMatrix::matrix<bool> matrixToSet);
+    void setLocalMatrixPresence(boostMatrix::matrix<double> matrixToSet);
     void setContactStatus(boostMatrix::matrix<bool> stateToSet, int cellType);
 
     // Simulation code:

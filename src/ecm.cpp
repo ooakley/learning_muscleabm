@@ -168,9 +168,9 @@ boostMatrix::matrix<double> ECMField::getLocalMatrixHeading(int i, int j) {
     return localMatrix;
 };
 
-boostMatrix::matrix<bool> ECMField::getLocalMatrixPresence(int i, int j) {
+boostMatrix::matrix<double> ECMField::getLocalMatrixPresence(int i, int j) {
     // Instantiating heading matrix:
-    boostMatrix::matrix<bool> localMatrix{boostMatrix::zero_matrix<double>(3, 3)};
+    boostMatrix::matrix<double> localMatrix{boostMatrix::zero_matrix<double>(3, 3)};
 
     // Looping through local indices:
     std::array<int, 3> rowScan = {i-1, i, i+1};
@@ -251,6 +251,7 @@ void ECMField::addToMatrix(int i, int j, double cellHeading) {
     };
 
     assert(ecmPresentMatrix(i, j) != 0);
+    assert(ecmPresentMatrix(i, j) <= 1);
 
     // Calculating delta between cell heading and ecm heading:
     double currentECMHeading{ecmHeadingMatrix(i, j)};

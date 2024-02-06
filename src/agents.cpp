@@ -155,7 +155,7 @@ void CellAgent::setLocalMatrixHeading(boostMatrix::matrix<double> stateToSet) {
     localMatrixHeading = stateToSet;
 }
 
-void CellAgent::setLocalMatrixPresence(boostMatrix::matrix<bool> stateToSet) {
+void CellAgent::setLocalMatrixPresence(boostMatrix::matrix<double> stateToSet) {
     localMatrixPresence = stateToSet;
 }
 
@@ -174,8 +174,14 @@ void CellAgent::takeRandomStep() {
         directionalIntensity = ecmCoherence;
     }
 
+    if (directionalIntensity >= 1) {
+        std::cout << "Directional intensity: " << directionalIntensity << std::endl;
+        assert(directionalIntensity <= 1);
+    }
+
     // Determine protrusion - polarity centered or ECM centered:
     double thresholdValue{findPolarityExtent() / (findPolarityExtent() + directionalIntensity)};
+    assert(thresholdValue <= 1 && thresholdValue >= 0);
     double randomDeterminant{uniformDistribution(generatorInfluence)};
 
     if (randomDeterminant < thresholdValue) {
@@ -439,6 +445,19 @@ std::tuple<double, double> CellAgent::getAverageDeltaHeading() {
     // assert(sineMean != 0 & cosineMean != 0);
     double angleAverage{std::atan2(sineMean, cosineMean)};
     double angleIntensity{std::sqrt(std::pow(sineMean, 2) + std::pow(cosineMean, 2))};
+
+    if (angleIntensity >= 1) {
+        std::cout << "~~~ Densities: ~~~" << std::endl;
+        for (auto & row : rowScan)
+        {
+            for (auto & column : columnScan)
+            {
+                double ecmDensity{localMatrixPresence(row, column)};
+                std::cout << ecmDensity << " ";
+            }
+        }
+        std::cout << std::endl;
+    }
     return {angleAverage, angleIntensity};
 }
 
