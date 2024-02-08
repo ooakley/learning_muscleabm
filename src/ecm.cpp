@@ -7,7 +7,7 @@ namespace boostMatrix = boost::numeric::ublas;
 using std::atan2;
 
 // Constructor:
-ECMField::ECMField(int setElements, float setMatrixPersistence, float setMatrixAdditionRate)
+ECMField::ECMField(int setElements, double setMatrixPersistence, double setMatrixAdditionRate)
     : elementCount{setElements}
     , ecmHeadingMatrix{boostMatrix::zero_matrix<double>(elementCount, elementCount)}
     , ecmPresentMatrix{boostMatrix::zero_matrix<double>(elementCount, elementCount)}
@@ -281,7 +281,8 @@ void ECMField::addToMatrix(int i, int j, double cellHeading) {
 
     // Setting matrix values:
     if (newECMDensity > 1) {
-        newECMDensity = 1;
+        const double epsilon{std::numeric_limits<double>::epsilon()};
+        newECMDensity = 1 - epsilon;
     };
     ecmPresentMatrix(i, j) = newECMDensity;
     ecmHeadingMatrix(i, j) = newECMHeading;

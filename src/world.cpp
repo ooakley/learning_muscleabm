@@ -18,9 +18,9 @@ World::World
     double setWorldSideLength,
     int setECMElementCount,
     int setNumberOfCells,
-    float setCellTypeProportions,
-    float setMatrixPersistence,
-    float setMatrixAdditionRate,
+    double setCellTypeProportions,
+    double setMatrixPersistence,
+    double setMatrixAdditionRate,
     CellParameters setCellParameters
 )
     : worldSeed{setWorldSeed}
