@@ -37,9 +37,9 @@ int main(int argc, char** argv) {
     int numberOfCells;
     int worldSize;
     int gridSize;
-    float cellTypeProportions;
-    float matrixPersistence;
-    float matrixAdditionRate;
+    double cellTypeProportions;
+    double matrixPersistence;
+    double matrixAdditionRate;
 
     // Cell behaviour parameters:
     CellParameters cellParams;
@@ -65,49 +65,49 @@ int main(int argc, char** argv) {
         ("gridSize", po::value<int>(&gridSize)->required(),
             "Defines number of cells in grid that defines the ECM & cell interaction neighbourhood."
         )
-        ("cellTypeProportions", po::value<float>(&cellTypeProportions)->required(),
+        ("cellTypeProportions", po::value<double>(&cellTypeProportions)->required(),
             "Proportion of cells that take type 0."
         )
-        // ("matrixPersistence", po::value<float>(&matrixPersistence)->required(),
+        // ("matrixPersistence", po::value<double>(&matrixPersistence)->required(),
         //     "Stability of the matrix under reorientation by cell movement."
         // )
-        ("matrixAdditionRate", po::value<float>(&matrixAdditionRate)->required(),
+        ("matrixAdditionRate", po::value<double>(&matrixAdditionRate)->required(),
             "Stability of the matrix under reorientation by cell movement."
         )
-        ("wbK", po::value<float>(&cellParams.wbK)->required(),
+        ("wbK", po::value<double>(&cellParams.wbK)->required(),
             "Weibull distribution k value."
         )
-        ("kappa", po::value<float>(&cellParams.kappa)->required(),
+        ("kappa", po::value<double>(&cellParams.kappa)->required(),
             "Von Mises distribution kappa parameter for cell intrinsic change in polarity."
         )
-        ("matrixKappa", po::value<float>(&cellParams.matrixKappa)->required(),
+        ("matrixKappa", po::value<double>(&cellParams.matrixKappa)->required(),
             "Von Mises distribution kappa parameter for matrix induced change in polarity."
         )
-        ("homotypicInhibition", po::value<float>(&cellParams.homotypicInhibition)->required(),
+        ("homotypicInhibition", po::value<double>(&cellParams.homotypicInhibition)->required(),
             "Homotypic inhibition rate."
         )
-        ("heterotypicInhibition", po::value<float>(&cellParams.heterotypicInhibition)->required(),
+        ("heterotypicInhibition", po::value<double>(&cellParams.heterotypicInhibition)->required(),
             "Heterotypic inhibition rate."
         )
-        ("polarityPersistence", po::value<float>(&cellParams.polarityPersistence)->required(),
+        ("polarityPersistence", po::value<double>(&cellParams.polarityPersistence)->required(),
             "How quickly the polarity of a cell changes when it moves."
         )
-        ("polarityTurningCoupling", po::value<float>(&cellParams.polarityTurningCoupling)->required(),
+        ("polarityTurningCoupling", po::value<double>(&cellParams.polarityTurningCoupling)->required(),
             "Magnitude of the influence that polarity has on turning probability."
         )
-        ("flowScaling", po::value<float>(&cellParams.flowScaling)->required(),
+        ("flowScaling", po::value<double>(&cellParams.flowScaling)->required(),
             "The scaling between the amount of actin flow and the cell step size."
         )
-        ("flowPolarityCoupling", po::value<float>(&cellParams.flowPolarityCoupling)->required(),
+        ("flowPolarityCoupling", po::value<double>(&cellParams.flowPolarityCoupling)->required(),
             "Magnitude of the influence that actin flow has on polarity."
         )
-        ("collisionRepolarisation", po::value<float>(&cellParams.collisionRepolarisation)->required(),
+        ("collisionRepolarisation", po::value<double>(&cellParams.collisionRepolarisation)->required(),
             "Size of the repolarisation induced by collision."
         )
-        ("repolarisationRate", po::value<float>(&cellParams.repolarisationRate)->required(),
+        ("repolarisationRate", po::value<double>(&cellParams.repolarisationRate)->required(),
             "Rate at which collisions induce repolarisation."
         )
-        ("polarityNoiseSigma", po::value<float>(&cellParams.polarityNoiseSigma)->required(),
+        ("polarityNoiseSigma", po::value<double>(&cellParams.polarityNoiseSigma)->required(),
             "Size of additive Gaussian noise to add to polarity at every timestep."
         )
     ;

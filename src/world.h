@@ -5,7 +5,7 @@
 
 // Structure to store necessary parameters for the simulation:
 struct CellParameters {
-    float wbK, kappa, matrixKappa, homotypicInhibition, heterotypicInhibition,
+    double wbK, kappa, matrixKappa, homotypicInhibition, heterotypicInhibition,
     polarityPersistence, polarityTurningCoupling, flowScaling, flowPolarityCoupling,
     collisionRepolarisation, repolarisationRate, polarityNoiseSigma;
 };
@@ -19,9 +19,9 @@ public:
         double setWorldSideLength,
         int setECMElementCount,
         int setNumberOfCells,
-        float setCellTypeProportions,
-        float setMatrixPersistence,
-        float setMatrixAdditionRate,
+        double setCellTypeProportions,
+        double setMatrixPersistence,
+        double setMatrixAdditionRate,
         CellParameters setCellParameters
     );
 
@@ -51,7 +51,7 @@ private:
 
     // Cell population characteristics:
     int numberOfCells;
-    float cellTypeProportions;
+    double cellTypeProportions;
 
     // Variables for initialising generators:
     int worldSeed;
