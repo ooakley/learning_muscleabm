@@ -198,18 +198,31 @@ void CellAgent::takeRandomStep() {
     // Determining collisions:
     std::pair<bool, double> collision{checkForCollisions()};
     if (collision.first) {
-        actinFlow = 0;
-        double effectiveRepolarisation{collisionRepolarisation * std::cos(collision.second)};
-        double effectiveRepolarisationRate{
-            std::abs(repolarisationRate * std::cos(collision.second))
+        // Calculating polarity change parameters due to collision:
+        double effectiveRepolarisationMagnitude{
+            collisionRepolarisation * std::sin(collision.second)
         };
-        double polarityChangeX{effectiveRepolarisation*cos(movementDirection)};
-        double polarityChangeY{effectiveRepolarisation*sin(movementDirection)};
+        double effectiveRepolarisationRate{
+            std::abs(repolarisationRate * std::sin(collision.second))
+        };
+        double repolarisationAbsoluteDirection{
+            angleMod(findPolarityDirection() + collision.second)
+        };
 
+        // Calculating repolarisation vector:
+        double polarityChangeX{
+            effectiveRepolarisationMagnitude*cos(repolarisationAbsoluteDirection)
+        };
+        double polarityChangeY{
+            effectiveRepolarisationMagnitude*sin(repolarisationAbsoluteDirection)
+        };
+
+        // Updating polarity:
         polarityX = (1-effectiveRepolarisationRate)*polarityX +
             effectiveRepolarisationRate*polarityChangeX;
         polarityY = (1-effectiveRepolarisationRate)*polarityY +
             effectiveRepolarisationRate*polarityChangeY;
+
     }
 
     // Calculating actin flow in protrusion:
