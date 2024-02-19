@@ -38,7 +38,7 @@ int main(int argc, char** argv) {
     int worldSize;
     int gridSize;
     double cellTypeProportions;
-    double matrixPersistence;
+    double matrixTurnoverRate;
     double matrixAdditionRate;
 
     // Cell behaviour parameters:
@@ -68,9 +68,9 @@ int main(int argc, char** argv) {
         ("cellTypeProportions", po::value<double>(&cellTypeProportions)->required(),
             "Proportion of cells that take type 0."
         )
-        // ("matrixPersistence", po::value<double>(&matrixPersistence)->required(),
-        //     "Stability of the matrix under reorientation by cell movement."
-        // )
+        ("matrixTurnoverRate", po::value<double>(&matrixTurnoverRate)->required(),
+            "Rate of matrix degradation."
+        )
         ("matrixAdditionRate", po::value<double>(&matrixAdditionRate)->required(),
             "Stability of the matrix under reorientation by cell movement."
         )
@@ -168,7 +168,7 @@ int main(int argc, char** argv) {
                 gridSize,
                 numberOfCells,
                 cellTypeProportions,
-                matrixPersistence,
+                matrixTurnoverRate,
                 matrixAdditionRate,
                 cellParams
             )

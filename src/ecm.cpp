@@ -7,14 +7,14 @@ namespace boostMatrix = boost::numeric::ublas;
 using std::atan2;
 
 // Constructor:
-ECMField::ECMField(int setElements, double setMatrixPersistence, double setMatrixAdditionRate)
+ECMField::ECMField(int setElements, double setMatrixMatrixTurnoverRate, double setMatrixAdditionRate)
     : elementCount{setElements}
     , ecmHeadingMatrix{boostMatrix::zero_matrix<double>(elementCount, elementCount)}
     , ecmPresentMatrix{boostMatrix::zero_matrix<double>(elementCount, elementCount)}
     , cellType0CountMatrix{boostMatrix::zero_matrix<int>(elementCount, elementCount)}
     , cellType1CountMatrix{boostMatrix::zero_matrix<int>(elementCount, elementCount)}
     , cellHeadingMatrix{boostMatrix::zero_matrix<double>(elementCount, elementCount)}
-    , matrixPersistence{setMatrixPersistence}
+    , matrixTurnoverRate{setMatrixMatrixTurnoverRate}
     , matrixAdditionRate{setMatrixAdditionRate}
 {
 }
@@ -197,7 +197,7 @@ boostMatrix::matrix<double> ECMField::getLocalMatrixPresence(int i, int j) {
 
 
 // Setters:
-void ECMField::setSubMatrix(int i, int j, double heading) {
+void ECMField::setSubMatrix(int i, int j, double heading, double polarityExtent) {
     std::array<int, 3> rowScan = {i-1, i, i+1};
     std::array<int, 3> columnScan = {j-1, j, j+1};
 
@@ -208,7 +208,7 @@ void ECMField::setSubMatrix(int i, int j, double heading) {
         for (auto & column : columnScan)
         {
             int safeColumn{rollOverIndex(column)};
-            addToMatrix(safeRow, safeColumn, heading);
+            addToMatrix(safeRow, safeColumn, heading, polarityExtent);
         }
     }
 }
@@ -237,10 +237,15 @@ void ECMField::removeCellPresence(int i, int j, int cellType) {
 
 }
 
+void ECMField::turnoverMatrix() {
+    ecmPresentMatrix = ecmPresentMatrix - (matrixTurnoverRate*ecmPresentMatrix);
+}
+
+
 // Private member functions:
 
 // Simulation functions:
-void ECMField::addToMatrix(int i, int j, double cellHeading) {
+void ECMField::addToMatrix(int i, int j, double cellHeading, double polarityExtent) {
     // If no matrix present, set to cellHeading:
     if (ecmPresentMatrix(i, j) == 0) {
         double newECMHeading{cellHeading};
@@ -262,14 +267,17 @@ void ECMField::addToMatrix(int i, int j, double cellHeading) {
     // Persistence weighting:
     // double currentPersistence{currentECMDensity*matrixPersistence};
 
+    // Weighting addition rate based on polarisation:
+    double effectiveAdditionRate{matrixAdditionRate*polarityExtent};
+
     // Calculaing weighted average of current and proposed ECM:
     double sineMean{0};
     sineMean += currentECMDensity * std::sin(currentECMHeading);
-    sineMean += matrixAdditionRate * std::sin(propsedECMHeading);
+    sineMean += effectiveAdditionRate * std::sin(propsedECMHeading);
 
     double cosineMean{0};
     cosineMean += currentECMDensity * std::cos(currentECMHeading);
-    cosineMean += matrixAdditionRate * std::cos(propsedECMHeading);
+    cosineMean += effectiveAdditionRate * std::cos(propsedECMHeading);
 
     double newECMHeading{std::atan2(sineMean, cosineMean)};
     double newECMDensity{std::sqrt(std::pow(sineMean, 2) + std::pow(cosineMean, 2))};
@@ -288,9 +296,6 @@ void ECMField::addToMatrix(int i, int j, double cellHeading) {
     ecmHeadingMatrix(i, j) = newECMHeading;
 }
 
-void ECMField::ageMatrix() {
-    ecmPresentMatrix = ecmPresentMatrix - 0.01*(ecmPresentMatrix);
-}
 
 // Utility functions:
 int ECMField::rollOverIndex(int index) {

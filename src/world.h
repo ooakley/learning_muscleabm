@@ -20,7 +20,7 @@ public:
         int setECMElementCount,
         int setNumberOfCells,
         double setCellTypeProportions,
-        double setMatrixPersistence,
+        double setMatrixTurnoverRate,
         double setMatrixAdditionRate,
         CellParameters setCellParameters
     );
@@ -46,6 +46,7 @@ private:
 
     // Complex objects from our libraries:
     std::vector<CellAgent> cellAgentVector;
+    std::unordered_map<int, CellAgent*> cellAgentMap;
     ECMField ecmField;
     CellParameters cellParameters;
 
@@ -82,7 +83,8 @@ private:
     void setMovementOnMatrix(
         std::tuple<double, double> cellStart,
         std::tuple<double, double> cellFinish,
-        double cellHeading
+        double cellHeading,
+        double cellPolarityExtent
     );
 
     // World utility functions:

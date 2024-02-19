@@ -5,7 +5,7 @@ namespace boostMatrix = boost::numeric::ublas;
 class ECMField{
 public:
     // Constructor:
-    ECMField(int setElements, double setMatrixPersistence, double setMatrixAdditionRate);
+    ECMField(int setElements, double setMatrixTurnoverRate, double setMatrixAdditionRate);
 
     // Getters:
     boostMatrix::matrix<double> getECMHeadingMatrix();
@@ -18,16 +18,16 @@ public:
     boostMatrix::matrix<double> getLocalMatrixPresence(int i, int j);
 
     // Setters:
-    void setSubMatrix(int i, int j, double heading);
+    void setSubMatrix(int i, int j, double heading, double polarityExtent);
     void setCellPresence(int i, int j, int cellType, double cellHeading);
     void removeCellPresence(int i, int j, int cellType);
 
     // Simulation code:
-    void ageMatrix();
+    void turnoverMatrix();
 
 private:
     // Simulation properties of matrix:
-    double matrixPersistence;
+    double matrixTurnoverRate;
     double matrixAdditionRate;
 
     // Matrix size and matrix definitions:
@@ -39,7 +39,7 @@ private:
     boostMatrix::matrix<double> cellHeadingMatrix;
 
     // Simulation functions:
-    void addToMatrix(int i, int j, double heading);
+    void addToMatrix(int i, int j, double heading, double polarityExtent);
 
     // Utility functions:
     int rollOverIndex(int index);

@@ -50,6 +50,7 @@ public:
     void setLocalCellHeadingState(boostMatrix::matrix<double> stateToSet);
 
     // Setters for simulating cell perception (e.g. updating cell percepts):
+    void setNeighbourPercept(double setNeighbourDistance, double setNeighbourPolarity, double setNeighbourHeading);
     void setLocalMatrixHeading(boostMatrix::matrix<double> matrixToSet);
     void setLocalMatrixPresence(boostMatrix::matrix<double> matrixToSet);
     void setContactStatus(boostMatrix::matrix<bool> stateToSet, int cellType);
@@ -103,6 +104,10 @@ private:
     boostMatrix::matrix<bool> cellType0ContactState;
     boostMatrix::matrix<bool> cellType1ContactState;
     boostMatrix::matrix<double> localCellHeadingState;
+
+    double neighbourDistance;
+    double neighbourPolarity;
+    double neighbourHeading;
 
     // Poisson sampling for step size:
     std::mt19937 generatorProtrusion;

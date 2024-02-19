@@ -8,8 +8,24 @@
 #include <cmath>
 #include <tuple>
 
+#include <boost/geometry.hpp>
+#include <boost/geometry/index/rtree.hpp>
 #include <boost/numeric/ublas/matrix.hpp>
+#include <boost/geometry/geometries/register/point.hpp>
 
+
+namespace bg = boost::geometry;
+namespace bgi = boost::geometry::index;
+
+typedef bg::model::point<double, 2, bg::cs::cartesian> Point;
+
+struct CellLocation
+{
+    double x, y;
+    int cellIndex;
+};
+
+BOOST_GEOMETRY_REGISTER_POINT_2D(CellLocation, double, bg::cs::cartesian, x, y);
 
 // Constructor and intialisation:
 World::World
@@ -19,7 +35,7 @@ World::World
     int setECMElementCount,
     int setNumberOfCells,
     double setCellTypeProportions,
-    double setMatrixPersistence,
+    double setMatrixTurnoverRate,
     double setMatrixAdditionRate,
     CellParameters setCellParameters
 )
@@ -27,7 +43,7 @@ World::World
     , worldSideLength{setWorldSideLength}
     , countECMElement{setECMElementCount}
     , lengthECMElement{worldSideLength/countECMElement}
-    , ecmField{ECMField(countECMElement, setMatrixPersistence, setMatrixAdditionRate)}
+    , ecmField{ECMField(countECMElement, setMatrixTurnoverRate, setMatrixAdditionRate)}
     , numberOfCells{setNumberOfCells}
     , cellTypeProportions{setCellTypeProportions}
     , simulationTime{0}
@@ -108,6 +124,9 @@ void World::initialiseCellVector() {
 
         // Adding newly initialised cell to CellVector:
         cellAgentVector.push_back(newCell);
+
+        // Adding cell to unordered map:
+        cellAgentMap[i] = &newCell;
     }
 }
 
@@ -138,13 +157,89 @@ void World::runSimulationStep() {
     // Shuffling acting order of cells:
     std::shuffle(std::begin(cellAgentVector), std::end(cellAgentVector), shuffleGenerator);
 
+    // Constructing RTree for nearest neighbour calculations:
+    bgi::rtree<CellLocation, bgi::rstar<8> > cellTree;
+    for (int i = 0; i < numberOfCells; ++i)
+    {
+        auto [x, y] = cellAgentVector[i].getPosition();
+        CellLocation position{x, y, i};
+        cellTree.insert(position);
+
+        // Adding "ghost" particles for our periodic boundary conditions:
+        bool xReflect{false};
+        double boundaryX{x};
+        bool yReflect{false};
+        double boundaryY{y};
+
+        if (x < 100) {
+            boundaryX += worldSideLength;
+            xReflect = true;
+        }
+        else if (x > (worldSideLength - 100)) {
+            boundaryX -= worldSideLength;
+            xReflect = true;
+        }
+        if (y < 100) {
+            boundaryY += worldSideLength;
+            yReflect = true;
+        }
+        else if (y > (worldSideLength - 100)) {
+            boundaryY -= worldSideLength;
+            yReflect = true;
+        }
+
+        // If particle was adjusted, we need to add it to the RTree:
+        if (xReflect) {
+            CellLocation ghostPosition{boundaryX, y, i};
+            cellTree.insert(ghostPosition);
+        }
+        if (yReflect) {
+            CellLocation ghostPosition{x, boundaryY, i};
+            cellTree.insert(ghostPosition);
+        }
+        if (xReflect && yReflect) {
+            CellLocation ghostPosition{boundaryX, boundaryY, i};
+            cellTree.insert(ghostPosition);
+        }
+    }
+
+    // Setting nearest neighbour percepts:
+    for (int i = 0; i < numberOfCells; ++i) {
+        // Getting nearest neighbour position:
+        std::vector<CellLocation> nearestNeighbours;
+        auto [currentX, currentY] = cellAgentVector[i].getPosition();
+        CellLocation currentPosition{currentX, currentY, i};
+        cellTree.query(
+            bgi::nearest(currentPosition, 2),
+            std::back_inserter(nearestNeighbours)
+        );
+
+        // Getting nearest neighbour parameters:
+        auto[neighbourX, neighbourY] = cellAgentVector[nearestNeighbours[0].cellIndex].getPosition();
+        double neighbourPolarity{cellAgentVector[nearestNeighbours[1].cellIndex].getPolarity()};
+
+        // Getting distance and relative heading:
+        double dx{neighbourX - currentX};
+        double dy{neighbourY - currentY};
+        double neighbourDistance{std::sqrt(
+            std::pow(dx, 2) +
+            std::pow(dy, 2)
+        )};
+        double relativeHeading{std::atan2(dy, dx)};
+
+        cellAgentVector[i].setNeighbourPercept(neighbourDistance, neighbourPolarity, relativeHeading);
+
+        // std::cout << neighbourDistance << std::endl;
+    }   
+
     // Looping through cells and running their behaviour:
     for (int i = 0; i < numberOfCells; ++i) {
+        // Running cell behaviour:
         runCellStep(cellAgentVector[i]);
     }
 
     // Updating ECM:
-    // ecmField.ageMatrix();
+    ecmField.turnoverMatrix();
 
     simulationTime += 1;
 }
@@ -152,18 +247,16 @@ void World::runSimulationStep() {
 void World::runCellStep(CellAgent& actingCell) {
     // Getting initial cell position:
     std::tuple<double, double> cellStart{actingCell.getPosition()};
-    std::array<int, 2> startIndex{getIndexFromLocation(cellStart)};
-
-    // // Setting cell percepts:
+    // std::array<int, 2> startIndex{getIndexFromLocation(cellStart)};
 
     // Setting percepts of matrix:
-    actingCell.setLocalMatrixHeading(
-        ecmField.getLocalMatrixHeading(startIndex[0], startIndex[1])
-    );
+    // actingCell.setLocalMatrixHeading(
+    //     ecmField.getLocalMatrixHeading(startIndex[0], startIndex[1])
+    // );
 
-    actingCell.setLocalMatrixPresence(
-        ecmField.getLocalMatrixPresence(startIndex[0], startIndex[1])
-    );
+    // actingCell.setLocalMatrixPresence(
+    //     ecmField.getLocalMatrixPresence(startIndex[0], startIndex[1])
+    // );
 
     // if (actingCell.getID() == 1) {
     //     double angle, intensity;
@@ -176,41 +269,44 @@ void World::runCellStep(CellAgent& actingCell) {
 
     // Determine contact status of cell (i.e. cells in Moore neighbourhood of current cell):
     // Cell type 0:
-    actingCell.setContactStatus(
-        ecmField.getCellTypeContactState(startIndex[0], startIndex[1], 0), 0
-    );
-    // Cell type 1:
-    actingCell.setContactStatus(
-        ecmField.getCellTypeContactState(startIndex[0], startIndex[1], 1), 1
-    );
-    // Local cell heading state:
-    actingCell.setLocalCellHeadingState(
-        ecmField.getLocalCellHeadingState(startIndex[0], startIndex[1])
-    );
+    // actingCell.setContactStatus(
+    //     ecmField.getCellTypeContactState(startIndex[0], startIndex[1], 0), 0
+    // );
+    // // Cell type 1:
+    // actingCell.setContactStatus(
+    //     ecmField.getCellTypeContactState(startIndex[0], startIndex[1], 1), 1
+    // );
+    // // Local cell heading state:
+    // actingCell.setLocalCellHeadingState(
+    //     ecmField.getLocalCellHeadingState(startIndex[0], startIndex[1])
+    // );
 
     // // Run cell intrinsic movement:
-    ecmField.removeCellPresence(startIndex[0], startIndex[1], actingCell.getCellType());
+    // ecmField.removeCellPresence(startIndex[0], startIndex[1], actingCell.getCellType());
     actingCell.takeRandomStep();
 
     // Calculate and set effects of cell on world:
     std::tuple<double, double> cellFinish{actingCell.getPosition()};
-    setMovementOnMatrix(cellStart, cellFinish, actingCell.getMovementDirection());
+    setMovementOnMatrix(
+        cellStart, cellFinish,
+        actingCell.getMovementDirection(), actingCell.getPolarityExtent()
+    );
 
     // Rollover the cell if out of bounds:
     actingCell.setPosition(rollPosition(cellFinish));
 
     // Set new count:
-    std::array<int, 2> endIndex{getIndexFromLocation(rollPosition(cellFinish))};
-    ecmField.setCellPresence(
-        endIndex[0], endIndex[1],
-        actingCell.getCellType(), actingCell.getPolarity()
-    );
+    // std::array<int, 2> endIndex{getIndexFromLocation(rollPosition(cellFinish))};
+    // ecmField.setCellPresence(
+    //     endIndex[0], endIndex[1],
+    //     actingCell.getCellType(), actingCell.getPolarity()
+    // );
 }
 
 void World::setMovementOnMatrix(
     std::tuple<double, double> cellStart,
     std::tuple<double, double> cellFinish,
-    double cellHeading
+    double cellHeading, double cellPolarityExtent
 )
 {
     // Finding gradient of line:
@@ -239,7 +335,7 @@ void World::setMovementOnMatrix(
 
     // Setting blocks to heading:
     for (auto& block : blocksToSet) {
-        ecmField.setSubMatrix(block[0], block[1], cellHeading);
+        ecmField.setSubMatrix(block[0], block[1], cellHeading, cellPolarityExtent);
     }
 
 }

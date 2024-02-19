@@ -139,6 +139,12 @@ void CellAgent::setPosition(std::tuple<double, double> newPosition) {
     y = std::get<1>(newPosition);
 }
 
+void CellAgent::setNeighbourPercept(double setNeighbourDistance, double setNeighbourPolarity, double setNeighbourHeading) {
+    neighbourDistance = setNeighbourDistance;
+    neighbourPolarity = setNeighbourPolarity;
+    neighbourHeading = setNeighbourHeading;
+}
+
 void CellAgent::setContactStatus(boostMatrix::matrix<bool> stateToSet, int cellType) {
     if (cellType == 0) {
         cellType0ContactState = stateToSet;
@@ -158,7 +164,6 @@ void CellAgent::setLocalMatrixHeading(boostMatrix::matrix<double> stateToSet) {
 void CellAgent::setLocalMatrixPresence(boostMatrix::matrix<double> stateToSet) {
     localMatrixPresence = stateToSet;
 }
-
 
 // Simulation code:
 void CellAgent::takeRandomStep() {
@@ -200,21 +205,19 @@ void CellAgent::takeRandomStep() {
     if (collision.first) {
         // Calculating polarity change parameters due to collision:
         double effectiveRepolarisationMagnitude{
-            collisionRepolarisation * std::sin(collision.second)
+            collisionRepolarisation * std::abs(std::sin(collision.second))
         };
         double effectiveRepolarisationRate{
-            std::abs(repolarisationRate * std::sin(collision.second))
+            repolarisationRate * std::abs(std::sin(collision.second))
         };
-        double repolarisationAbsoluteDirection{
-            angleMod(findPolarityDirection() + collision.second)
-        };
+        double repolarisationAbsoluteDirection{neighbourPolarity};
 
         // Calculating repolarisation vector:
         double polarityChangeX{
-            effectiveRepolarisationMagnitude*cos(repolarisationAbsoluteDirection)
+            -effectiveRepolarisationMagnitude*cos(repolarisationAbsoluteDirection)
         };
         double polarityChangeY{
-            effectiveRepolarisationMagnitude*sin(repolarisationAbsoluteDirection)
+            -effectiveRepolarisationMagnitude*sin(repolarisationAbsoluteDirection)
         };
 
         // Updating polarity:
@@ -277,58 +280,73 @@ void CellAgent::takeRandomStep() {
 
 // Private functions for cell behaviour:
 std::pair<bool, double> CellAgent::checkForCollisions() {
-    // This checks for which cell in the Moore neighbourhood we need to query:
-    int stateIndex{int(floor((movementDirection + M_PI + (M_PI/8)) / (M_PI / 4)))};
-    int iContact{std::get<0>(HEADING_CONTACT_MAPPING[stateIndex])};
-    int jContact{std::get<1>(HEADING_CONTACT_MAPPING[stateIndex])};
+    // Calculating collisions:
+    double interactionDistance{100};
+    double collisionLikelihood{std::exp(-neighbourDistance/interactionDistance)};
+    // double collisionEnvelope{std::cos(movementDirection - neighbourHeading)};
 
-    // Are any cells nearby?
-    bool type0Contact = cellType0ContactState(iContact, jContact);
-    bool type1Contact = cellType1ContactState(iContact, jContact);
-    if ((!type0Contact) && (!type1Contact)) {
+    if (uniformDistribution(generatorForInhibitionRate) < (collisionLikelihood)) {
+            double headingDistance{calculateAngularDistance(
+                findPolarityDirection(), neighbourPolarity
+            )};
+            return std::make_pair(true, headingDistance);
+    }
+    else {
         return std::make_pair(false, 0);
     }
 
-    // Calculate corner collision correction:
-    bool isCorner{(stateIndex == 1 || stateIndex == 3 || stateIndex == 5 || stateIndex == 7)};
-    const double cornerCorrectionFactor{0.5 + ((9*M_PI)/32) - ((9*sqrt(2))/16)};
+    // // This checks for which cell in the Moore neighbourhood we need to query:
+    // int stateIndex{int(floor((movementDirection + M_PI + (M_PI/8)) / (M_PI / 4)))};
+    // int iContact{std::get<0>(HEADING_CONTACT_MAPPING[stateIndex])};
+    // int jContact{std::get<1>(HEADING_CONTACT_MAPPING[stateIndex])};
 
-    if (isCorner) {
-        bool skipCollision{uniformDistribution(generatorCornerCorrection) > cornerCorrectionFactor};
-        if (skipCollision) {return std::make_pair(false, 0);}
-    }
+    // // Are any cells nearby?
+    // bool type0Contact = cellType0ContactState(iContact, jContact);
+    // bool type1Contact = cellType1ContactState(iContact, jContact);
+    // if ((!type0Contact) && (!type1Contact)) {
+    //     return std::make_pair(false, 0);
+    // }
 
-    // Calculate correction for relative cell angles:
-    double otherCellHeading{localCellHeadingState(iContact, jContact)};
-    double angularDistance{calculateMinimumAngularDistance(findPolarityDirection(), otherCellHeading)};
-    double angularCorrectionFactor{cos(angularDistance)};
+    // // Calculate corner collision correction:
+    // bool isCorner{(stateIndex == 1 || stateIndex == 3 || stateIndex == 5 || stateIndex == 7)};
+    // const double cornerCorrectionFactor{0.5 + ((9*M_PI)/32) - ((9*sqrt(2))/16)};
 
-    // Calculate homotypic / heterotypic interactions:
-    std::array<bool, 2> cellTypeContacts{type0Contact, type1Contact};
-    if (cellTypeContacts[cellType]) {
-        // Do homotypic interaction if present:
-        double effectiveHomotypicInhibition{(homotypicInhibitionRate*angularCorrectionFactor)};
-        if (uniformDistribution(generatorForInhibitionRate) < effectiveHomotypicInhibition) {
-            double headingDistance{calculateAngularDistance(
-                findPolarityDirection(), otherCellHeading
-            )};
-            return std::make_pair(true, headingDistance);
-        }
-    } else if (cellTypeContacts[std::abs(cellType - 1)]) {
-        // Do heterotypic interaction if no homotypic interaction:
-        double effectiveHeterotypicInhibition{
-            (heterotypicInhibitionRate*angularCorrectionFactor)
-        };
-        if (uniformDistribution(generatorForInhibitionRate) < effectiveHeterotypicInhibition) {
-            double headingDistance{calculateAngularDistance(
-                findPolarityDirection(), otherCellHeading
-            )};
-            return std::make_pair(true, headingDistance);
-        }
-    }
+    // if (isCorner) {
+    //     bool skipCollision{uniformDistribution(generatorCornerCorrection) > cornerCorrectionFactor};
+    //     if (skipCollision) {return std::make_pair(false, 0);}
+    // }
 
-    // If no collision is ultimately calculated, return no collision:
-    return std::make_pair(false, 0);
+    // // Calculate correction for relative cell angles:
+    // double otherCellHeading{localCellHeadingState(iContact, jContact)};
+    // double angularDistance{calculateMinimumAngularDistance(findPolarityDirection(), otherCellHeading)};
+    // double angularCorrectionFactor{cos(angularDistance)};
+
+    // // Calculate homotypic / heterotypic interactions:
+    // std::array<bool, 2> cellTypeContacts{type0Contact, type1Contact};
+    // if (cellTypeContacts[cellType]) {
+    //     // Do homotypic interaction if present:
+    //     double effectiveHomotypicInhibition{(homotypicInhibitionRate*angularCorrectionFactor)};
+    //     if (uniformDistribution(generatorForInhibitionRate) < effectiveHomotypicInhibition) {
+    //         double headingDistance{calculateAngularDistance(
+    //             findPolarityDirection(), otherCellHeading
+    //         )};
+    //         return std::make_pair(true, headingDistance);
+    //     }
+    // } else if (cellTypeContacts[std::abs(cellType - 1)]) {
+    //     // Do heterotypic interaction if no homotypic interaction:
+    //     double effectiveHeterotypicInhibition{
+    //         (heterotypicInhibitionRate*angularCorrectionFactor)
+    //     };
+    //     if (uniformDistribution(generatorForInhibitionRate) < effectiveHeterotypicInhibition) {
+    //         double headingDistance{calculateAngularDistance(
+    //             findPolarityDirection(), otherCellHeading
+    //         )};
+    //         return std::make_pair(true, headingDistance);
+    //     }
+    // }
+
+    // // If no collision is ultimately calculated, return no collision:
+    // return std::make_pair(false, 0);
 }
 
 
