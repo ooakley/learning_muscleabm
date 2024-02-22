@@ -31,7 +31,7 @@ vectorOfTuples HEADING_CONTACT_MAPPING{
 CellAgent::CellAgent(
     double startX, double startY, double startHeading,
     unsigned int setCellSeed, int setCellID, int setCellType,
-    double setWbK, double setKappa, double setMatrixKappa,
+    double setPoissonLambda, double setKappa, double setMatrixKappa,
     double setHomotypicInhibition, double setHeterotypicInhibition,
     double setPolarityPersistence, double setPolarityTurningCoupling,
     double setFlowScaling, double setFlowPolarityCoupling,
@@ -65,7 +65,7 @@ CellAgent::CellAgent(
     , localCellHeadingState{boostMatrix::zero_matrix<double>(3, 3)}
     , cellSeed{setCellSeed}
     , cellID{setCellID}
-    , kWeibull{setWbK}
+    , poissonLambda{setPoissonLambda}
     , homotypicInhibitionRate{setHomotypicInhibition}
     , heterotypicInhibitionRate{setHeterotypicInhibition}
     , cellType{setCellType}
@@ -159,20 +159,28 @@ void CellAgent::setLocalMatrixPresence(boostMatrix::matrix<double> stateToSet) {
     localMatrixPresence = stateToSet;
 }
 
+void CellAgent::setDirectionalInfluence(double setDirectionalInfluence) {
+    directionalInfluence = setDirectionalInfluence;
+};
+
+void CellAgent::setDirectionalIntensity(double setDirectiontalIntensity) {
+    directionalIntensity = setDirectiontalIntensity;
+};
+
 
 // Simulation code:
 void CellAgent::takeRandomStep() {
     // // Calculating new attachment:
-    if (thereIsMatrixInteraction) {
-        // Calculate mean for von mises distribution by taking average of local ECM:
-        double relativeECMDirection;
-        double ecmCoherence;
-        std::tie(relativeECMDirection, ecmCoherence) = getAverageDeltaHeading();
+    // if (thereIsMatrixInteraction) {
+    //     // Calculate mean for von mises distribution by taking average of local ECM:
+    //     double relativeECMDirection;
+    //     double ecmCoherence;
+    //     std::tie(relativeECMDirection, ecmCoherence) = getAverageDeltaHeading();
 
-        // Recording values as member variables to be output at end of global timestep:
-        directionalInfluence = relativeECMDirection;
-        directionalIntensity = ecmCoherence;
-    }
+    //     // Recording values as member variables to be output at end of global timestep:
+    //     directionalInfluence = relativeECMDirection;
+    //     directionalIntensity = ecmCoherence;
+    // }
 
     assert(directionalIntensity <= 1);
 
@@ -200,10 +208,10 @@ void CellAgent::takeRandomStep() {
     if (collision.first) {
         // Calculating polarity change parameters due to collision:
         double effectiveRepolarisationMagnitude{
-            collisionRepolarisation * std::sin(collision.second)
+            collisionRepolarisation * std::abs(std::sin(collision.second))
         };
         double effectiveRepolarisationRate{
-            std::abs(repolarisationRate * std::sin(collision.second))
+            repolarisationRate * std::abs(std::sin(collision.second))
         };
         double repolarisationAbsoluteDirection{
             angleMod(findPolarityDirection() + collision.second)
@@ -234,7 +242,7 @@ void CellAgent::takeRandomStep() {
 
     // actinFlow = sampleLevyDistribution(0, 1);
 
-    std::poisson_distribution<int> protrusionDistribution(findPolarityExtent()*kWeibull);
+    std::poisson_distribution<int> protrusionDistribution(findPolarityExtent()*poissonLambda);
     int protrusionCount{protrusionDistribution(generatorProtrusion)};
 
     actinFlow = protrusionCount;
@@ -424,70 +432,6 @@ double CellAgent::calculateMinimumAngularDistance(double headingA, double headin
 }
 
 
-std::tuple<double, double> CellAgent::getAverageDeltaHeading() {
-    std::array<int, 3> rowScan = {0, 1, 2};
-    std::array<int, 3> columnScan = {0, 1, 2};
-    double polarityDirection{findPolarityDirection()};
-
-    // Getting all headings:
-    double sineMean{0};
-    double cosineMean{0};
-    for (auto & row : rowScan)
-    {
-        for (auto & column : columnScan)
-        {
-            double ecmHeading{localMatrixHeading(row, column)};
-            double ecmDensity{localMatrixPresence(row, column)};
-            double deltaHeading{
-                calculateCellDeltaTowardsECM(ecmHeading, polarityDirection)
-            };
-            sineMean += std::sin(deltaHeading) * ecmDensity;
-            cosineMean += std::cos(deltaHeading) * ecmDensity;
-        }
-    }
-
-    // Taking average:
-    sineMean /= 9;
-    cosineMean /= 9;
-
-    assert(std::abs(sineMean) <= 1);
-    assert(std::abs(cosineMean) <= 1);
-    // assert(sineMean != 0 & cosineMean != 0);
-    double angleAverage{std::atan2(sineMean, cosineMean)};
-    double angleIntensity{std::sqrt(std::pow(sineMean, 2) + std::pow(cosineMean, 2))};
-
-    return {angleAverage, angleIntensity};
-}
-
-
-double CellAgent::calculateCellDeltaTowardsECM(double ecmHeading, double cellHeading) {
-    // Ensuring input values are in the correct range:
-    assert((ecmHeading >= 0) & (ecmHeading < M_PI));
-    assert((cellHeading >= -M_PI) & (cellHeading < M_PI));
-
-    // Calculating change in theta (ECM is direction agnostic so we have to reverse it):
-    double deltaHeading{ecmHeading - cellHeading};
-    // while (deltaHeading <= -M_PI) {deltaHeading += M_PI;}
-    while (deltaHeading > M_PI) {deltaHeading -= M_PI;}
-
-    double flippedHeading;
-    if (deltaHeading < 0) {
-        flippedHeading = M_PI + deltaHeading;
-    } else {
-        flippedHeading = -(M_PI - deltaHeading);
-    };
-
-    // Selecting smallest change in theta and ensuring correct range:
-    if (std::abs(deltaHeading) < std::abs(flippedHeading)) {
-        assert((std::abs(deltaHeading) <= M_PI/2));
-        return deltaHeading;
-    } else {
-        assert((std::abs(flippedHeading) <= M_PI/2));
-        return flippedHeading;
-    };
-}
-
-
 double CellAgent::findPolarityDirection() {
     if ((polarityY == 0) & (polarityX == 0)) {
         double newAngle{angleUniformDistribution(generatorRandomRepolarisation)};
@@ -512,19 +456,19 @@ double CellAgent::findPolarityExtent() {
 };
 
 
-double CellAgent::getAverageAttachmentHeading() {
-    double sineMean{0};
-    double cosineMean{0};
-    for (auto & heading : attachmentHistory) {
-        sineMean += std::sin(heading);
-        cosineMean += std::cos(heading);
-    }
+// double CellAgent::getAverageAttachmentHeading() {
+//     double sineMean{0};
+//     double cosineMean{0};
+//     for (auto & heading : attachmentHistory) {
+//         sineMean += std::sin(heading);
+//         cosineMean += std::cos(heading);
+//     }
 
-    sineMean /= 5;
-    cosineMean /= 5;
+//     sineMean /= 5;
+//     cosineMean /= 5;
 
-    assert(std::abs(sineMean) <= 1);
-    assert(std::abs(cosineMean) <= 1);
-    double angleAverage{std::atan2(sineMean, cosineMean)};
-    return angleAverage;
-};
+//     assert(std::abs(sineMean) <= 1);
+//     assert(std::abs(cosineMean) <= 1);
+//     double angleAverage{std::atan2(sineMean, cosineMean)};
+//     return angleAverage;
+// };

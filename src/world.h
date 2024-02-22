@@ -5,7 +5,7 @@
 
 // Structure to store necessary parameters for the simulation:
 struct CellParameters {
-    double wbK, kappa, matrixKappa, homotypicInhibition, heterotypicInhibition,
+    double poissonLambda, kappa, matrixKappa, homotypicInhibition, heterotypicInhibition,
     polarityPersistence, polarityTurningCoupling, flowScaling, flowPolarityCoupling,
     collisionRepolarisation, repolarisationRate, polarityNoiseSigma;
 };
@@ -20,8 +20,10 @@ public:
         int setECMElementCount,
         int setNumberOfCells,
         double setCellTypeProportions,
-        double setMatrixPersistence,
+        double setMatrixTurnoverRate,
         double setMatrixAdditionRate,
+        double setCellDepositionSigma,
+        double setCellSensationSigma,
         CellParameters setCellParameters
     );
 
@@ -52,6 +54,8 @@ private:
     // Cell population characteristics:
     int numberOfCells;
     double cellTypeProportions;
+    double cellDepositionSigma;
+    double cellSensationSigma;
 
     // Variables for initialising generators:
     int worldSeed;
@@ -82,13 +86,19 @@ private:
     void setMovementOnMatrix(
         std::tuple<double, double> cellStart,
         std::tuple<double, double> cellFinish,
-        double cellHeading
+        double cellHeading, double cellPolarity
     );
 
+    // Calculating percepts for cells:
+    std::tuple<double, double> getAverageDeltaHeading(CellAgent queryCell);
+    double calculateCellDeltaTowardsECM(double ecmHeading, double cellHeading);
+
     // World utility functions:
-    std::array<int, 2> getIndexFromLocation(std::tuple<double, double> position);
+    std::array<int, 2> getECMIndexFromLocation(std::tuple<double, double> position);
+    boostMatrix::matrix<double> generateGaussianKernel(double sigma);
 
     // Basic utility functions:
     int sign(double value);
     std::tuple<double, double> rollPosition(std::tuple<double, double> position);
+    std::tuple<int, int> rollIndex(int i, int j);
 };

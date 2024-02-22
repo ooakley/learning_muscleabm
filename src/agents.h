@@ -11,7 +11,7 @@ public:
     CellAgent(
         double startX, double startY, double startHeading,
         unsigned int setCellSeed, int setCellID, int setCellType,
-        double setWbK, double setKappa, double setMatrixKappa,
+        double setPoissonLambda, double setKappa, double setMatrixKappa,
         double setHomotypicInhibition, double setHeterotypicInhibiton,
         double setPolarityPersistence, double setPolarityTurningCoupling,
         double setFlowScaling, double setFlowPolarityCoupling,
@@ -53,6 +53,9 @@ public:
     void setLocalMatrixHeading(boostMatrix::matrix<double> matrixToSet);
     void setLocalMatrixPresence(boostMatrix::matrix<double> matrixToSet);
     void setContactStatus(boostMatrix::matrix<bool> stateToSet, int cellType);
+
+    void setDirectionalInfluence(double setDirectionalInfluence);
+    void setDirectionalIntensity(double setDirectiontalIntensity);
 
     // Simulation code:
     void takeRandomStep();
@@ -110,7 +113,7 @@ private:
     // Levy sampling for step size:
     std::mt19937 generatorLevy;
     boost::math::normal_distribution<> normalDistribution;
-    double kWeibull;
+    double poissonLambda;
 
     std::tuple<double, double> getAverageDeltaHeading();
     double calculateCellDeltaTowardsECM(double ecmHeading, double cellHeading);

@@ -38,8 +38,10 @@ int main(int argc, char** argv) {
     int worldSize;
     int gridSize;
     double cellTypeProportions;
-    double matrixPersistence;
+    double matrixTurnoverRate;
     double matrixAdditionRate;
+    double cellDepositionSigma;
+    double cellSensationSigma;
 
     // Cell behaviour parameters:
     CellParameters cellParams;
@@ -68,14 +70,14 @@ int main(int argc, char** argv) {
         ("cellTypeProportions", po::value<double>(&cellTypeProportions)->required(),
             "Proportion of cells that take type 0."
         )
-        // ("matrixPersistence", po::value<double>(&matrixPersistence)->required(),
-        //     "Stability of the matrix under reorientation by cell movement."
-        // )
+        ("matrixTurnoverRate", po::value<double>(&matrixTurnoverRate)->required(),
+            "Stability of the matrix under reorientation by cell movement."
+        )
         ("matrixAdditionRate", po::value<double>(&matrixAdditionRate)->required(),
             "Stability of the matrix under reorientation by cell movement."
         )
-        ("wbK", po::value<double>(&cellParams.wbK)->required(),
-            "Weibull distribution k value."
+        ("poissonLambda", po::value<double>(&cellParams.poissonLambda)->required(),
+            "Maximum poission scale parameter"
         )
         ("kappa", po::value<double>(&cellParams.kappa)->required(),
             "Von Mises distribution kappa parameter for cell intrinsic change in polarity."
@@ -109,6 +111,12 @@ int main(int argc, char** argv) {
         )
         ("polarityNoiseSigma", po::value<double>(&cellParams.polarityNoiseSigma)->required(),
             "Size of additive Gaussian noise to add to polarity at every timestep."
+        )
+        ("cellDepositionSigma", po::value<double>(&cellDepositionSigma)->required(),
+            "Standard deviation of gaussian kernel defining spatial extent of matrix deposition."
+        )
+        ("cellSensationSigma", po::value<double>(&cellSensationSigma)->required(),
+            "Standard deviation of gaussian kernel defining spatial extent of matrix sensation."
         )
     ;
 
@@ -168,8 +176,10 @@ int main(int argc, char** argv) {
                 gridSize,
                 numberOfCells,
                 cellTypeProportions,
-                matrixPersistence,
+                matrixTurnoverRate,
                 matrixAdditionRate,
+                cellDepositionSigma,
+                cellSensationSigma,
                 cellParams
             )
         };

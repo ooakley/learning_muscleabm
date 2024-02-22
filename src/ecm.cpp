@@ -7,14 +7,21 @@ namespace boostMatrix = boost::numeric::ublas;
 using std::atan2;
 
 // Constructor:
-ECMField::ECMField(int setElements, double setMatrixPersistence, double setMatrixAdditionRate)
-    : elementCount{setElements}
-    , ecmHeadingMatrix{boostMatrix::zero_matrix<double>(elementCount, elementCount)}
-    , ecmPresentMatrix{boostMatrix::zero_matrix<double>(elementCount, elementCount)}
-    , cellType0CountMatrix{boostMatrix::zero_matrix<int>(elementCount, elementCount)}
-    , cellType1CountMatrix{boostMatrix::zero_matrix<int>(elementCount, elementCount)}
-    , cellHeadingMatrix{boostMatrix::zero_matrix<double>(elementCount, elementCount)}
-    , matrixPersistence{setMatrixPersistence}
+ECMField::ECMField(
+    int setMatrixElements, int setCollisionElements, double setFieldSize,
+    double setMatrixTurnoverRate, double setMatrixAdditionRate
+    )
+    : matrixElementCount{setMatrixElements}
+    , collisionElementCount{setCollisionElements}
+    , fieldSize{setFieldSize}
+    , ecmElementSize{setFieldSize / setMatrixElements}
+    , collisionElementSize{setFieldSize / setCollisionElements}
+    , ecmHeadingMatrix{boostMatrix::zero_matrix<double>(matrixElementCount, matrixElementCount)}
+    , ecmPresentMatrix{boostMatrix::zero_matrix<double>(matrixElementCount, matrixElementCount)}
+    , cellType0CountMatrix{boostMatrix::zero_matrix<int>(collisionElementCount, collisionElementCount)}
+    , cellType1CountMatrix{boostMatrix::zero_matrix<int>(collisionElementCount, collisionElementCount)}
+    , cellHeadingMatrix{boostMatrix::zero_matrix<double>(collisionElementCount, collisionElementCount)}
+    , matrixTurnoverRate{setMatrixTurnoverRate}
     , matrixAdditionRate{setMatrixAdditionRate}
 {
 }
@@ -24,18 +31,27 @@ boostMatrix::matrix<double> ECMField::getECMHeadingMatrix() {
     return ecmHeadingMatrix;
 }
 
+double ECMField::getHeading(std::tuple<double, double> position) {
+    auto [i, j] = getMatrixIndexFromLocation(position);
+    return ecmHeadingMatrix(i, j);
+}
 double ECMField::getHeading(int i, int j) {
     return ecmHeadingMatrix(i, j);
 }
 
+double ECMField::getMatrixPresent(std::tuple<double, double> position) {
+    auto [i, j] = getMatrixIndexFromLocation(position);
+    return ecmPresentMatrix(i, j);
+}
 double ECMField::getMatrixPresent(int i, int j) {
     return ecmPresentMatrix(i, j);
 }
 
-std::tuple<double, double> ECMField::getAverageDeltaHeadingAroundIndex(
-    int i, int j, double cellHeading
+std::tuple<double, double> ECMField::getAverageDeltaHeadingAroundPosition(
+    std::tuple<double, double> position, double cellHeading
 )
 {
+    auto [i, j] = getMatrixIndexFromLocation(position);
     std::array<int, 3> rowScan = {i-1, i, i+1};
     std::array<int, 3> columnScan = {j-1, j, j+1};
 
@@ -43,14 +59,12 @@ std::tuple<double, double> ECMField::getAverageDeltaHeadingAroundIndex(
     std::vector<double> deltaHeadingVector;
     for (auto & row : rowScan)
     {
-        int safeRow{rollOverIndex(row)};
+        int safeRow{rollOverMatrixIndex(row)};
         for (auto & column : columnScan)
         {
-            int safeColumn{rollOverIndex(column)};
-            if (getMatrixPresent(safeRow, safeColumn)) {
-                double ecmHeading{getHeading(safeRow, safeColumn)};
-                deltaHeadingVector.push_back(calculateCellDeltaTowardsECM(ecmHeading, cellHeading));
-            }
+            int safeColumn{rollOverMatrixIndex(column)};
+            double ecmHeading{getHeading(safeRow, safeColumn)};
+            deltaHeadingVector.push_back(calculateCellDeltaTowardsECM(ecmHeading, cellHeading));
         }
     }
 
@@ -77,7 +91,10 @@ std::tuple<double, double> ECMField::getAverageDeltaHeadingAroundIndex(
     return {angleAverage, angleIntensity};
 }
 
-boostMatrix::matrix<bool> ECMField::getCellTypeContactState(int i, int j, int cellType) {
+boostMatrix::matrix<bool> ECMField::getCellTypeContactState(
+    std::tuple<double, double> position, int cellType
+) {
+    auto [i, j] = getCollisionIndexFromLocation(position);
     // Asserting counting is working as expected:
     assert((cellType0CountMatrix(i, j) >= 1 ) || (cellType1CountMatrix(i, j) >= 1));
 
@@ -90,11 +107,11 @@ boostMatrix::matrix<bool> ECMField::getCellTypeContactState(int i, int j, int ce
     int k{0}; 
     for (auto & row : rowScan)
     {
-        int safeRow{rollOverIndex(row)};
+        int safeRow{rollOverCollisionIndex(row)};
         int l{0};
         for (auto & column : columnScan)
         {
-            int safeColumn{rollOverIndex(column)};
+            int safeColumn{rollOverCollisionIndex(column)};
             if (cellType == 0) {
                 cellTypeContactState(k, l) = bool(cellType0CountMatrix(safeRow, safeColumn) > 0);
             } else {
@@ -111,12 +128,16 @@ boostMatrix::matrix<bool> ECMField::getCellTypeContactState(int i, int j, int ce
     return cellTypeContactState;
 }
 
-boostMatrix::matrix<double> ECMField::getLocalCellHeadingState(int i, int j) {
+boostMatrix::matrix<double> ECMField::getLocalCellHeadingState(std::tuple<double, double> position) {
+    auto [i, j] = getCollisionIndexFromLocation(position);
+
     // Asserting counting is working as expected:
     assert((cellType0CountMatrix(i, j) >= 1 ) || (cellType1CountMatrix(i, j) >= 1));
 
     // Instantiating heading matrix:
-    boostMatrix::matrix<double> localCellHeadingState{boostMatrix::zero_matrix<double>(3, 3)};
+    boostMatrix::matrix<double> localCellHeadingState{
+        boostMatrix::zero_matrix<double>(3, 3)
+    };
 
     // Looping through local indices:
     std::array<int, 3> rowScan = {i-1, i, i+1};
@@ -124,11 +145,11 @@ boostMatrix::matrix<double> ECMField::getLocalCellHeadingState(int i, int j) {
     int k{0};
     for (auto & row : rowScan)
     {
-        int safeRow{rollOverIndex(row)};
+        int safeRow{rollOverCollisionIndex(row)};
         int l{0};
         for (auto & column : columnScan)
         {
-            int safeColumn{rollOverIndex(column)};
+            int safeColumn{rollOverCollisionIndex(column)};
             localCellHeadingState(k, l) = cellHeadingMatrix(safeRow, safeColumn);
 
             // Incrementing column index for contact matrix:
@@ -141,7 +162,8 @@ boostMatrix::matrix<double> ECMField::getLocalCellHeadingState(int i, int j) {
     return localCellHeadingState;
 }
 
-boostMatrix::matrix<double> ECMField::getLocalMatrixHeading(int i, int j) {
+boostMatrix::matrix<double> ECMField::getLocalMatrixHeading(std::tuple<double, double> position) {
+    auto [i, j] = getMatrixIndexFromLocation(position);
     // Instantiating heading matrix:
     boostMatrix::matrix<double> localMatrix{boostMatrix::zero_matrix<double>(3, 3)};
 
@@ -151,11 +173,11 @@ boostMatrix::matrix<double> ECMField::getLocalMatrixHeading(int i, int j) {
     int k{0}; 
     for (auto & row : rowScan)
     {
-        int safeRow{rollOverIndex(row)};
+        int safeRow{rollOverMatrixIndex(row)};
         int l{0};
         for (auto & column : columnScan)
         {
-            int safeColumn{rollOverIndex(column)};
+            int safeColumn{rollOverMatrixIndex(column)};
             localMatrix(k, l) = ecmHeadingMatrix(safeRow, safeColumn);
 
             // Incrementing column index for local matrix:
@@ -168,7 +190,9 @@ boostMatrix::matrix<double> ECMField::getLocalMatrixHeading(int i, int j) {
     return localMatrix;
 };
 
-boostMatrix::matrix<double> ECMField::getLocalMatrixPresence(int i, int j) {
+boostMatrix::matrix<double> ECMField::getLocalMatrixPresence(std::tuple<double, double> position) {
+    auto [i, j] = getMatrixIndexFromLocation(position);
+
     // Instantiating heading matrix:
     boostMatrix::matrix<double> localMatrix{boostMatrix::zero_matrix<double>(3, 3)};
 
@@ -178,11 +202,11 @@ boostMatrix::matrix<double> ECMField::getLocalMatrixPresence(int i, int j) {
     int k{0}; 
     for (auto & row : rowScan)
     {
-        int safeRow{rollOverIndex(row)};
+        int safeRow{rollOverMatrixIndex(row)};
         int l{0};
         for (auto & column : columnScan)
         {
-            int safeColumn{rollOverIndex(column)};
+            int safeColumn{rollOverMatrixIndex(column)};
             localMatrix(k, l) = ecmPresentMatrix(safeRow, safeColumn);
 
             // Incrementing column index for local matrix:
@@ -197,23 +221,34 @@ boostMatrix::matrix<double> ECMField::getLocalMatrixPresence(int i, int j) {
 
 
 // Setters:
-void ECMField::setSubMatrix(int i, int j, double heading) {
-    std::array<int, 3> rowScan = {i-1, i, i+1};
-    std::array<int, 3> columnScan = {j-1, j, j+1};
+void ECMField::setSubMatrix(
+    int iECM, int jECM, double heading, double polarity,
+    boostMatrix::matrix<double> kernel
+) {
+    // auto [i, j] = getMatrixIndexFromLocation(position);
+    // Getting kernel dimensions:
+    int numRows = kernel.size1();
+    int numCols = kernel.size2();
+    int center{(numRows - 1) / 2};
+    assert(numRows == numCols);
 
     // Applying heading to matrix in neighbourhood:
-    for (auto & row : rowScan)
+    for (int i = 0; i < numRows; ++i)
     {
-        int safeRow{rollOverIndex(row)};
-        for (auto & column : columnScan)
+        for (int j = 0; j < numCols; ++j)
         {
-            int safeColumn{rollOverIndex(column)};
-            addToMatrix(safeRow, safeColumn, heading);
+            int rowOffset{i - center};
+            int columnOffset{j - center};
+            int iSafe{rollOverMatrixIndex(iECM + rowOffset)};
+            int jSafe{rollOverMatrixIndex(jECM + columnOffset)};
+            double kernelWeighting{kernel(i, j)};
+            addToMatrix(iSafe, jSafe, heading, polarity, kernelWeighting);
         }
     }
 }
 
-void ECMField::setCellPresence(int i, int j, int cellType, double cellHeading) {
+void ECMField::setCellPresence(std::tuple<double, double> position, int cellType, double cellHeading) {
+    auto [i, j] = getCollisionIndexFromLocation(position);
     // Adding to cell count matrices:
     if (cellType == 0) {
         cellType0CountMatrix(i, j) = cellType0CountMatrix(i, j) + 1;
@@ -225,7 +260,8 @@ void ECMField::setCellPresence(int i, int j, int cellType, double cellHeading) {
     cellHeadingMatrix(i, j) = cellHeading;
 }
 
-void ECMField::removeCellPresence(int i, int j, int cellType) {
+void ECMField::removeCellPresence(std::tuple<double, double> position, int cellType) {
+    auto [i, j] = getCollisionIndexFromLocation(position);
     // Removing from cell count matrices:
     if (cellType == 0) {
         cellType0CountMatrix(i, j) = cellType0CountMatrix(i, j) - 1;
@@ -240,7 +276,7 @@ void ECMField::removeCellPresence(int i, int j, int cellType) {
 // Private member functions:
 
 // Simulation functions:
-void ECMField::addToMatrix(int i, int j, double cellHeading) {
+void ECMField::addToMatrix(int i, int j, double cellHeading, double polarity, double kernelWeighting) {
     // If no matrix present, set to cellHeading:
     if (ecmPresentMatrix(i, j) == 0) {
         double newECMHeading{cellHeading};
@@ -263,16 +299,19 @@ void ECMField::addToMatrix(int i, int j, double cellHeading) {
     // double currentPersistence{currentECMDensity*matrixPersistence};
 
     // Calculaing weighted average of current and proposed ECM:
+    double combinedWeighting{polarity * kernelWeighting * matrixAdditionRate};
     double sineMean{0};
     sineMean += currentECMDensity * std::sin(currentECMHeading);
-    sineMean += matrixAdditionRate * std::sin(propsedECMHeading);
+    sineMean += combinedWeighting * std::sin(propsedECMHeading);
 
     double cosineMean{0};
     cosineMean += currentECMDensity * std::cos(currentECMHeading);
-    cosineMean += matrixAdditionRate * std::cos(propsedECMHeading);
+    cosineMean += combinedWeighting * std::cos(propsedECMHeading);
 
     double newECMHeading{std::atan2(sineMean, cosineMean)};
-    double newECMDensity{std::sqrt(std::pow(sineMean, 2) + std::pow(cosineMean, 2))};
+    double newECMDensity{
+        std::sqrt(std::pow(sineMean, 2) + std::pow(cosineMean, 2))
+    };
 
     // Ensuring ECM angles are not vectors:
     if (newECMHeading < 0) {newECMHeading += M_PI;};
@@ -289,15 +328,22 @@ void ECMField::addToMatrix(int i, int j, double cellHeading) {
 }
 
 void ECMField::ageMatrix() {
-    ecmPresentMatrix = ecmPresentMatrix - 0.01*(ecmPresentMatrix);
+    ecmPresentMatrix = ecmPresentMatrix - matrixTurnoverRate*(ecmPresentMatrix);
 }
 
 // Utility functions:
-int ECMField::rollOverIndex(int index) {
+int ECMField::rollOverMatrixIndex(int index) {
     while (index < 0) {
-        index = index + elementCount;
+        index = index + matrixElementCount;
     }
-    return index % elementCount;
+    return index % matrixElementCount;
+}
+
+int ECMField::rollOverCollisionIndex(int index) {
+    while (index < 0) {
+        index = index + collisionElementCount;
+    }
+    return index % collisionElementCount;
 }
 
 double ECMField::calculateCellDeltaTowardsECM(double ecmHeading, double cellHeading) {
@@ -351,4 +397,22 @@ double ECMField::calculateECMDeltaTowardsCell(double ecmHeading, double cellHead
         assert((std::abs(flippedHeading) <= M_PI/2));
         return flippedHeading;
     }; 
+}
+
+std::array<int, 2> ECMField::getMatrixIndexFromLocation(std::tuple<double, double> position) {
+    auto [xPosition, yPosition] = position;
+
+    int xIndex{int(std::floor(xPosition / ecmElementSize))};
+    int yIndex{int(std::floor(yPosition / ecmElementSize))};
+
+    return std::array<int, 2>{{yIndex, xIndex}};
+}
+
+std::array<int, 2> ECMField::getCollisionIndexFromLocation(std::tuple<double, double> position) {
+    auto [xPosition, yPosition] = position;
+
+    int xIndex{int(std::floor(xPosition / collisionElementSize))};
+    int yIndex{int(std::floor(yPosition / collisionElementSize))};
+
+    return std::array<int, 2>{{yIndex, xIndex}};
 }
