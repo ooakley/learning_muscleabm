@@ -379,7 +379,10 @@ boostMatrix::matrix<double> World::generateGaussianKernel(double sigma) {
     // -- Getting size of sigma in matrix units:
     double sigmaMatrix{sigma / lengthECMElement};
     int kernelSize{(int(3 * sigmaMatrix)*2) + 1}; // Capturing variance up to 3 sigma.
-    if (kernelSize < 3) {kernelSize = 3;}
+    if (kernelSize < 3) {
+        std::cout << "Warning - Deposition or sensation kernel radius too small for current matrix mesh size." << std::endl;
+        kernelSize = 3;
+    }
 
     // Creating matrix:
     boostMatrix::matrix<double> kernel(kernelSize, kernelSize, 0);
