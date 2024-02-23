@@ -8,8 +8,12 @@ add_definitions("-DBOOST_ALLOW_DEPRECATED_HEADERS")
 add_definitions("-DBOOST_BIND_GLOBAL_PLACEHOLDERS")
 enable_testing()
 
-# Enable Clang Tidy only if using Clang
+# Command line flags to force use of non-apple clang:
+# cmake -B . -S .. -DCMAKE_C_COMPILER=/usr/local/bin/gcc-13 -DCMAKE_CXX_COMPILER=/usr/local/bin/g++-13
+
 message(STATUS "${CMAKE_CXX_COMPILER_ID}")
+
+# Enable Clang Tidy only if using Clang
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
   message(STATUS "Using Clang compiler, so we enable clang-tidy...")
   set(CMAKE_CXX_CLANG_TIDY
@@ -25,7 +29,10 @@ add_compile_options(
   -Wno-deprecated-declarations
 )
 
-# Ensuring GoogleTest is Present
+# Linking against OpenMP if present:
+find_package(OpenMP)
+
+# Ensuring GoogleTest is present:
 include(FetchContent)
 FetchContent_Declare(
   googletest
