@@ -30,7 +30,7 @@ World::World
     , worldSideLength{setWorldSideLength}
     , countECMElement{setECMElementCount}
     , lengthECMElement{worldSideLength/countECMElement}
-    , ecmField{ECMField(countECMElement, 32, setWorldSideLength, setMatrixTurnoverRate, setMatrixAdditionRate)}
+    , ecmField{ECMField(countECMElement, 16, setWorldSideLength, setMatrixTurnoverRate, setMatrixAdditionRate)}
     , numberOfCells{setNumberOfCells}
     , cellTypeProportions{setCellTypeProportions}
     , cellDepositionSigma{setCellDepositionSigma}
@@ -57,6 +57,10 @@ World::World
     positionDistribution = std::uniform_real_distribution<double>(0, worldSideLength);
     headingDistribution = std::uniform_real_distribution<double>(-M_PI, M_PI);
     contactInhibitionDistribution  = std::uniform_real_distribution<double>(0, 1);
+
+    // Kernels:
+    cellSensationKernel = generateGaussianKernel(cellSensationSigma);
+    cellDepositionKernel = generateGaussianKernel(cellDepositionSigma);
 
     // Initialising cells:
     initialiseCellVector();
@@ -247,9 +251,10 @@ void World::setMovementOnMatrix(
     }
 
     // Setting blocks to heading:
-    boostMatrix::matrix<double> kernel(generateGaussianKernel(cellDepositionSigma));
     for (auto& block : blocksToSet) {
-        ecmField.setSubMatrix(block[0], block[1], cellHeading, cellPolarity, kernel);
+        ecmField.setSubMatrix(block[0], block[1],
+        cellHeading, cellPolarity,
+        cellDepositionKernel);
     }
 
 }
@@ -303,9 +308,8 @@ std::tuple<int, int> World::rollIndex(int i, int j) {
 
 std::tuple<double, double> World::getAverageDeltaHeading(CellAgent queryCell) {
     // Generate kernel:
-    boostMatrix::matrix<double> kernel{generateGaussianKernel(cellSensationSigma)};
-    int numRows = kernel.size1();
-    int numCols = kernel.size2();
+    int numRows = cellSensationKernel.size1();
+    int numCols = cellSensationKernel.size2();
     int center{(numRows - 1) / 2};
     assert(numRows == numCols);
 
@@ -316,6 +320,8 @@ std::tuple<double, double> World::getAverageDeltaHeading(CellAgent queryCell) {
     // Getting all headings:
     double sineMean{0};
     double cosineMean{0};
+
+    #pragma omp parallel for reduction(+:sineMean,cosineMean)
     for (int i = 0; i < numRows; ++i)
     {
         for (int j = 0; j < numCols; ++j)
@@ -328,7 +334,7 @@ std::tuple<double, double> World::getAverageDeltaHeading(CellAgent queryCell) {
             // Getting all weightings from kernel & matrix density:
             double ecmHeading{ecmField.getHeading(iSafe, jSafe)};
             double ecmDensity{ecmField.getMatrixPresent(iSafe, jSafe)};
-            double kernelWeighting{kernel(i, j)};
+            double kernelWeighting{cellSensationKernel(i, j)};
             double deltaHeading{
                 calculateCellDeltaTowardsECM(ecmHeading, polarityDirection)
             };
@@ -341,7 +347,9 @@ std::tuple<double, double> World::getAverageDeltaHeading(CellAgent queryCell) {
     assert(std::abs(cosineMean) <= 1);
     // assert(sineMean != 0 & cosineMean != 0);
     double angleAverage{std::atan2(sineMean, cosineMean)};
-    double angleIntensity{std::sqrt(std::pow(sineMean, 2) + std::pow(cosineMean, 2))};
+    double angleIntensity{
+        std::sqrt(std::pow(sineMean, 2) + std::pow(cosineMean, 2))
+    };
 
     return {angleAverage, angleIntensity};
 }

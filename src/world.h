@@ -45,6 +45,8 @@ private:
     // ECM Information:
     int countECMElement;
     double lengthECMElement;
+    boostMatrix::matrix<double> cellSensationKernel;
+    boostMatrix::matrix<double> cellDepositionKernel;
 
     // Complex objects from our libraries:
     std::vector<CellAgent> cellAgentVector;
