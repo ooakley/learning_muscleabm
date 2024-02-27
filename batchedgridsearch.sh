@@ -2,13 +2,12 @@
 #SBATCH --job-name=simulation
 #SBATCH --ntasks=1
 #SBATCH --partition=cpu
-#SBATCH --time=15:00
+#SBATCH --time=20:00
 #SBATCH --cpus-per-task=1
-#SBATCH --array=1-125
+#SBATCH --array=1-282
 
 # Required lmod modules:
-# Boost/1.81.0-GCC-12.2.0
-# CMake/3.24.3-GCCcore-12.2.0
+# Boost/1.81.0-GCC-12.2.0 CMake/3.24.3-GCCcore-12.2.0 OpenMPI/4.1.4-GCC-12.2.0
 
 # Specify the path to the config file
 config=./fileOutputs/gridsearch.txt
@@ -25,28 +24,35 @@ simulate () {
 
     cellTypeProportions=$(awk -v array_id=$arrayid '$1==array_id {print $6}' $config)
     matrixAdditionRate=$(awk -v array_id=$arrayid '$1==array_id {print $7}' $config)
+    matrixTurnoverRate=$(awk -v array_id=$arrayid '$1==array_id {print $8}' $config)
 
-    wbK=$(awk -v array_id=$arrayid '$1==array_id {print $8}' $config)
-    kappa=$(awk -v array_id=$arrayid '$1==array_id {print $9}' $config)
-    matrixKappa=$(awk -v array_id=$arrayid '$1==array_id {print $10}' $config)
+    cellDepositionSigma=$(awk -v array_id=$arrayid '$1==array_id {print $9}' $config)
+    cellSensationSigma=$(awk -v array_id=$arrayid '$1==array_id {print $10}' $config)
 
-    homotypicInhibition=$(awk -v array_id=$arrayid '$1==array_id {print $11}' $config)
-    heterotypicInhibition=$(awk -v array_id=$arrayid '$1==array_id {print $12}' $config)
-    polarityPersistence=$(awk -v array_id=$arrayid '$1==array_id {print $13}' $config)
-    polarityTurningCoupling=$(awk -v array_id=$arrayid '$1==array_id {print $14}' $config)
-    flowScaling=$(awk -v array_id=$arrayid '$1==array_id {print $15}' $config)
-    flowPolarityCoupling=$(awk -v array_id=$arrayid '$1==array_id {print $16}' $config)
-    polarityNoiseSigma=$(awk -v array_id=$arrayid '$1==array_id {print $17}' $config)
+    poissonLambda=$(awk -v array_id=$arrayid '$1==array_id {print $11}' $config)
+    kappa=$(awk -v array_id=$arrayid '$1==array_id {print $12}' $config)
+    matrixKappa=$(awk -v array_id=$arrayid '$1==array_id {print $13}' $config)
 
-    collisionRepolarisation=$(awk -v array_id=$arrayid '$1==array_id {print $18}' $config)
-    repolarisationRate=$(awk -v array_id=$arrayid '$1==array_id {print $19}' $config)
+    homotypicInhibition=$(awk -v array_id=$arrayid '$1==array_id {print $14}' $config)
+    heterotypicInhibition=$(awk -v array_id=$arrayid '$1==array_id {print $15}' $config)
+    polarityPersistence=$(awk -v array_id=$arrayid '$1==array_id {print $16}' $config)
+    polarityTurningCoupling=$(awk -v array_id=$arrayid '$1==array_id {print $17}' $config)
+
+    flowScaling=$(awk -v array_id=$arrayid '$1==array_id {print $18}' $config)
+    flowPolarityCoupling=$(awk -v array_id=$arrayid '$1==array_id {print $19}' $config)
+    polarityNoiseSigma=$(awk -v array_id=$arrayid '$1==array_id {print $20}' $config)
+
+    collisionRepolarisation=$(awk -v array_id=$arrayid '$1==array_id {print $21}' $config)
+    repolarisationRate=$(awk -v array_id=$arrayid '$1==array_id {print $22}' $config)
 
     # Running simulation with specified parameters:
     ./build/src/main --jobArrayID $arrayid --superIterationCount $superIterationCount \
         --numberOfCells $numberOfCells --timestepsToRun 576 \
         --worldSize $worldSize --gridSize $gridSize \
-        --cellTypeProportions $cellTypeProportions --matrixAdditionRate $matrixAdditionRate \
-        --wbK $wbK --kappa $kappa --matrixKappa $matrixKappa \
+        --cellTypeProportions $cellTypeProportions \
+        --matrixAdditionRate $matrixAdditionRate --matrixTurnoverRate $matrixTurnoverRate \
+        --cellDepositionSigma $cellDepositionSigma --cellSensationSigma $cellSensationSigma \
+        --poissonLambda $poissonLambda --kappa $kappa --matrixKappa $matrixKappa \
         --homotypicInhibition $homotypicInhibition --heterotypicInhibition $heterotypicInhibition \
         --polarityPersistence $polarityPersistence --polarityTurningCoupling $polarityTurningCoupling \
         --flowScaling $flowScaling --flowPolarityCoupling $flowPolarityCoupling \

@@ -4,6 +4,16 @@ project(cell_abm)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_WARN_DEPRECATED FALSE)
 
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+
+set(CMAKE_CXX_FLAGS "-Wall -Wextra")
+set(CMAKE_CXX_FLAGS_DEBUG "-g")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+
+message(STATUS ${CMAKE_BUILD_TYPE})
+
 add_definitions("-DBOOST_ALLOW_DEPRECATED_HEADERS")
 add_definitions("-DBOOST_BIND_GLOBAL_PLACEHOLDERS")
 enable_testing()
@@ -44,7 +54,7 @@ FetchContent_MakeAvailable(googletest)
 set(CMAKE_LIBRARY_PATH ${CMAKE_LIBRARY_PATH} /usr/local/boost_1_84_0/stage/lib)
 # ^ location of GCC compiled libraries on my local machine (for OpenMP access on Mac)
 
-find_package(Boost 1.84.0 REQUIRED COMPONENTS program_options filesystem)
+find_package(Boost 1.81.0 REQUIRED COMPONENTS program_options filesystem)
 include_directories(${Boost_INCLUDE_DIR})
 message(STATUS ${Boost_INCLUDE_DIR})
 message(STATUS ${Boost_LIBRARY_DIRS})

@@ -10,7 +10,10 @@ GRIDSEARCH = {
     "gridSize": [32, 32, 1],
     "cellTypeProportions": [0, 0, 1],
     "matrixAdditionRate": [0.002, 0.002, 1],
-    "wbK": [1, 8, 50],
+    "matrixTurnoverRate": [0.001, 0.001, 1],
+    "cellDepositionSigma": [80, 80, 1],
+    "cellSensationSigma": [120, 120, 1],
+    "poissonLambda": [1, 8, 75],
     "kappa": [0, 0, 1],
     "matrixKappa": [4, 4, 1],
     "homotypicInhibition": [0.9, 0.9, 1],
@@ -18,7 +21,7 @@ GRIDSEARCH = {
     "polarityPersistence": [1.25, 1.25, 1],
     "polarityTurningCoupling": [5, 5, 1],
     "flowScaling": [3, 3, 1],
-    "flowPolarityCoupling": [0.1, 5, 50],
+    "flowPolarityCoupling": [0.1, 5, 75],
     "polarityNoiseSigma": [0.01, 0.01, 1],
     "collisionRepolarisation": [0, 0, 1],
     "repolarisationRate": [0.8, 0.8, 1],
@@ -30,8 +33,9 @@ def main():
     argument_grid = [
         (
             int(superIterationCount), int(numberOfCells), int(worldSize), int(gridSize),
-            cellTypeProportions, matrixAdditionRate,
-            wbK, kappa, matrixKappa,
+            cellTypeProportions, matrixAdditionRate, matrixTurnoverRate,
+            cellDepositionSigma, cellSensationSigma,
+            poissonLambda, kappa, matrixKappa,
             homotypicInhibition, heterotypicInhibition,
             1 - (1/polarityPersistence), polarityTurningCoupling,
             flowScaling, flowPolarityCoupling, polarityNoiseSigma,
@@ -43,7 +47,10 @@ def main():
         for gridSize in np.linspace(*GRIDSEARCH["gridSize"])
         for cellTypeProportions in np.linspace(*GRIDSEARCH["cellTypeProportions"])
         for matrixAdditionRate in np.linspace(*GRIDSEARCH["matrixAdditionRate"])
-        for wbK in np.linspace(*GRIDSEARCH["wbK"])
+        for matrixTurnoverRate in np.linspace(*GRIDSEARCH["matrixTurnoverRate"])
+        for cellDepositionSigma in np.linspace(*GRIDSEARCH["cellDepositionSigma"])
+        for cellSensationSigma in np.linspace(*GRIDSEARCH["cellSensationSigma"])
+        for poissonLambda in np.linspace(*GRIDSEARCH["poissonLambda"])
         for kappa in np.linspace(*GRIDSEARCH["kappa"])
         for matrixKappa in np.linspace(*GRIDSEARCH["matrixKappa"])
         for homotypicInhibition in np.linspace(*GRIDSEARCH["homotypicInhibition"])

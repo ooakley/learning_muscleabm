@@ -321,6 +321,7 @@ std::tuple<double, double> World::getAverageDeltaHeading(CellAgent queryCell) {
     double sineMean{0};
     double cosineMean{0};
 
+    
     #pragma omp parallel for reduction(+:sineMean,cosineMean)
     for (int i = 0; i < numRows; ++i)
     {
@@ -338,6 +339,8 @@ std::tuple<double, double> World::getAverageDeltaHeading(CellAgent queryCell) {
             double deltaHeading{
                 calculateCellDeltaTowardsECM(ecmHeading, polarityDirection)
             };
+
+            // Taking reduction:
             sineMean += std::sin(deltaHeading) * ecmDensity * kernelWeighting;
             cosineMean += std::cos(deltaHeading) * ecmDensity * kernelWeighting;
         }
