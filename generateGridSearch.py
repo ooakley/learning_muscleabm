@@ -9,19 +9,19 @@ GRIDSEARCH = {
     "worldSize": [2048, 2048, 1],
     "gridSize": [32, 32, 1],
     "cellTypeProportions": [0, 0, 1],
-    "matrixAdditionRate": [0.001, 0.001, 1],
-    "wbK": [1, 10, 15],
+    "matrixAdditionRate": [0.002, 0.002, 1],
+    "wbK": [1, 8, 50],
     "kappa": [0, 0, 1],
     "matrixKappa": [4, 4, 1],
     "homotypicInhibition": [0.9, 0.9, 1],
     "heterotypicInhibition": [0, 0, 1],
-    "polarityPersistence": [0.8, 0.8, 1],
+    "polarityPersistence": [1.25, 1.25, 1],
     "polarityTurningCoupling": [5, 5, 1],
-    "flowScaling": [2, 4, 10],
-    "flowPolarityCoupling": [0.01, 4, 15],
+    "flowScaling": [3, 3, 1],
+    "flowPolarityCoupling": [0.1, 5, 50],
     "polarityNoiseSigma": [0.01, 0.01, 1],
     "collisionRepolarisation": [0, 0, 1],
-    "repolarisationRate": [0.9, 0.9, 1],
+    "repolarisationRate": [0.8, 0.8, 1],
 }
 
 
@@ -33,7 +33,7 @@ def main():
             cellTypeProportions, matrixAdditionRate,
             wbK, kappa, matrixKappa,
             homotypicInhibition, heterotypicInhibition,
-            polarityPersistence, polarityTurningCoupling,
+            1 - (1/polarityPersistence), polarityTurningCoupling,
             flowScaling, flowPolarityCoupling, polarityNoiseSigma,
             collisionRepolarisation, repolarisationRate
         )
@@ -48,7 +48,7 @@ def main():
         for matrixKappa in np.linspace(*GRIDSEARCH["matrixKappa"])
         for homotypicInhibition in np.linspace(*GRIDSEARCH["homotypicInhibition"])
         for heterotypicInhibition in np.linspace(*GRIDSEARCH["heterotypicInhibition"])
-        for polarityPersistence in np.linspace(*GRIDSEARCH["polarityPersistence"])
+        for polarityPersistence in np.logspace(*GRIDSEARCH["polarityPersistence"], base=10)
         for polarityTurningCoupling in np.linspace(*GRIDSEARCH["polarityTurningCoupling"])
         for flowScaling in np.linspace(*GRIDSEARCH["flowScaling"])
         for flowPolarityCoupling in np.linspace(*GRIDSEARCH["flowPolarityCoupling"])
