@@ -41,10 +41,13 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(googletest)
 
 # Ensuring Boost is present:
-set(Boost_INCLUDE_DIR /usr/local/Cellar/boost/1.83.0/include)
-find_package(Boost COMPONENTS regex system filesystem program_options REQUIRED)
-message(STATUS ${Boost_INCLUDE_DIR})
+set(CMAKE_LIBRARY_PATH ${CMAKE_LIBRARY_PATH} /usr/local/boost_1_84_0/stage/lib)
+# ^ location of GCC compiled libraries on my local machine (for OpenMP access on Mac)
+
+find_package(Boost 1.84.0 REQUIRED COMPONENTS program_options filesystem)
 include_directories(${Boost_INCLUDE_DIR})
+message(STATUS ${Boost_INCLUDE_DIR})
+message(STATUS ${Boost_LIBRARY_DIRS})
 
 # Putting together the main executable & building relevant libraries:
 add_subdirectory(src)

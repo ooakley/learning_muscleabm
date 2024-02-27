@@ -23,6 +23,8 @@ target_link_libraries(main
     ${Boost_SYSTEM_LIBRARY}
     Boost::program_options
 )
+
+# Linking to OpenMP (for multiprocessing) if available:
 if(OpenMP_CXX_FOUND)
     target_link_libraries(main PUBLIC OpenMP::OpenMP_CXX)
 endif()

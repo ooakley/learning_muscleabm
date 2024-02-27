@@ -11,6 +11,7 @@
 
 #include <boost/numeric/ublas/matrix.hpp>
 #include <boost/math/distributions/normal.hpp>
+
 namespace boostMatrix = boost::numeric::ublas;
 
 typedef std::vector<std::tuple<int, int>> vectorOfTuples;

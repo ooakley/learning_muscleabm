@@ -282,7 +282,7 @@ void ECMField::addToMatrix(int i, int j, double cellHeading, double polarity, do
         double newECMHeading{cellHeading};
         if (newECMHeading < 0) {newECMHeading += M_PI;};
         ecmHeadingMatrix(i, j) = newECMHeading;
-        ecmPresentMatrix(i, j) = matrixAdditionRate;
+        ecmPresentMatrix(i, j) = polarity*kernelWeighting*matrixAdditionRate;
         return;
     };
 

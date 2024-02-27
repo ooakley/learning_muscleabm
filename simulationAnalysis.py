@@ -8,6 +8,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from scipy.spatial import KDTree
+import skimage.morphology as skmorph
+import skimage.measure as skmeasure
 
 SIMULATION_OUTPUTS_FOLDER = "./fileOutputs/"
 CSV_COLUMN_NAMES = [
@@ -130,6 +132,86 @@ def get_summary_order_parameter(matrix):
     order_parameters = np.array(order_parameters)
     order_parameters = order_parameters[~np.isnan(order_parameters)]
     return order_parameters
+
+
+def return_periodic_labels(binary_matrix):
+    # Creating tiles
+    side_length = binary_matrix.shape[0]  # Assuming square matrix.
+    tiled_matrix = np.tile(binary_matrix, (3, 3))
+
+    # Processing threshold map:
+    tiled_matrix = skmorph.binary_closing(tiled_matrix)
+    tiled_matrix = skmorph.remove_small_objects(tiled_matrix, min_size=8)
+
+    # Labelling regions:
+    labelled_tiles = skmorph.label(tiled_matrix)
+
+    # Getting region properties:
+    properties = skmeasure.regionprops(labelled_tiles)
+    infinity_flag = False
+    valid_gaps = []
+    for area_property in properties:
+        min_row, min_col, max_row, max_col = area_property.bbox
+        box_length = max_row - min_row
+        box_width = max_col - min_col
+
+        # Filtering out maximum measurable size:
+        if box_length >= side_length or box_width >= side_length:
+            # Gap too large for measurement.
+            infinity_flag = True
+            continue
+
+        # Bounding box conditions:
+        upper_boundary_criterion = min_row >= side_length
+        lower_boundary_criterion = max_row < side_length*2
+        left_boundary_criterion = min_col >= side_length
+        right_boundary_criterion = max_col < side_length*2
+
+        boundary_criterion = [
+            upper_boundary_criterion,
+            lower_boundary_criterion,
+            left_boundary_criterion,
+            right_boundary_criterion
+        ]
+
+        # Check if no part of the object is within simulation frame:
+        if np.all(~np.array(boundary_criterion)):
+            continue
+
+        # Checking if entirely within simulation frame:
+        if np.all(np.array(boundary_criterion)):
+            valid_gaps.append(area_property)
+            continue
+
+        # Checking for edge cases, crossing upper or left boundary:
+        lower_in_frame = max_row > side_length and max_row < side_length*2
+        upper_out_frame = min_row < side_length
+        right_in_frame = max_col > side_length and max_col < side_length*2
+        left_out_frame = min_col < side_length
+
+        # Intersecting upper edge only:
+        if right_in_frame and not left_out_frame:
+            if lower_in_frame and upper_out_frame:
+                valid_gaps.append(area_property)
+                continue
+
+        # Intersecting left edge only:
+        if lower_in_frame and not upper_out_frame:
+            if right_in_frame and left_out_frame:
+                valid_gaps.append(area_property)
+                continue
+
+        # Intersecting corner:
+        if right_in_frame and left_out_frame:
+            if lower_in_frame and upper_out_frame:
+                valid_gaps.append(area_property)
+                continue
+
+    # Returning centre tile:
+    labelled_matrix = labelled_tiles[side_length:side_length*2, side_length:side_length*2]
+    assert (labelled_matrix.shape == binary_matrix.shape)
+
+    return labelled_matrix, labelled_tiles, valid_gaps, infinity_flag
 
 
 def plot_superiteration(
@@ -323,6 +405,35 @@ def main():
         }
     )
     particle_dataframe.to_csv(os.path.join(subdirectory_path, "particle_data.csv"))
+
+    # Calculating collagen vortex number, size and shape:
+    seed_list = []
+    area_list = []
+    eccentricity_list = []
+    for seed, matrix in enumerate(matrix_list):
+        matrix_density = matrix[1, :, :]
+        labelled_matrix, labelled_tiles, valid_gaps, infinity_flag = \
+            return_periodic_labels(matrix_density < 0.25)
+
+        if infinity_flag:
+            seed_list.append(seed)
+            area_list.append(-1)
+            eccentricity_list.append(-1)
+            continue
+
+        for gap_properties in valid_gaps:
+            seed_list.append(seed)
+            area_list.append(gap_properties.area)
+            eccentricity_list.append(gap_properties.eccentricity)
+
+    collagen_vortex_dataframe = pd.DataFrame(
+        {
+            "seed": seed_list,
+            "area": area_list,
+            "eccentricity": eccentricity_list
+        }
+    )
+    collagen_vortex_dataframe.to_csv(os.path.join(subdirectory_path, "collagen_vortex_data.csv"))
 
     # Plotting final orientations of the matrix:
     fig, ax = plt.subplots(figsize=(7, 4))
