@@ -1,0 +1,23 @@
+{
+    "superIterationCount": 10,
+    "numberOfCells": 70,
+    "worldSize": 2048,
+    "gridSize": 32,
+    "cellTypeProportions": 0,
+    "matrixAdditionRate": 0.5,
+    "matrixTurnoverRate": 0.001,
+    "cellDepositionSigma": 80,
+    "cellSensationSigma": 120,
+    "poissonLambda": 4,
+    "kappa": 0,
+    "matrixKappa": 4,
+    "homotypicInhibition": 0.9,
+    "heterotypicInhibition": 0,
+    "polarityPersistence": 0.975,
+    "polarityTurningCoupling": 4,
+    "flowScaling": 3,
+    "flowPolarityCoupling": 3.5,
+    "polarityNoiseSigma": 0.01,
+    "collisionRepolarisation": 0,
+    "repolarisationRate": 0.8
+}

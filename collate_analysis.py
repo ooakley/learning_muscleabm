@@ -31,7 +31,11 @@ def main():
             # Reading in all dataframes:
             try:
                 trajectory_data = pd.read_csv(summary_filepath, index_col=0)
-                trajectory_data.to_csv(summary_buffer, mode=mode, header=header, index=False)
+                trajectory_data.to_csv(
+                    summary_buffer,
+                    mode=mode, header=header, index=False,
+                    float_format='%.8f'
+                )
             except:
                 print(f"Folder {folder_id} skipped...")
                 continue
@@ -49,7 +53,11 @@ def main():
             particle_dataframe["nn_distances"] = particle_data["particle_nn_distance"]
             particle_dataframe["seed"] = particle_data["seed"]
 
-            particle_dataframe.to_csv(particle_buffer, mode=mode, header=header, index=False)
+            particle_dataframe.to_csv(
+                particle_buffer,
+                mode=mode, header=header, index=False,
+                float_format='%.8f'
+            )
 
             # No header written to csv unless its the first row:
             header = False
