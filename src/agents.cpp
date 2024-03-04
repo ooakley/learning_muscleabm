@@ -342,6 +342,11 @@ std::pair<bool, double> CellAgent::checkForCollisions() {
 
 
 double CellAgent::sampleVonMises(double kappa) {
+    // Von Mises sampling quickly overloaded if kappa is very low - can set a minimum and take a
+    // uniform distribution instead:
+    if (kappa < 1e-3) {
+        return angleUniformDistribution(generatorAngleUniform);
+    }
     // See Efficient Simulation of the von Mises Distribution - Best & Fisher 1979
     // Calculating distribution parameters:
     double vm_tau = 1 + sqrt(1 + (4 * pow(kappa, 2)));
