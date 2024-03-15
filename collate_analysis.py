@@ -9,13 +9,11 @@ def main():
     # Reading in gridsearch dataframe:
     gridseach_dataframe = pd.read_csv("fileOutputs/gridsearch.txt", delimiter="\t")
 
-    summary_dataframe_list = []
-    particle_dataframe_list = []
     header = True
     with open("./summary_dataframe.csv", 'w') as summary_buffer, \
          open("./particle_dataframe.csv", 'w') as particle_buffer:
 
-        for folder_id in range(1, 2500+1):
+        for folder_id in range(1, 8000+1):
             # Ensuring correct .csv appending behaviour:
             mode = 'w' if header else 'a'
 
@@ -61,13 +59,6 @@ def main():
 
             # No header written to csv unless its the first row:
             header = False
-
-    # Concatenating summary dataframes and saving:
-    # summary_dataframe = pd.concat(summary_dataframe_list).reset_index()
-    # summary_dataframe.to_csv("./summary_dataframe.csv")
-
-    # particle_dataframe = pd.concat(particle_dataframe_list).reset_index()
-    # particle_dataframe.to_csv("./particle_dataframe.csv")
 
     return None
 
