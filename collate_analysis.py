@@ -1,3 +1,8 @@
+"""
+Script to collate the outputs of simulational analysis across a set of cluster runs.
+
+Saves to overall summary .csv file.
+"""
 import os
 import copy
 import pandas as pd
