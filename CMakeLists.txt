@@ -19,20 +19,15 @@ add_definitions("-DBOOST_BIND_GLOBAL_PLACEHOLDERS")
 enable_testing()
 
 # Command line flags to force use of non-apple clang:
-# cmake -B . -S .. -DCMAKE_C_COMPILER=/usr/local/bin/gcc-13 -DCMAKE_CXX_COMPILER=/usr/local/bin/g++-13
+# cmake -B . -S .. -DCMAKE_C_COMPILER=/opt/homebrew/bin/gcc-13 -DCMAKE_CXX_COMPILER=/opt/homebrew/bin/g++-13
 
 message(STATUS "${CMAKE_CXX_COMPILER_ID}")
 
 # Enable Clang Tidy only if using Clang
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
-  message(STATUS "Using Clang compiler, so we enable clang-tidy...")
-  set(CMAKE_CXX_CLANG_TIDY
-    clang-tidy;
-    -format-style='file';
-    -header-filter=${CMAKE_CURRENT_SOURCE_DIR};
-  )
+  message(STATUS "Using Clang compiler!")
 else()
-  message(STATUS "Not using Clang, so we can skip clang-tidy...")
+  message(STATUS "Not using Clang!")
 endif()
 
 add_compile_options(

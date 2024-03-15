@@ -1,3 +1,9 @@
+"""
+Script to run analysis of model output data.
+
+Outputs trajectory images, matrix images, and a large set of derived
+statistics.
+"""
 import argparse
 import os
 import copy
@@ -30,7 +36,7 @@ def parse_arguments():
 
 
 def read_matrix_into_numpy(filename, grid_size, timesteps):
-    number_of_elements = (grid_size**2)*timesteps*2
+    number_of_elements = (grid_size**2) * timesteps * 2
     flattened_matrix = np.loadtxt(filename, delimiter=',', usecols=range(number_of_elements))
     return np.reshape(flattened_matrix, (timesteps, 2, grid_size, grid_size), order='C')
 
@@ -40,17 +46,17 @@ def find_persistence_times(orientation_array):
     direction_differences = np.subtract.outer(orientation_array, orientation_array)
 
     # Ensuring distances are bounded between pi and -pi:
-    direction_differences[direction_differences < -np.pi] += 2*np.pi
-    direction_differences[direction_differences > np.pi] -= 2*np.pi
+    direction_differences[direction_differences < -np.pi] += 2 * np.pi
+    direction_differences[direction_differences > np.pi] -= 2 * np.pi
     direction_differences = np.abs(direction_differences)
 
     # Calculating number of frames that it takes for the angle to change by pi/2 (90 degrees):
     pt_list = []
     for timestep in range(orientation_array.shape[0]):
         subsequent_directions = direction_differences[timestep, timestep:]
-        if np.count_nonzero(subsequent_directions > np.pi/2) == 0:
+        if np.count_nonzero(subsequent_directions > np.pi / 2) == 0:
             continue
-        persistence_time = np.argmax(subsequent_directions > np.pi/2)
+        persistence_time = np.argmax(subsequent_directions > np.pi / 2)
         pt_list.append(persistence_time)
 
     return pt_list
@@ -112,8 +118,8 @@ def get_order_parameter(submatrix, presence_submatrix):
         return np.nan
 
     # Taking angle modulus:
-    angle_diff[angle_diff > np.pi/2] = angle_diff[angle_diff > np.pi/2] - np.pi
-    angle_diff[angle_diff < -np.pi/2] = angle_diff[angle_diff < -np.pi/2] + np.pi
+    angle_diff[angle_diff > np.pi / 2] = angle_diff[angle_diff > np.pi / 2] - np.pi
+    angle_diff[angle_diff < -np.pi / 2] = angle_diff[angle_diff < -np.pi / 2] + np.pi
 
     # Calculating order parameter:
     order_parameter = np.mean(np.abs(angle_diff))
@@ -122,10 +128,10 @@ def get_order_parameter(submatrix, presence_submatrix):
 
 def get_summary_order_parameter(matrix):
     order_parameters = []
-    for i in range(1, GRID_SIZE-1):
-        for j in range(1, GRID_SIZE-1):
-            submatrix = matrix[0, i-1:i+2, j-1:j+2]
-            presence_submatrix = matrix[1, i-1:i+2, j-1:j+2]
+    for i in range(1, GRID_SIZE - 1):
+        for j in range(1, GRID_SIZE - 1):
+            submatrix = matrix[0, i - 1:i + 2, j - 1:j + 2]
+            presence_submatrix = matrix[1, i - 1:i + 2, j - 1:j + 2]
             order_parameter = get_order_parameter(submatrix, presence_submatrix)
             order_parameters.append(order_parameter)
 
@@ -163,9 +169,9 @@ def return_periodic_labels(binary_matrix):
 
         # Bounding box conditions:
         upper_boundary_criterion = min_row >= side_length
-        lower_boundary_criterion = max_row < side_length*2
+        lower_boundary_criterion = max_row < side_length * 2
         left_boundary_criterion = min_col >= side_length
-        right_boundary_criterion = max_col < side_length*2
+        right_boundary_criterion = max_col < side_length * 2
 
         boundary_criterion = [
             upper_boundary_criterion,
@@ -184,9 +190,9 @@ def return_periodic_labels(binary_matrix):
             continue
 
         # Checking for edge cases, crossing upper or left boundary:
-        lower_in_frame = max_row > side_length and max_row < side_length*2
+        lower_in_frame = max_row > side_length and max_row < side_length * 2
         upper_out_frame = min_row < side_length
-        right_in_frame = max_col > side_length and max_col < side_length*2
+        right_in_frame = max_col > side_length and max_col < side_length * 2
         left_out_frame = min_col < side_length
 
         # Intersecting upper edge only:
@@ -208,7 +214,7 @@ def return_periodic_labels(binary_matrix):
                 continue
 
     # Returning centre tile:
-    labelled_matrix = labelled_tiles[side_length:side_length*2, side_length:side_length*2]
+    labelled_matrix = labelled_tiles[side_length:side_length * 2, side_length:side_length * 2]
     assert (labelled_matrix.shape == binary_matrix.shape)
 
     return labelled_matrix, labelled_tiles, valid_gaps, infinity_flag
@@ -296,6 +302,88 @@ def plot_trajectories(subdirectory_path, trajectory_list, matrix_list, area_size
     fig.savefig(os.path.join(subdirectory_path, "trajectories.png"))
 
 
+# Feature matrix extraction:
+def get_particle_positions_list(site_trajectory_df):
+    particle_list = list(set(list(site_trajectory_df["particle"])))
+    particle_positions_list = []
+    for particle in particle_list:
+        particle_mask = site_trajectory_df["particle"] == particle
+        x_pos = np.array(site_trajectory_df[particle_mask]["x"])[::4]
+        y_pos = np.array(site_trajectory_df[particle_mask]["y"])[::4]
+        particle_positions_list.append((x_pos, y_pos))
+    return particle_positions_list
+
+
+def get_features_from_positions(particle_positions_list):
+    # Extracted features:
+    path_lengths = []
+    maximal_excursions = []
+    net_displacements = []
+    outreach_ratios = []
+    meandering_ratios = []
+    maximum_densities = []
+    angle_entropies = []
+
+    for particle_positions in particle_positions_list:
+        x_pos, y_pos = particle_positions
+        dx = np.diff(x_pos)
+        dy = np.diff(y_pos)
+
+        # Accounting for rollover positions:
+        dx[dx > 1024] = dx[dx > 1024] - 2048
+        dx[dx < -1024] = dx[dx < -1024] + 2048
+
+        dy[dy > 1024] = dy[dy > 1024] - 2048
+        dy[dy < -1024] = dy[dy < -1024] + 2048
+
+        # Calculating path statistics:
+        displacements = np.sqrt(dx**2 + dy**2)
+
+        x_excursion = np.cumsum(dx)
+        y_excursion = np.cumsum(dy)
+        total_excursion = np.sqrt(x_excursion**2 + y_excursion**2)
+        max_excursion = np.max(total_excursion)
+
+        net_dx = x_excursion[-1]
+        net_dy = y_excursion[-1]
+        net_displacement = np.sqrt(net_dx**2 + net_dy**2)
+        path_length = np.sum(displacements)
+
+        path_lengths.append(path_length)
+        maximal_excursions.append(max_excursion)
+        net_displacements.append(net_displacement)
+
+        outreach_ratios.append(max_excursion / path_length)
+        meandering_ratios.append(net_displacement / path_length)
+
+        # Calculating directional statistics:
+        directions = np.arctan2(dy, dx)
+        bins = np.linspace(-np.pi, np.pi, 12)
+        hist_densities, _ = np.histogram(directions, bins=bins, density=True, weights=displacements)
+        maximum_density = np.max(hist_densities)
+        maximum_densities.append(maximum_density)
+
+        # Calculating entropy:
+        hist_densities = hist_densities + 1e-4
+        hist_densities = hist_densities / np.sum(hist_densities)
+        entropy = np.sum(-hist_densities * np.log(hist_densities))
+        angle_entropies.append(entropy)
+
+    feature_list = [
+        np.array(path_lengths),
+        np.array(maximal_excursions),
+        np.array(net_displacements),
+        np.array(outreach_ratios),
+        np.array(meandering_ratios),
+        np.array(maximum_densities),
+        np.array(angle_entropies)
+    ]
+
+    feature_matrix = np.stack(feature_list, axis=1)
+
+    return feature_matrix
+
+
 def main():
     # Parsing command line arguments:
     args = parse_arguments()
@@ -304,8 +392,8 @@ def main():
     # Getting simulation parameters:
     gridseach_dataframe = pd.read_csv("fileOutputs/gridsearch.txt", delimiter="\t")
     gridsearch_row = gridseach_dataframe[gridseach_dataframe["array_id"] == args.folder_id]
-    GRID_SIZE = int(gridsearch_row["gridSize"])
-    AREA_SIZE = int(gridsearch_row["worldSize"])
+    GRID_SIZE = int(gridsearch_row["gridSize"].iloc[0])
+    AREA_SIZE = int(gridsearch_row["worldSize"].iloc[0])
     TIMESTEPS = 576
 
     # Finding specified simulation output files:
@@ -390,6 +478,14 @@ def main():
         simulation_properties = simulation_properties.reset_index()
         iteration_row = pd.concat([simulation_properties, new_info], axis=1)
         sub_dataframes.append(iteration_row)
+
+    extracted_feature_matrix = []
+    for trajectory_dataframe in trajectory_list:
+        particle_positions_list = get_particle_positions_list(trajectory_dataframe)
+        feature_matrix = get_features_from_positions(particle_positions_list)
+        extracted_feature_matrix.append(feature_matrix)
+    extracted_feature_matrix = np.concatenate(extracted_feature_matrix, axis=0)
+    np.save(os.path.join(subdirectory_path, "feature_matrix.npy"), extracted_feature_matrix)
 
     # Generating full dataframe and saving to subdirectory:
     summary_dataframe = pd.concat(sub_dataframes).reset_index().drop(columns=["index", "level_0"])

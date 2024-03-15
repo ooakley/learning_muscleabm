@@ -1,3 +1,8 @@
+"""
+Script to collate the outputs of simulational analysis across a set of cluster runs.
+
+Saves to overall summary .csv file.
+"""
 import os
 import copy
 import pandas as pd
@@ -9,13 +14,13 @@ def main():
     # Reading in gridsearch dataframe:
     gridseach_dataframe = pd.read_csv("fileOutputs/gridsearch.txt", delimiter="\t")
 
-    summary_dataframe_list = []
-    particle_dataframe_list = []
+    # summary_dataframe_list = []
+    # particle_dataframe_list = []
     header = True
     with open("./summary_dataframe.csv", 'w') as summary_buffer, \
          open("./particle_dataframe.csv", 'w') as particle_buffer:
 
-        for folder_id in range(1, 2500+1):
+        for folder_id in range(1, 2500 + 1):
             # Ensuring correct .csv appending behaviour:
             mode = 'w' if header else 'a'
 
