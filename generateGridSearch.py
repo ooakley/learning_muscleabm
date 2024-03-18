@@ -1,3 +1,8 @@
+"""
+Generates basic gridsearch over parameters.
+
+Quickly becomes computationally infeasible.
+"""
 import os
 import json
 import numpy as np
@@ -37,7 +42,7 @@ def main():
             cellDepositionSigma, cellSensationSigma,
             poissonLambda, kappa, matrixKappa,
             homotypicInhibition, heterotypicInhibition,
-            1 - (1/polarityPersistence), polarityTurningCoupling,
+            1 - (1 / polarityPersistence), polarityTurningCoupling,
             flowScaling, flowPolarityCoupling, polarityNoiseSigma,
             collisionRepolarisation, repolarisationRate
         )
@@ -84,7 +89,7 @@ def main():
 
         # Writing gridsearch values:
         for i, argtuple in enumerate(argument_grid):
-            f.write(f"{i+1}")
+            f.write(f"{i + 1}")
             for argument_value in argtuple:
                 f.write("\t")
                 f.write(f"{argument_value}")
