@@ -9,7 +9,7 @@ import json
 import numpy as np
 
 # Defines sampling size of LHS method:
-NUM_SAMPLES = 2000
+NUM_SAMPLES = 5000
 
 # Ensures necessary parameters are integers:
 INTEGER_PARAMETERS = [
@@ -26,22 +26,22 @@ GRIDSEARCH = {
     "worldSize": [2048, 2048],
     "gridSize": [32, 32],
     "cellTypeProportions": [0, 0],
-    "matrixAdditionRate": [0.01, 0.2],
-    "matrixTurnoverRate": [0.0001, 0.01],
-    "cellDepositionSigma": [60, 100],
-    "cellSensationSigma": [60, 100],
-    "poissonLambda": [1, 10],
-    "kappa": [0, 4],
-    "matrixKappa": [0, 6],
-    "homotypicInhibition": [0.9, 0.9],
+    "matrixAdditionRate": [0.15, 0.25],
+    "matrixTurnoverRate": [0.0005, 0.001],
+    "cellDepositionSigma": [65, 75],
+    "cellSensationSigma": [65, 75],
+    "poissonLambda": [2.5, 3.5],
+    "kappa": [0, 0.5],
+    "matrixKappa": [2, 5],
+    "homotypicInhibition": [0.5, 0.95],
     "heterotypicInhibition": [0, 0],
-    "polarityPersistence": [0.5, 1],
+    "polarityPersistence": [0.5, 0.99],
     "polarityTurningCoupling": [0, 6],
-    "flowScaling": [2, 4],
-    "flowPolarityCoupling": [0.5, 5],
+    "flowScaling": [2, 3],
+    "flowPolarityCoupling": [2.5, 4.5],
     "polarityNoiseSigma": [0.01, 0.01],
     "collisionRepolarisation": [0, 0],
-    "repolarisationRate": [0.6, 0.95],
+    "repolarisationRate": [0.25, 0.95],
 }
 
 REPARAMETERISATIONS = {
