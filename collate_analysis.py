@@ -18,7 +18,7 @@ def main():
     with open("./summary_dataframe.csv", 'w') as summary_buffer, \
          open("./particle_dataframe.csv", 'w') as particle_buffer:
 
-        for folder_id in range(1, 8000+1):
+        for folder_id in range(1, 700+1):
             # Ensuring correct .csv appending behaviour:
             mode = 'w' if header else 'a'
 

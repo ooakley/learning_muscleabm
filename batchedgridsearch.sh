@@ -4,7 +4,7 @@
 #SBATCH --partition=cpu
 #SBATCH --time=25:00
 #SBATCH --cpus-per-task=1
-#SBATCH --array=1-400
+#SBATCH --array=1-35
 
 # Required lmod modules:
 # Boost/1.81.0-GCC-12.2.0 CMake/3.24.3-GCCcore-12.2.0 OpenMPI/4.1.4-GCC-12.2.0
