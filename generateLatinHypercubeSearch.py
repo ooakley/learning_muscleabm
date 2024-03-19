@@ -37,16 +37,21 @@ GRIDSEARCH = {
     "heterotypicInhibition": [0, 0],
     "polarityPersistence": [0.5, 1],
     "polarityTurningCoupling": [0, 6],
-    "flowScaling": [3, 3],
+    "flowScaling": [2, 4],
     "flowPolarityCoupling": [0.5, 5],
     "polarityNoiseSigma": [0.01, 0.01],
     "collisionRepolarisation": [0, 0],
     "repolarisationRate": [0.6, 0.95],
 }
 
+REPARAMETERISATIONS = {
+    "reparameterisedSmallT": [0.2, 2.5],
+    "reparameterisationBeta": [1, 7.5]
+}
 
-def rand_seq(parameter_name, rng, is_int):
-    parameter_array = np.linspace(*GRIDSEARCH[parameter_name], NUM_SAMPLES)
+
+def rand_seq(parameter_range, rng, is_int=False):
+    parameter_array = np.linspace(*parameter_range, NUM_SAMPLES)
     if is_int:
         parameter_array = parameter_array.astype(int)
     rng.shuffle(parameter_array)
@@ -57,15 +62,29 @@ def main():
     # Generating random number generator for shuffling of variables:
     rng = np.random.default_rng(0)
 
-    shuffled_parameters = []
+    shuffled_parameters = {}
     for parameter in GRIDSEARCH.keys():
-        shuffled_parameter = rand_seq(parameter, rng, parameter in INTEGER_PARAMETERS)
-        shuffled_parameters.append(shuffled_parameter)
+        shuffled_parameter_set = rand_seq(
+            GRIDSEARCH[parameter], rng, parameter in INTEGER_PARAMETERS
+        )
+        shuffled_parameters[parameter] = shuffled_parameter_set
+
+    # Overwriting poissonLamda and flowPolarityCoupling for reparameterisation:
+    rand_t = rand_seq(REPARAMETERISATIONS["reparameterisedSmallT"], rng)
+    rand_beta = rand_seq(REPARAMETERISATIONS["reparameterisationBeta"], rng)
+    shuffled_parameters["poissonLambda"] = rand_beta * rand_t
+    shuffled_parameters["flowPolarityCoupling"] = 1 / rand_t
+
+    print("-- --- -- --- --")
+    print(shuffled_parameters["poissonLambda"])
+    print("-- --- -- --- --")
+    print(shuffled_parameters["flowPolarityCoupling"])
 
     argument_grid = []
     for simulation_index in range(NUM_SAMPLES):
         parameter_set = []
-        for shuffled_parameter in shuffled_parameters:
+        for parameter_name in GRIDSEARCH.keys():
+            shuffled_parameter = shuffled_parameters[parameter_name]
             parameter_set.append(shuffled_parameter[simulation_index])
         argument_grid.append(parameter_set)
 
