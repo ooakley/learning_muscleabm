@@ -12,6 +12,7 @@ import scipy
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 
 from scipy.spatial import KDTree
 import skimage.morphology as skmorph
@@ -219,72 +220,99 @@ def return_periodic_labels(binary_matrix):
     return labelled_matrix, labelled_tiles, valid_gaps, infinity_flag
 
 
-def plot_superiteration(
-    trajectory_list, matrix_list, area_size, grid_size, timestep, iteration, ax
-):
+def plot_superiteration(trajectory_list, matrix_list, area_size, grid_size, timestep, iteration, ax, cell_size=15):
+    GRID_SIZE = grid_size
+    GRID_LENGTH = area_size
+
     # Accessing and formatting relevant dataframe:
     trajectory_dataframe = trajectory_list[iteration]
-    x_mask = (trajectory_dataframe["x"] > 50) & (trajectory_dataframe["x"] < area_size - 50)
-    y_mask = (trajectory_dataframe["y"] > 50) & (trajectory_dataframe["y"] < area_size - 50)
+    x_mask = (trajectory_dataframe["x"] > 0) & (trajectory_dataframe["x"] < GRID_LENGTH)
+    y_mask = (trajectory_dataframe["y"] > 0) & (trajectory_dataframe["y"] < GRID_LENGTH)
     full_mask = x_mask & y_mask
     rollover_skipped_df = trajectory_dataframe[full_mask]
-    timeframe_mask = \
-        (rollover_skipped_df["frame"] > timestep - TIMESTEP_WIDTH) & \
-        (rollover_skipped_df["frame"] <= timestep)
+    timeframe_mask = (rollover_skipped_df["frame"] > timestep - TIMESTEP_WIDTH) & (rollover_skipped_df["frame"] <= timestep)
     timepoint_mask = rollover_skipped_df["frame"] == timestep
     ci_lookup = trajectory_dataframe[trajectory_dataframe["frame"] == 1]
-    unstacked_dataframe = \
-        rollover_skipped_df[timeframe_mask].set_index(['particle', 'frame'])[['x', 'y']].unstack()
+    unstacked_dataframe = rollover_skipped_df[timeframe_mask].set_index(['particle', 'frame'])[['x', 'y']].unstack()
 
     # Setting up matrix plotting:
-    tile_width = area_size / grid_size
-    X = np.arange(0, area_size, tile_width) + (tile_width / 2)
-    Y = np.arange(0, area_size, tile_width) + (tile_width / 2)
+    tile_width = GRID_LENGTH / GRID_SIZE
+    X = np.arange(0, GRID_LENGTH, tile_width) + (tile_width / 2)
+    Y = np.arange(0, GRID_LENGTH, tile_width) + (tile_width / 2)
     X, Y = np.meshgrid(X, Y)
 
-    matrix = matrix_list[iteration][0, :, :]
-    U = np.cos(matrix)
-    V = -np.sin(matrix)
+    ecm_matrix = matrix_list[iteration]
+    matrix = ecm_matrix[0, :, :]
+    U = np.cos(matrix) * ecm_matrix[1, :, :]
+    V = -np.sin(matrix) * ecm_matrix[1, :, :]
 
     # Setting up plot
-    colour_list = ['r', 'g']
+    # colour_list = ['r', 'g']
 
     # Plotting particle trajectories:
     for i, trajectory in unstacked_dataframe.iterrows():
         identity = int(ci_lookup[ci_lookup["particle"] == i]["contact_inhibition"].iloc[0])
-        ax.plot(
-            trajectory['x'], trajectory['y'],
-            c=colour_list[identity], alpha=0.4, linewidth=0.5
-        )
+
+        rollover_x = np.abs(np.diff(np.array(trajectory['x'])[::4])) > (GRID_LENGTH/2)
+        rollover_y = np.abs(np.diff(np.array(trajectory['y'])[::4])) > (GRID_LENGTH/2)
+        rollover_mask = rollover_x | rollover_y
+
+        colors_list = list(mcolors.TABLEAU_COLORS.values())
+        color = colors_list[i % len(colors_list)]
+
+        if np.count_nonzero(rollover_mask) == 0:
+            ax.plot(
+                np.array(trajectory['x'])[::4], np.array(trajectory['y'])[::4],
+                alpha=0.75, linewidth=1.5, c=color
+            )
+        else:
+            plot_separation_indices = np.argwhere(rollover_mask)
+            prev_index = 0
+            for separation_index in plot_separation_indices:
+                separation_index = separation_index[0]
+                x_array = np.array(trajectory['x'])[::4][prev_index:separation_index]
+                y_array = np.array(trajectory['y'])[::4][prev_index:separation_index]
+                ax.plot(x_array, y_array, alpha=0.75, linewidth=1.5, c=color)
+                prev_index = separation_index+1
+
+            # Plotting final segment:
+            x_array = np.array(trajectory['x'])[::4][prev_index:]
+            y_array = np.array(trajectory['y'])[::4][prev_index:]
+            ax.plot(x_array, y_array, alpha=0.25, linewidth=1, c=color)
 
     # Plotting background matrix:
-    ax.quiver(
-        X, Y, U, V, [matrix],
-        cmap='twilight', pivot='mid', scale=75,
-        headwidth=0, headlength=0, headaxislength=0, alpha=0.5
-    )
+    speed = np.sqrt(U**2 + V**2)
+    alpha = speed / speed.max()
+    ax.quiver(X, Y, U, V, [matrix], cmap='twilight', pivot='mid', scale=50, headwidth=0, headlength=0, headaxislength=0, alpha=alpha)
+    # ax.streamplot(
+    #     X, Y, U, -V, linewidth=0.5, arrowsize=1e-5, density=2
+    # )
 
     # Plotting cells & their directions:
     type0_mask = rollover_skipped_df['contact_inhibition'][timepoint_mask] == 0
     type1_mask = rollover_skipped_df['contact_inhibition'][timepoint_mask] == 1
     x_pos = rollover_skipped_df['x'][timepoint_mask]
     y_pos = rollover_skipped_df['y'][timepoint_mask]
-    x_heading = np.cos(rollover_skipped_df['orientation'][timepoint_mask])
-    y_heading = - np.sin(rollover_skipped_df['orientation'][timepoint_mask])
-    # heading_list = rollover_skipped_df['orientation'][timepoint_mask]
-
+    x_heading = np.cos(rollover_skipped_df['orientation'][timepoint_mask]) * rollover_skipped_df["polarity_extent"][timepoint_mask] * 2
+    y_heading = - np.sin(rollover_skipped_df['orientation'][timepoint_mask]) * rollover_skipped_df["polarity_extent"][timepoint_mask] * 2
+    heading_list = rollover_skipped_df['orientation'][timepoint_mask]
+    # , color='r',
     ax.quiver(
         x_pos[type0_mask], y_pos[type0_mask], x_heading[type0_mask], y_heading[type0_mask],
-        pivot='mid', scale=75, color='r'
+        pivot='tail', scale=50, headwidth=5, headlength=5, headaxislength=3, width=0.002, alpha=0.8
     )
     ax.quiver(
         x_pos[type1_mask], y_pos[type1_mask], x_heading[type1_mask], y_heading[type1_mask],
-        pivot='mid', scale=75, color='g'
+        pivot='tail', scale=50, color='g', headwidth=5, headlength=5, headaxislength=3, width=0.002, alpha=0.8
     )
-    ax.set_xlim(0, area_size)
-    ax.set_ylim(0, area_size)
+    ax.scatter(x_pos, y_pos, color='k', alpha=0.5, s=cell_size)
+    ax.set_xlim(0, GRID_LENGTH)
+    ax.set_ylim(0, GRID_LENGTH)
     ax.invert_yaxis()
-    ax.set_axis_off()
+    ax.patch.set_edgecolor('black')
+    ax.patch.set_linewidth(2)
+    ax.set_xticks([])
+    ax.set_yticks([])
 
 
 def plot_trajectories(subdirectory_path, trajectory_list, matrix_list, area_size, grid_size):
@@ -293,7 +321,7 @@ def plot_trajectories(subdirectory_path, trajectory_list, matrix_list, area_size
     for i in range(3):
         for j in range(3):
             plot_superiteration(
-                trajectory_list, matrix_list, area_size, grid_size, TIMESTEPS-1, count, axs[i, j]
+                trajectory_list, matrix_list, area_size, grid_size, TIMESTEPS - 1, count, axs[i, j]
             )
             count += 1
 
