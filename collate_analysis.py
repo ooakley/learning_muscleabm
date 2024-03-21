@@ -18,7 +18,7 @@ def main():
     with open("./summary_dataframe.csv", 'w') as summary_buffer, \
          open("./particle_dataframe.csv", 'w') as particle_buffer:
 
-        for folder_id in range(1, 700+1):
+        for folder_id in range(1, 2 + 1):
             # Ensuring correct .csv appending behaviour:
             mode = 'w' if header else 'a'
 
@@ -30,11 +30,17 @@ def main():
             folder_path = os.path.join(SIMULATION_OUTPUTS_FOLDER, str(folder_id))
             summary_filepath = os.path.join(folder_path, "summary.csv")
             particle_filepath = os.path.join(folder_path, "particle_data.csv")
+            vortex_filepath = os.path.join(folder_path, "collagen_vortex_data.csv")
 
             # Reading in all dataframes:
             try:
                 trajectory_data = pd.read_csv(summary_filepath, index_col=0)
-                trajectory_data.to_csv(
+                vortex_data = pd.read_csv(vortex_filepath, index_col=0)
+                full_data = pd.concat(
+                    [trajectory_data, vortex_data],
+                    axis=1, ignore_index=False, join='inner'
+                )
+                full_data.to_csv(
                     summary_buffer,
                     mode=mode, header=header, index=False,
                     float_format='%.8f'
