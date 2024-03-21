@@ -38,7 +38,7 @@ def main():
                 vortex_data = pd.read_csv(vortex_filepath, index_col=0)
                 full_data = pd.concat(
                     [trajectory_data, vortex_data],
-                    axis=1, ignore_index=True, join='inner'
+                    axis=1, ignore_index=False, join='inner'
                 )
                 full_data.to_csv(
                     summary_buffer,
