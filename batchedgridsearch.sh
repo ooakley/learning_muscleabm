@@ -47,7 +47,7 @@ simulate () {
 
     # Running simulation with specified parameters:
     ./build/src/main --jobArrayID $arrayid --superIterationCount $superIterationCount \
-        --numberOfCells $numberOfCells --timestepsToRun 576 \
+        --numberOfCells $numberOfCells --timestepsToRun 5760 \
         --worldSize $worldSize --gridSize $gridSize \
         --cellTypeProportions $cellTypeProportions \
         --matrixAdditionRate $matrixAdditionRate --matrixTurnoverRate $matrixTurnoverRate \

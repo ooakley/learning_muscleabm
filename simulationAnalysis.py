@@ -24,7 +24,7 @@ CSV_COLUMN_NAMES = [
     "actin_flow", "movement_direction", "turning_angle", "sampled_angle", "contact_inhibition"
 ]
 
-TIMESTEPS = 576
+TIMESTEPS = 5760
 TIMESTEP_WIDTH = 576
 GRID_SIZE = 32
 
@@ -505,6 +505,7 @@ def main():
     seed_list = []
     area_list = []
     eccentricity_list = []
+
     for seed, matrix in enumerate(matrix_list):
         matrix_density = matrix[1, :, :]
         labelled_matrix, labelled_tiles, valid_gaps, infinity_flag = \
