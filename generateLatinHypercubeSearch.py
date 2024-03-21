@@ -9,7 +9,7 @@ import json
 import numpy as np
 
 # Defines sampling size of LHS method:
-NUM_SAMPLES = 5000
+NUM_SAMPLES = 2500
 
 # Ensures necessary parameters are integers:
 INTEGER_PARAMETERS = [
@@ -21,7 +21,7 @@ INTEGER_PARAMETERS = [
 
 # Defines the parameter ranges, with [start, stop]:
 GRIDSEARCH = {
-    "superIterationCount": [10, 10],
+    "superIterationCount": [30, 30],
     "numberOfCells": [70, 70],
     "worldSize": [2048, 2048],
     "gridSize": [32, 32],
@@ -87,41 +87,6 @@ def main():
             shuffled_parameter = shuffled_parameters[parameter_name]
             parameter_set.append(shuffled_parameter[simulation_index])
         argument_grid.append(parameter_set)
-
-    # # Generate the grid search variables:
-    # argument_grid = [
-    #     (
-    #         int(superIterationCount), int(numberOfCells), int(worldSize), int(gridSize),
-    #         cellTypeProportions, matrixAdditionRate, matrixTurnoverRate,
-    #         cellDepositionSigma, cellSensationSigma,
-    #         poissonLambda, kappa, matrixKappa,
-    #         homotypicInhibition, heterotypicInhibition,
-    #         polarityPersistence, polarityTurningCoupling,
-    #         flowScaling, flowPolarityCoupling, polarityNoiseSigma,
-    #         collisionRepolarisation, repolarisationRate
-    #     )
-    #     for superIterationCount in rand_seq("superIterationCount", rng)
-    #     for numberOfCells in rand_seq("numberOfCells", rng)
-    #     for worldSize in rand_seq("worldSize", rng)
-    #     for gridSize in rand_seq("gridSize", rng)
-    #     for cellTypeProportions in rand_seq("cellTypeProportions", rng)
-    #     for matrixAdditionRate in rand_seq("matrixAdditionRate", rng)
-    #     for matrixTurnoverRate in rand_seq("matrixTurnoverRate", rng)
-    #     for cellDepositionSigma in rand_seq("cellDepositionSigma", rng)
-    #     for cellSensationSigma in rand_seq("cellSensationSigma", rng)
-    #     for poissonLambda in rand_seq("poissonLambda", rng)
-    #     for kappa in rand_seq("kappa", rng)
-    #     for matrixKappa in rand_seq("matrixKappa", rng)
-    #     for homotypicInhibition in rand_seq("homotypicInhibition", rng)
-    #     for heterotypicInhibition in rand_seq("heterotypicInhibition", rng)
-    #     for polarityPersistence in rand_seq("polarityPersistence", rng)
-    #     for polarityTurningCoupling in rand_seq("polarityTurningCoupling", rng)
-    #     for flowScaling in rand_seq("flowScaling", rng)
-    #     for flowPolarityCoupling in rand_seq("flowPolarityCoupling", rng)
-    #     for polarityNoiseSigma in rand_seq("polarityNoiseSigma", rng)
-    #     for collisionRepolarisation in rand_seq("collisionRepolarisation", rng)
-    #     for repolarisationRate in rand_seq("repolarisationRate", rng)
-    # ]
 
     print(len(argument_grid))
 

@@ -24,6 +24,7 @@ CSV_COLUMN_NAMES = [
     "actin_flow", "movement_direction", "turning_angle", "sampled_angle", "contact_inhibition"
 ]
 
+TIMESTEPS = 576
 TIMESTEP_WIDTH = 576
 GRID_SIZE = 32
 
@@ -62,7 +63,7 @@ def find_persistence_times(orientation_array):
     return pt_list
 
 
-def analyse_particle(particle_dataframe, rng):
+def analyse_particle(particle_dataframe):
     # Getting dx and dy, using these to calculate orientations and RMS displacements of
     # particle over time. We subsample by four as we simulate every timestep as 2.5 minutes,
     # but we capture image data every ten minutes:
@@ -70,10 +71,10 @@ def analyse_particle(particle_dataframe, rng):
     sampled_ypos = np.array(particle_dataframe['y'])[::4]
 
     # Adding measurement noise:
-    noise_x = rng.normal(0, 1e-5, len(sampled_xpos))
-    noise_y = rng.normal(0, 1e-5, len(sampled_ypos))
-    sampled_xpos = sampled_xpos + noise_x
-    sampled_ypos = sampled_ypos + noise_y
+    # noise_x = rng.normal(0, 1e-5, len(sampled_xpos))
+    # noise_y = rng.normal(0, 1e-5, len(sampled_ypos))
+    # sampled_xpos = sampled_xpos + noise_x
+    # sampled_ypos = sampled_ypos + noise_y
 
     dx = np.diff(sampled_xpos)
     dy = np.diff(sampled_ypos)
@@ -94,8 +95,6 @@ def analyse_particle(particle_dataframe, rng):
     orientation_timeseries = np.arctan2(dy, dx)
     persistence_times = find_persistence_times(orientation_timeseries)
     if len(persistence_times) == 0:
-        print(dx)
-        print(dy)
         particle_pt = np.inf
     else:
         particle_pt = np.mean(persistence_times)
@@ -294,7 +293,7 @@ def plot_trajectories(subdirectory_path, trajectory_list, matrix_list, area_size
     for i in range(3):
         for j in range(3):
             plot_superiteration(
-                trajectory_list, matrix_list, area_size, grid_size, 575, count, axs[i, j]
+                trajectory_list, matrix_list, area_size, grid_size, TIMESTEPS-1, count, axs[i, j]
             )
             count += 1
 
@@ -394,13 +393,13 @@ def main():
     gridsearch_row = gridseach_dataframe[gridseach_dataframe["array_id"] == args.folder_id]
     GRID_SIZE = int(gridsearch_row["gridSize"].iloc[0])
     AREA_SIZE = int(gridsearch_row["worldSize"].iloc[0])
-    TIMESTEPS = 576
+    SUPERITERATION_NUM = int(gridsearch_row["superIterationCount"].iloc[0])
 
     # Finding specified simulation output files:
     subdirectory_path = os.path.join(SIMULATION_OUTPUTS_FOLDER, str(args.folder_id))
 
     # Defining and seeding RNG for measurement noise simulation:
-    rng = np.random.default_rng(0)
+    # rng = np.random.default_rng(0)
 
     matrix_list = []
     particle_rmsd_list = []
@@ -409,7 +408,7 @@ def main():
     particle_seed_list = []
     trajectory_list = []
     sub_dataframes = []
-    for seed in range(10):
+    for seed in range(SUPERITERATION_NUM):
         print(f"Reading subiteration {seed}...")
         # Reading trajectory information:
         csv_filename = f"positions_seed{seed:03d}.csv"
@@ -425,7 +424,7 @@ def main():
         pt_list = []
         for particle in particles:
             particle_dataframe = trajectory_dataframe[trajectory_dataframe["particle"] == particle]
-            rmsd, persistence_time = analyse_particle(particle_dataframe, rng)
+            rmsd, persistence_time = analyse_particle(particle_dataframe)
             rmsd_list.append(rmsd), pt_list.append(persistence_time)
 
         # Getting nearest-neighbour distance distribution:

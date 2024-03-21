@@ -1,6 +1,7 @@
 # Prerequisites
 *.d
 .DS_Store
+*.npy
 
 # Compiled Object files
 *.slo

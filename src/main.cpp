@@ -144,6 +144,10 @@ int main(int argc, char** argv) {
         boostfs::create_directory(subdirectoryPath);
     }
 
+    // Defining RNG generator for world seeds:
+    std::mt19937 seedGenerator = std::mt19937(jobArrayID);
+    std::uniform_int_distribution<unsigned int> seedDistribution = std::uniform_int_distribution<unsigned int>(0, UINT32_MAX);
+
     // Running mulitple simulations:
     for (int superIteration = 0; superIteration < superIterationCount; ++superIteration) {
         // Getting correct width string representation:
@@ -171,7 +175,7 @@ int main(int argc, char** argv) {
         // Running simulation:
         World mainWorld{
             World(
-                superIteration,
+                seedDistribution(seedGenerator),
                 worldSize,
                 gridSize,
                 numberOfCells,
