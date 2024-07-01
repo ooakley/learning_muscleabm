@@ -1,41 +1,41 @@
 {
     "matrixAdditionRate": [
-        -0.15,
+        -0.1652060824329732,
         0.4,
         50
     ],
     "matrixTurnoverRate": [
-        -0.0005,
+        -0.0006956782713085,
         0.05,
         50
     ],
     "cellDepositionSigma": [
         -20,
-        30,
+        20,
         50
     ],
     "cellSensationSigma": [
         -20,
-        30,
+        20,
         50
     ],
     "poissonLambda": [
-        -3,
-        2,
+        -2,
+        3,
         50
     ],
     "kappa": [
-        -0.4,
+        -0.1270508203281312,
         2,
         50
     ],
     "matrixKappa": [
-        -2,
+        -3.1368547418967587,
         4,
         50
     ],
     "homotypicInhibition": [
-        -0.5,
+        -0.8974189675870348,
         0.05,
         50
     ],
@@ -45,28 +45,28 @@
         50
     ],
     "polarityTurningCoupling": [
-        -0.1,
-        6,
+        -0.921968787515006,
+        5,
         50
     ],
     "flowScaling": [
-        -1,
-        3,
+        -2,
+        2,
         50
     ],
     "flowPolarityCoupling": [
-        -0.4,
-        5,
+        -0.5,
+        4,
         50
     ],
     "collisionRepolarisation": [
         0.05,
-        0.5,
+        0.25,
         50
     ],
     "repolarisationRate": [
         -0.3,
-        0.65,
+        0.5,
         50
     ]
 }

@@ -16,9 +16,10 @@ def main():
 
     header = True
     with open("./summary_dataframe.csv", 'w') as summary_buffer, \
-         open("./particle_dataframe.csv", 'w') as particle_buffer:
+         open("./particle_dataframe.csv", 'w') as particle_buffer, \
+         open("./vortex_dataframe.csv", 'w') as vortex_buffer:
 
-        for folder_id in range(1, 2 + 1):
+        for folder_id in range(1, 700 + 1):
             # Ensuring correct .csv appending behaviour:
             mode = 'w' if header else 'a'
 
@@ -35,13 +36,25 @@ def main():
             # Reading in all dataframes:
             try:
                 trajectory_data = pd.read_csv(summary_filepath, index_col=0)
+                trajectory_data.to_csv(
+                    summary_buffer,
+                    mode=mode, header=header, index=False,
+                    float_format='%.8f'
+                )
+
+                # Vortex data requires a bit more handling:
                 vortex_data = pd.read_csv(vortex_filepath, index_col=0)
+                mask = gridseach_dataframe["array_id"] == folder_id
+                parameter_data = pd.concat(
+                    [gridseach_dataframe[mask]] * vortex_data.shape[0],
+                    axis=0, ignore_index=True
+                )
                 full_data = pd.concat(
-                    [trajectory_data, vortex_data],
+                    [parameter_data, vortex_data],
                     axis=1, ignore_index=False, join='inner'
                 )
                 full_data.to_csv(
-                    summary_buffer,
+                    vortex_buffer,
                     mode=mode, header=header, index=False,
                     float_format='%.8f'
                 )

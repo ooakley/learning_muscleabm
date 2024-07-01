@@ -58,7 +58,7 @@ PARAMETER_MODIFIERS = {
     "matrixTurnoverRate": [-BASE_PARAMETERS["matrixTurnoverRate"], 0.05, 50],
     "cellDepositionSigma": [-20, 20, 50],
     "cellSensationSigma": [-20, 20, 50],
-    "poissonLambda": [-2.5, 3, 50],
+    "poissonLambda": [-2, 3, 50],
     "kappa": [-BASE_PARAMETERS["kappa"], 2, 50],
     "matrixKappa": [-BASE_PARAMETERS["matrixKappa"], 4, 50],
     "homotypicInhibition": [-BASE_PARAMETERS["homotypicInhibition"], 0.05, 50],
@@ -120,8 +120,10 @@ def main():
             f.write("\n")
 
     # Write up summary of gridsearch parameters:
-    baseparams_filepath = os.path.join("fileOutputs", "base_parameters_summary.json")
-    modifiers_filepath = os.path.join("fileOutputs", "modifiers_summary.json")
+    # baseparams_filepath = os.path.join("fileOutputs", "base_parameters_summary.json")
+    baseparams_filepath = os.path.join("./", "base_parameters_summary.json")
+    # modifiers_filepath = os.path.join("fileOutputs", "modifiers_summary.json")
+    modifiers_filepath = os.path.join("./", "modifiers_summary.json")
 
     with open(baseparams_filepath, 'w') as writefile:
         json.dump(BASE_PARAMETERS, writefile, indent=4)
