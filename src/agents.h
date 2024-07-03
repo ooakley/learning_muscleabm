@@ -21,38 +21,37 @@ public:
 
     // Getters:
     // Getters for values that shouldn't change:
-    double getID();
-    double getHomotypicInhibitionRate();
-    double getCellType();
+    double getID() const;
+    double getHomotypicInhibitionRate() const;
+    double getCellType() const;
 
     // Persistent variable getters: (these variables represent aspects of the cell's "memory")
-    double getX();
-    double getY();
-    std::tuple<double, double> getPosition();
-    double getPolarity();
-    double getPolarityExtent();
-    std::vector<double> getAttachmentHistory();
+    double getX() const;
+    double getY() const;
+    std::tuple<double, double> getPosition() const;
+    double getPolarity() const;
+    double getPolarityExtent() const;
+    std::vector<double> getAttachmentHistory() const;
 
     // Instantaneous variable getters: (these variables are updated each timestep,
     // and represent the cell's percepts/actions)
-    double getMovementDirection();
-    double getActinFlow();
-    double getDirectionalInfluence();
-    double getDirectionalIntensity();
-    double getAverageAttachmentHeading();
-    double getDirectionalShift();
-    double getSampledAngle();
-
+    double getMovementDirection() const;
+    double getActinFlow() const;
+    double getDirectionalInfluence() const;
+    double getDirectionalIntensity() const;
+    // double getAverageAttachmentHeading() const;
+    double getDirectionalShift() const;
+    double getSampledAngle() const;
 
     // Setters:
     // Setters for simulation (moving cells around etc.):
     void setPosition(std::tuple<double, double> newPosition);
-    void setLocalCellHeadingState(boostMatrix::matrix<double> stateToSet);
+    void setLocalCellHeadingState(const boostMatrix::matrix<double>& stateToSet);
 
     // Setters for simulating cell perception (e.g. updating cell percepts):
-    void setLocalMatrixHeading(boostMatrix::matrix<double> matrixToSet);
-    void setLocalMatrixPresence(boostMatrix::matrix<double> matrixToSet);
-    void setContactStatus(boostMatrix::matrix<bool> stateToSet, int cellType);
+    void setLocalMatrixHeading(const boostMatrix::matrix<double>& matrixToSet);
+    void setLocalMatrixPresence(const boostMatrix::matrix<double>& matrixToSet);
+    void setContactStatus(const boostMatrix::matrix<bool>& stateToSet, int cellType);
 
     void setDirectionalInfluence(double setDirectionalInfluence);
     void setDirectionalIntensity(double setDirectiontalIntensity);
@@ -70,12 +69,14 @@ private:
     // Whether to simulate matrix interactions:
     bool thereIsMatrixInteraction;
 
-    // Position and physical characteristics:
+    // Dynamic cell state data:
     double x;
     double y;
     double polarityX;
     double polarityY;
     std::vector<double> attachmentHistory;
+
+    // Constant cell properties:
     double kappa;
     double matrixKappa;
     double polarityPersistence;
@@ -109,14 +110,14 @@ private:
 
     // Poisson sampling for step size:
     std::mt19937 generatorProtrusion;
+    double poissonLambda;
 
     // Levy sampling for step size:
     std::mt19937 generatorLevy;
     boost::math::normal_distribution<> normalDistribution;
-    double poissonLambda;
 
-    std::tuple<double, double> getAverageDeltaHeading();
-    double calculateCellDeltaTowardsECM(double ecmHeading, double cellHeading);
+    // std::tuple<double, double> getAverageDeltaHeading();
+    // double calculateCellDeltaTowardsECM(double ecmHeading, double cellHeading);
 
     // We need to use a special distribution (von Mises) to sample from a random
     // direction over a circle - unfortunately not included in std
@@ -151,9 +152,12 @@ private:
     double sampleLevyDistribution(double mu, double c);
 
     // Effectively a utility function for calculating the modulus of angles:
-    double angleMod(double angle);
-    double calculateMinimumAngularDistance(double headingA, double headingB);
-    double calculateAngularDistance(double headingA, double headingB);
-    double findPolarityDirection();
-    double findPolarityExtent();
+    double angleMod(double angle) const;
+    double calculateMinimumAngularDistance(double headingA, double headingB) const;
+    double calculateAngularDistance(double headingA, double headingB) const;
+    double findPolarityDirection() const;
+    double findPolarityExtent() const;
+
+    // Function to prevent 0 polarisation:
+    void safeZeroPolarisation();
 };

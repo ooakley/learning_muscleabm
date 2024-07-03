@@ -37,6 +37,8 @@ World::World
     , cellSensationSigma{setCellSensationSigma}
     , simulationTime{0}
     , cellParameters{setCellParameters}
+    , cellSensationKernel{generateGaussianKernel(setCellSensationSigma)}
+    , cellDepositionKernel{generateGaussianKernel(setCellDepositionSigma)}
 {
     // Initialising randomness:
     seedGenerator = std::mt19937(worldSeed);
@@ -57,10 +59,6 @@ World::World
     positionDistribution = std::uniform_real_distribution<double>(0, worldSideLength);
     headingDistribution = std::uniform_real_distribution<double>(-M_PI, M_PI);
     contactInhibitionDistribution  = std::uniform_real_distribution<double>(0, 1);
-
-    // Kernels:
-    cellSensationKernel = generateGaussianKernel(cellSensationSigma);
-    cellDepositionKernel = generateGaussianKernel(cellDepositionSigma);
 
     // Initialising cells:
     initialiseCellVector();
@@ -121,11 +119,11 @@ void World::initialiseCellVector() {
 
 CellAgent World::initialiseCell(int setCellID) {
     // Generating positions and randomness:
-    double startX{positionDistribution(xPositionGenerator)};
-    double startY{positionDistribution(yPositionGenerator)};
-    double startHeading{headingDistribution(headingGenerator)};
-    unsigned int setCellSeed{seedDistribution(cellSeedGenerator)};
-    double inhibitionBoolean{contactInhibitionDistribution(contactInhibitionGenerator)};
+    const double startX{positionDistribution(xPositionGenerator)};
+    const double startY{positionDistribution(yPositionGenerator)};
+    const double startHeading{headingDistribution(headingGenerator)};
+    const unsigned int setCellSeed{seedDistribution(cellSeedGenerator)};
+    const double inhibitionBoolean{contactInhibitionDistribution(contactInhibitionGenerator)};
 
     return CellAgent(
         startX, startY, startHeading,
@@ -159,13 +157,13 @@ void World::runSimulationStep() {
 
 void World::runCellStep(CellAgent& actingCell) {
     // Getting initial cell position:
-    std::tuple<double, double> cellStart{actingCell.getPosition()};
+    const std::tuple<double, double> cellStart{actingCell.getPosition()};
 
     // // Setting cell percepts:
 
     // Calculating matrix percept:
     // Setting percepts of local matrix:
-    auto [angleAverage, angleIntensity] = getAverageDeltaHeading(actingCell);
+    const auto [angleAverage, angleIntensity] = getAverageDeltaHeading(actingCell);
     actingCell.setDirectionalInfluence(angleAverage);
     actingCell.setDirectionalIntensity(angleIntensity);
 
@@ -204,7 +202,7 @@ void World::runCellStep(CellAgent& actingCell) {
     actingCell.takeRandomStep();
 
     // Calculate and set effects of cell on world:
-    std::tuple<double, double> cellFinish{actingCell.getPosition()};
+    const std::tuple<double, double> cellFinish{actingCell.getPosition()};
     setMovementOnMatrix(
         cellStart, cellFinish,
         actingCell.getMovementDirection(), actingCell.getPolarityExtent()
@@ -308,19 +306,18 @@ std::tuple<int, int> World::rollIndex(int i, int j) {
 
 std::tuple<double, double> World::getAverageDeltaHeading(CellAgent queryCell) {
     // Generate kernel:
-    int numRows = cellSensationKernel.size1();
-    int numCols = cellSensationKernel.size2();
-    int center{(numRows - 1) / 2};
+    const int numRows = cellSensationKernel.size1();
+    const int numCols = cellSensationKernel.size2();
+    const int center{(numRows - 1) / 2};
     assert(numRows == numCols);
 
     // Finding centre ECM element:
-    double polarityDirection{queryCell.getPolarity()};
-    auto [iECM, jECM] = getECMIndexFromLocation(queryCell.getPosition());
+    const double polarityDirection{queryCell.getPolarity()};
+    const auto [iECM, jECM] = getECMIndexFromLocation(queryCell.getPosition());
 
     // Getting all headings:
     double sineMean{0};
     double cosineMean{0};
-
     
     #pragma omp parallel for reduction(+:sineMean,cosineMean)
     for (int i = 0; i < numRows; ++i)
@@ -328,15 +325,15 @@ std::tuple<double, double> World::getAverageDeltaHeading(CellAgent queryCell) {
         for (int j = 0; j < numCols; ++j)
         {
             // Getting rolled-over indices for ECM matrix:
-            int rowOffset{i - center};
-            int columnOffset{j - center};
-            auto [iSafe, jSafe] = rollIndex(iECM + rowOffset, jECM + columnOffset);
+            const int rowOffset{i - center};
+            const int columnOffset{j - center};
+            const auto [iSafe, jSafe] = rollIndex(iECM + rowOffset, jECM + columnOffset);
 
             // Getting all weightings from kernel & matrix density:
-            double ecmHeading{ecmField.getHeading(iSafe, jSafe)};
-            double ecmDensity{ecmField.getMatrixPresent(iSafe, jSafe)};
-            double kernelWeighting{cellSensationKernel(i, j)};
-            double deltaHeading{
+            const double ecmHeading{ecmField.getHeading(iSafe, jSafe)};
+            const double ecmDensity{ecmField.getMatrixPresent(iSafe, jSafe)};
+            const double kernelWeighting{cellSensationKernel(i, j)};
+            const double deltaHeading{
                 calculateCellDeltaTowardsECM(ecmHeading, polarityDirection)
             };
 
@@ -388,7 +385,7 @@ double World::calculateCellDeltaTowardsECM(double ecmHeading, double cellHeading
 boostMatrix::matrix<double> World::generateGaussianKernel(double sigma) {
     // Determine size of kernel:
     // -- Getting size of sigma in matrix units:
-    double sigmaMatrix{sigma / lengthECMElement};
+    const double sigmaMatrix{sigma / lengthECMElement};
     int kernelSize{(int(3 * sigmaMatrix)*2) + 1}; // Capturing variance up to 3 sigma.
     if (kernelSize < 3) {
         std::cout << "Warning - Deposition or sensation kernel radius too small for current matrix mesh size." << std::endl;
@@ -397,20 +394,24 @@ boostMatrix::matrix<double> World::generateGaussianKernel(double sigma) {
 
     // Creating matrix:
     boostMatrix::matrix<double> kernel(kernelSize, kernelSize, 0);
-    int centerValue{(kernelSize-1) / 2};
+    const int centerValue{(kernelSize-1) / 2};
 
     // Setting kernel values:
     double normalisation{0};
     for (int i = 0; i < kernelSize; ++i) {
         for (int j = 0; j < kernelSize; ++j) {
-            int y{i - centerValue};
-            int x{j - centerValue};
-            double exponent{-0.5*(std::pow(x / sigmaMatrix, 2.0) + std::pow(y / sigmaMatrix, 2.0))};
+            // Getting location and thus Gaussian value:
+            const int y{i - centerValue};
+            const int x{j - centerValue};
+            const double exponent{-0.5*(std::pow(x / sigmaMatrix, 2.0) + std::pow(y / sigmaMatrix, 2.0))};
+
+            // Assigning value to kernel:
             kernel(i, j) = std::exp(exponent);
             normalisation += kernel(i, j);
         }
     }
 
+    // Normalising kernel so deposition is constant for different sigma values:
     kernel /= normalisation;
 
     return kernel;

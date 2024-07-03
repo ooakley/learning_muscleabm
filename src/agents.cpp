@@ -112,26 +112,26 @@ CellAgent::CellAgent(
 
 // Getters:
 // Getters for values that shouldn't change:
-double CellAgent::getID() {return cellID;}
-double CellAgent::getHomotypicInhibitionRate() {return homotypicInhibitionRate;}
-double CellAgent::getCellType() {return cellType;}
+double CellAgent::getID() const {return cellID;}
+double CellAgent::getHomotypicInhibitionRate() const {return homotypicInhibitionRate;}
+double CellAgent::getCellType() const {return cellType;}
 
 // Persistent variable getters: (these variables represent aspects of the cell's "memory")
-double CellAgent::getX() {return x;}
-double CellAgent::getY() {return y;}
-std::tuple<double, double> CellAgent::getPosition() {return std::tuple<double, double>{x, y};}
-double CellAgent::getPolarity() {return findPolarityDirection();}
-double CellAgent::getPolarityExtent() {return findPolarityExtent();}
-std::vector<double> CellAgent::getAttachmentHistory() {return attachmentHistory;}
+double CellAgent::getX() const {return x;}
+double CellAgent::getY() const {return y;}
+std::tuple<double, double> CellAgent::getPosition() const {return std::tuple<double, double>{x, y};}
+double CellAgent::getPolarity() const {return findPolarityDirection();}
+double CellAgent::getPolarityExtent() const {return findPolarityExtent();}
+std::vector<double> CellAgent::getAttachmentHistory() const {return attachmentHistory;}
 
 // Instantaneous variable getters: (these variables are updated each timestep,
 // and represent the cell's percepts)
-double CellAgent::getMovementDirection() {return movementDirection;}
-double CellAgent::getActinFlow() {return actinFlow;}
-double CellAgent::getDirectionalInfluence() {return directionalInfluence;}
-double CellAgent::getDirectionalIntensity() {return directionalIntensity;}
-double CellAgent::getDirectionalShift() {return directionalShift;}
-double CellAgent::getSampledAngle() {return sampledAngle;}
+double CellAgent::getMovementDirection() const {return movementDirection;}
+double CellAgent::getActinFlow() const {return actinFlow;}
+double CellAgent::getDirectionalInfluence() const {return directionalInfluence;}
+double CellAgent::getDirectionalIntensity() const {return directionalIntensity;}
+double CellAgent::getDirectionalShift() const {return directionalShift;}
+double CellAgent::getSampledAngle() const {return sampledAngle;}
 
 
 // Setters:
@@ -140,7 +140,7 @@ void CellAgent::setPosition(std::tuple<double, double> newPosition) {
     y = std::get<1>(newPosition);
 }
 
-void CellAgent::setContactStatus(boostMatrix::matrix<bool> stateToSet, int cellType) {
+void CellAgent::setContactStatus(const boostMatrix::matrix<bool>& stateToSet, int cellType) {
     if (cellType == 0) {
         cellType0ContactState = stateToSet;
     } else {
@@ -148,15 +148,15 @@ void CellAgent::setContactStatus(boostMatrix::matrix<bool> stateToSet, int cellT
     }
 }
 
-void CellAgent::setLocalCellHeadingState(boostMatrix::matrix<double> stateToSet) {
+void CellAgent::setLocalCellHeadingState(const boostMatrix::matrix<double>& stateToSet) {
     localCellHeadingState = stateToSet;
 }
 
-void CellAgent::setLocalMatrixHeading(boostMatrix::matrix<double> stateToSet) {
+void CellAgent::setLocalMatrixHeading(const boostMatrix::matrix<double>& stateToSet) {
     localMatrixHeading = stateToSet;
 }
 
-void CellAgent::setLocalMatrixPresence(boostMatrix::matrix<double> stateToSet) {
+void CellAgent::setLocalMatrixPresence(const boostMatrix::matrix<double>& stateToSet) {
     localMatrixPresence = stateToSet;
 }
 
@@ -244,7 +244,7 @@ void CellAgent::takeRandomStep() {
     // actinFlow = sampleLevyDistribution(0, 1);
 
     std::poisson_distribution<int> protrusionDistribution(findPolarityExtent()*poissonLambda);
-    int protrusionCount{protrusionDistribution(generatorProtrusion)};
+    const int protrusionCount{protrusionDistribution(generatorProtrusion)};
 
     actinFlow = protrusionCount;
 
@@ -277,10 +277,12 @@ void CellAgent::takeRandomStep() {
         newPolarityExtent = 1;
     }
     assert(newPolarityExtent <= 1);
-    double direction{std::atan2(newPolarityY, newPolarityX)};
-    polarityX = newPolarityExtent * cos(direction);
-    polarityY = newPolarityExtent * sin(direction);
+    const double newPolarityDirection{std::atan2(newPolarityY, newPolarityX)};
+    polarityX = newPolarityExtent * cos(newPolarityDirection);
+    polarityY = newPolarityExtent * sin(newPolarityDirection);
 
+    // Check for valid low polarisation values:
+    safeZeroPolarisation();
 }
 
 
@@ -398,14 +400,14 @@ double CellAgent::sampleLevyDistribution(double mu, double c) {
 }
 
 
-double CellAgent::angleMod(double angle) {
+double CellAgent::angleMod(double angle) const {
     while (angle < -M_PI) {angle += 2*M_PI;};
     while (angle >= M_PI) {angle -= 2*M_PI;};
     return angle;
 }
 
 
-double CellAgent::calculateAngularDistance(double headingA, double headingB) {
+double CellAgent::calculateAngularDistance(double headingA, double headingB) const {
     // Calculating change in theta:
     double deltaHeading{headingA - headingB};
     while (deltaHeading <= -M_PI) {deltaHeading += 2*M_PI;}
@@ -414,7 +416,7 @@ double CellAgent::calculateAngularDistance(double headingA, double headingB) {
 }
 
 
-double CellAgent::calculateMinimumAngularDistance(double headingA, double headingB) {
+double CellAgent::calculateMinimumAngularDistance(double headingA, double headingB) const {
     // Calculating change in theta:
     double deltaHeading{headingA - headingB};
     while (deltaHeading <= -M_PI) {deltaHeading += 2*M_PI;}
@@ -438,19 +440,12 @@ double CellAgent::calculateMinimumAngularDistance(double headingA, double headin
 }
 
 
-double CellAgent::findPolarityDirection() {
-    if ((polarityY == 0) & (polarityX == 0)) {
-        double newAngle{angleUniformDistribution(generatorRandomRepolarisation)};
-        polarityX = std::cos(newAngle) * 1e-5;
-        polarityY = std::sin(newAngle) * 1e-5;
-        return newAngle;
-    } else {
-        return std::atan2(polarityY, polarityX);
-    };
+double CellAgent::findPolarityDirection() const {
+    return std::atan2(polarityY, polarityX);
 };
 
 
-double CellAgent::findPolarityExtent() {
+double CellAgent::findPolarityExtent() const {
     double polarityExtent{
         std::sqrt(
             std::pow(polarityX, 2) +
@@ -459,6 +454,15 @@ double CellAgent::findPolarityExtent() {
     };
     assert(polarityExtent <= 1.0);
     return polarityExtent;
+};
+
+
+void CellAgent::safeZeroPolarisation() {
+    if ((polarityY == 0) & (polarityX == 0)) {
+        double newAngle{angleUniformDistribution(generatorRandomRepolarisation)};
+        polarityX = std::cos(newAngle) * 1e-5;
+        polarityY = std::sin(newAngle) * 1e-5;
+    }
 };
 
 

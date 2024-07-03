@@ -11,12 +11,13 @@ endif()
 set(CMAKE_CXX_FLAGS "-Wall -Wextra")
 set(CMAKE_CXX_FLAGS_DEBUG "-g")
 set(CMAKE_CXX_FLAGS_RELEASE "-O2")
-
 message(STATUS ${CMAKE_BUILD_TYPE})
 
 add_definitions("-DBOOST_ALLOW_DEPRECATED_HEADERS")
 add_definitions("-DBOOST_BIND_GLOBAL_PLACEHOLDERS")
 enable_testing()
+
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 # Command line flags to force use of non-apple clang:
 # cmake -B . -S .. -DCMAKE_C_COMPILER=/opt/homebrew/bin/gcc-13 -DCMAKE_CXX_COMPILER=/opt/homebrew/bin/g++-13

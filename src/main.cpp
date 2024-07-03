@@ -17,7 +17,7 @@ namespace po = boost::program_options;
 
 /*
 Hello! There are a lot of command line arguments, for which I apologise. It makes
-parallelisation easier. If you'd just like to run the simulation, here's what you can paste into
+parallelisation on the cluster easier. If you'd just like to run the simulation, here's what you can paste into
 the terminal after compiling the code:
 ./build/src/main --jobArrayID 1 --superIterationCount 10 --timestepsToRun 576 --numberOfCells 70 \
 --worldSize 2048 --gridSize 32 \
@@ -135,13 +135,13 @@ int main(int argc, char** argv) {
     }
 
     // Creating output directory if not present:
-    std::string directoryPath{"./fileOutputs/"};
+    const std::string directoryPath{"./fileOutputs/"};
     if (!boostfs::exists(directoryPath)) {
         boostfs::create_directory(directoryPath);
     }
 
     // Generating subdirectory to store simulation results:
-    std::string subdirectoryPath{directoryPath + std::to_string(jobArrayID) + "/"};
+    const std::string subdirectoryPath{directoryPath + std::to_string(jobArrayID) + "/"};
     if (!boostfs::exists(subdirectoryPath)) {
         boostfs::create_directory(subdirectoryPath);
     }
@@ -161,10 +161,10 @@ int main(int argc, char** argv) {
         std::cout << "Iteration: " << iterationString << "\n";
 
         // Generating filepath & filename:
-        std::string positionsFilename{
+        const std::string positionsFilename{
             subdirectoryPath + "positions_seed" + iterationString + ".csv"
         };
-        std::string matrixFilename{
+        const std::string matrixFilename{
             subdirectoryPath + "matrix_seed" + iterationString + ".txt"
         };
 

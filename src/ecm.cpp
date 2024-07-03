@@ -27,29 +27,29 @@ ECMField::ECMField(
 }
 
 // Getters:
-boostMatrix::matrix<double> ECMField::getECMHeadingMatrix() {
+boostMatrix::matrix<double> ECMField::getECMHeadingMatrix() const {
     return ecmHeadingMatrix;
 }
 
-double ECMField::getHeading(std::tuple<double, double> position) {
+double ECMField::getHeading(std::tuple<double, double> position) const {
     auto [i, j] = getMatrixIndexFromLocation(position);
     return ecmHeadingMatrix(i, j);
 }
-double ECMField::getHeading(int i, int j) {
+double ECMField::getHeading(int i, int j) const {
     return ecmHeadingMatrix(i, j);
 }
 
-double ECMField::getMatrixPresent(std::tuple<double, double> position) {
+double ECMField::getMatrixPresent(std::tuple<double, double> position) const {
     auto [i, j] = getMatrixIndexFromLocation(position);
     return ecmPresentMatrix(i, j);
 }
-double ECMField::getMatrixPresent(int i, int j) {
+double ECMField::getMatrixPresent(int i, int j) const {
     return ecmPresentMatrix(i, j);
 }
 
 std::tuple<double, double> ECMField::getAverageDeltaHeadingAroundPosition(
     std::tuple<double, double> position, double cellHeading
-)
+) const
 {
     auto [i, j] = getMatrixIndexFromLocation(position);
     std::array<int, 3> rowScan = {i-1, i, i+1};
@@ -93,7 +93,8 @@ std::tuple<double, double> ECMField::getAverageDeltaHeadingAroundPosition(
 
 boostMatrix::matrix<bool> ECMField::getCellTypeContactState(
     std::tuple<double, double> position, int cellType
-) {
+) const
+{
     auto [i, j] = getCollisionIndexFromLocation(position);
     // Asserting counting is working as expected:
     assert((cellType0CountMatrix(i, j) >= 1 ) || (cellType1CountMatrix(i, j) >= 1));
@@ -128,7 +129,7 @@ boostMatrix::matrix<bool> ECMField::getCellTypeContactState(
     return cellTypeContactState;
 }
 
-boostMatrix::matrix<double> ECMField::getLocalCellHeadingState(std::tuple<double, double> position) {
+boostMatrix::matrix<double> ECMField::getLocalCellHeadingState(std::tuple<double, double> position) const {
     auto [i, j] = getCollisionIndexFromLocation(position);
 
     // Asserting counting is working as expected:
@@ -162,7 +163,7 @@ boostMatrix::matrix<double> ECMField::getLocalCellHeadingState(std::tuple<double
     return localCellHeadingState;
 }
 
-boostMatrix::matrix<double> ECMField::getLocalMatrixHeading(std::tuple<double, double> position) {
+boostMatrix::matrix<double> ECMField::getLocalMatrixHeading(std::tuple<double, double> position) const {
     auto [i, j] = getMatrixIndexFromLocation(position);
     // Instantiating heading matrix:
     boostMatrix::matrix<double> localMatrix{boostMatrix::zero_matrix<double>(3, 3)};
@@ -190,7 +191,7 @@ boostMatrix::matrix<double> ECMField::getLocalMatrixHeading(std::tuple<double, d
     return localMatrix;
 };
 
-boostMatrix::matrix<double> ECMField::getLocalMatrixPresence(std::tuple<double, double> position) {
+boostMatrix::matrix<double> ECMField::getLocalMatrixPresence(std::tuple<double, double> position) const {
     auto [i, j] = getMatrixIndexFromLocation(position);
 
     // Instantiating heading matrix:
@@ -223,7 +224,7 @@ boostMatrix::matrix<double> ECMField::getLocalMatrixPresence(std::tuple<double, 
 // Setters:
 void ECMField::setSubMatrix(
     int iECM, int jECM, double heading, double polarity,
-    boostMatrix::matrix<double> kernel
+    const boostMatrix::matrix<double>& kernel
 ) {
     // auto [i, j] = getMatrixIndexFromLocation(position);
     // Getting kernel dimensions:
@@ -332,21 +333,21 @@ void ECMField::ageMatrix() {
 }
 
 // Utility functions:
-int ECMField::rollOverMatrixIndex(int index) {
+int ECMField::rollOverMatrixIndex(int index) const {
     while (index < 0) {
         index = index + matrixElementCount;
     }
     return index % matrixElementCount;
 }
 
-int ECMField::rollOverCollisionIndex(int index) {
+int ECMField::rollOverCollisionIndex(int index) const {
     while (index < 0) {
         index = index + collisionElementCount;
     }
     return index % collisionElementCount;
 }
 
-double ECMField::calculateCellDeltaTowardsECM(double ecmHeading, double cellHeading) {
+double ECMField::calculateCellDeltaTowardsECM(double ecmHeading, double cellHeading) const {
     // Ensuring input values are in the correct range:
     assert((ecmHeading >= 0) & (ecmHeading < M_PI));
     assert((cellHeading >= -M_PI) & (cellHeading < M_PI));
@@ -373,7 +374,7 @@ double ECMField::calculateCellDeltaTowardsECM(double ecmHeading, double cellHead
     }; 
 }
 
-double ECMField::calculateECMDeltaTowardsCell(double ecmHeading, double cellHeading) {
+double ECMField::calculateECMDeltaTowardsCell(double ecmHeading, double cellHeading) const {
     // Ensuring input values are in the correct range:
     assert((ecmHeading >= 0) & (ecmHeading < M_PI));
     assert((cellHeading >= -M_PI) & (cellHeading < M_PI));
@@ -399,7 +400,7 @@ double ECMField::calculateECMDeltaTowardsCell(double ecmHeading, double cellHead
     }; 
 }
 
-std::array<int, 2> ECMField::getMatrixIndexFromLocation(std::tuple<double, double> position) {
+std::array<int, 2> ECMField::getMatrixIndexFromLocation(std::tuple<double, double> position) const {
     auto [xPosition, yPosition] = position;
 
     int xIndex{int(std::floor(xPosition / ecmElementSize))};
@@ -408,7 +409,7 @@ std::array<int, 2> ECMField::getMatrixIndexFromLocation(std::tuple<double, doubl
     return std::array<int, 2>{{yIndex, xIndex}};
 }
 
-std::array<int, 2> ECMField::getCollisionIndexFromLocation(std::tuple<double, double> position) {
+std::array<int, 2> ECMField::getCollisionIndexFromLocation(std::tuple<double, double> position) const {
     auto [xPosition, yPosition] = position;
 
     int xIndex{int(std::floor(xPosition / collisionElementSize))};
