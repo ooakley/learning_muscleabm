@@ -56,6 +56,8 @@ public:
     void setDirectionalInfluence(double setDirectionalInfluence);
     void setDirectionalIntensity(double setDirectiontalIntensity);
 
+    void setLocalECMDensity(double setLocalDensity);
+
     // Simulation code:
     void takeRandomStep();
 
@@ -97,8 +99,10 @@ private:
     double actinFlow;
     double directionalInfluence; // -pi <= theta < pi
     double directionalIntensity; // 0 <= I < 1
+    double localECMDensity; // 0 <= D < 1
     double directionalShift; // -pi <= theta < pi
     double sampledAngle;
+
 
     // Percepts:
     boostMatrix::matrix<double> localMatrixHeading;

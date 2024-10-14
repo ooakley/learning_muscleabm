@@ -163,9 +163,10 @@ void World::runCellStep(CellAgent& actingCell) {
 
     // Calculating matrix percept:
     // Setting percepts of local matrix:
-    const auto [angleAverage, angleIntensity] = getAverageDeltaHeading(actingCell);
+    const auto [angleAverage, angleIntensity, localDensity] = getAverageDeltaHeading(actingCell);
     actingCell.setDirectionalInfluence(angleAverage);
     actingCell.setDirectionalIntensity(angleIntensity);
+    actingCell.setLocalECMDensity(localDensity);
 
     // actingCell.setLocalMatrixHeading(
     //     ecmField.getLocalMatrixHeading(cellStart)
@@ -304,7 +305,7 @@ std::tuple<int, int> World::rollIndex(int i, int j) {
 };
 
 
-std::tuple<double, double> World::getAverageDeltaHeading(CellAgent queryCell) {
+std::tuple<double, double, double> World::getAverageDeltaHeading(CellAgent queryCell) {
     // Generate kernel:
     const int numRows = cellSensationKernel.size1();
     const int numCols = cellSensationKernel.size2();
@@ -318,6 +319,7 @@ std::tuple<double, double> World::getAverageDeltaHeading(CellAgent queryCell) {
     // Getting all headings:
     double sineMean{0};
     double cosineMean{0};
+    double localDensity{0};
     
     #pragma omp parallel for reduction(+:sineMean,cosineMean)
     for (int i = 0; i < numRows; ++i)
@@ -340,6 +342,7 @@ std::tuple<double, double> World::getAverageDeltaHeading(CellAgent queryCell) {
             // Taking reduction:
             sineMean += std::sin(deltaHeading) * ecmDensity * kernelWeighting;
             cosineMean += std::cos(deltaHeading) * ecmDensity * kernelWeighting;
+            localDensity += ecmDensity * kernelWeighting;
         }
     }
 
@@ -351,7 +354,7 @@ std::tuple<double, double> World::getAverageDeltaHeading(CellAgent queryCell) {
         std::sqrt(std::pow(sineMean, 2) + std::pow(cosineMean, 2))
     };
 
-    return {angleAverage, angleIntensity};
+    return {angleAverage, angleIntensity, localDensity};
 }
 
 

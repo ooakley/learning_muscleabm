@@ -92,7 +92,7 @@ private:
     );
 
     // Calculating percepts for cells:
-    std::tuple<double, double> getAverageDeltaHeading(CellAgent queryCell);
+    std::tuple<double, double, double> getAverageDeltaHeading(CellAgent queryCell);
     double calculateCellDeltaTowardsECM(double ecmHeading, double cellHeading);
 
     // World utility functions:

@@ -9,8 +9,8 @@ def main():
 
     run_command = \
         f"./build/src/main \
-        --jobArrayID 8 \
-        --superIterationCount 20 \
+        --jobArrayID 3 \
+        --superIterationCount 10 \
         --timestepsToRun 5760 \
         --numberOfCells 70 \
         --worldSize 2048 \

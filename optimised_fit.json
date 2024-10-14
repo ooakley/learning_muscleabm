@@ -5,7 +5,7 @@
     "worldSize": 2048.0,
     "gridSize": 32.0,
     "cellTypeProportions": 0.0,
-    "matrixAdditionRate": 0.1652060824329732,
+    "matrixAdditionRate": 0.075,
     "matrixTurnoverRate": 0.0006956782713085,
     "cellDepositionSigma": 71.00240096038415,
     "cellSensationSigma": 71.95878351340536,

@@ -55,6 +55,7 @@ CellAgent::CellAgent(
     , actinFlow{0}
     , directionalInfluence{0}
     , directionalIntensity{0}
+    , localECMDensity{0}
     , directionalShift{0}
     , sampledAngle{0}
     , kappa{setKappa}
@@ -168,6 +169,10 @@ void CellAgent::setDirectionalIntensity(double setDirectiontalIntensity) {
     directionalIntensity = setDirectiontalIntensity;
 };
 
+void CellAgent::setLocalECMDensity(double setLocalDensity) {
+    localECMDensity = setLocalDensity;
+};
+
 
 // Simulation code:
 void CellAgent::takeRandomStep() {
@@ -249,8 +254,8 @@ void CellAgent::takeRandomStep() {
     actinFlow = protrusionCount;
 
     // // Update position:
-    double dx{actinFlow * cos(movementDirection) * flowScaling};
-    double dy{actinFlow * sin(movementDirection) * flowScaling};
+    double dx{actinFlow * cos(movementDirection) * flowScaling * std::pow(localECMDensity, 2)};
+    double dy{actinFlow * sin(movementDirection) * flowScaling * std::pow(localECMDensity, 2)};
     x = x + dx;
     y = y + dy;
 
@@ -261,7 +266,6 @@ void CellAgent::takeRandomStep() {
 
     // Trying out extent-defined persistence:
     // double testPersistence{findPolarityExtent()};
-
     double newPolarityX{polarityPersistence*polarityX + (1-polarityPersistence)*polarityChangeX};
     double newPolarityY{polarityPersistence*polarityY + (1-polarityPersistence)*polarityChangeY};
 
