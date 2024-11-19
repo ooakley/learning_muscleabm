@@ -73,6 +73,8 @@ private:
     std::mt19937 headingGenerator;
     std::mt19937 contactInhibitionGenerator;
 
+    std::mt19937 kernelSamplingGenerator;
+
     // Distributions for seeding position and initial heading:
     std::uniform_real_distribution<double> positionDistribution;
     std::uniform_real_distribution<double> headingDistribution;
@@ -90,9 +92,15 @@ private:
         std::tuple<double, double> cellFinish,
         double cellHeading, double cellPolarity
     );
+    void depositAtAttachments(
+        std::vector<std::tuple<int, int>> attachmentIndices,
+        double heading, double polarity, double weighting
+    );
 
     // Calculating percepts for cells:
     std::tuple<double, double, double> getAverageDeltaHeading(CellAgent queryCell);
+    std::tuple<double, double, double, std::vector<std::tuple<int, int>>>
+        sampleAttachmentHeadings(CellAgent queryCell);
     double calculateCellDeltaTowardsECM(double ecmHeading, double cellHeading);
 
     // World utility functions:

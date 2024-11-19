@@ -17,7 +17,9 @@ ECMField::ECMField(
     , ecmElementSize{setFieldSize / setMatrixElements}
     , collisionElementSize{setFieldSize / setCollisionElements}
     , ecmHeadingMatrix{boostMatrix::zero_matrix<double>(matrixElementCount, matrixElementCount)}
-    , ecmPresentMatrix{boostMatrix::zero_matrix<double>(matrixElementCount, matrixElementCount)}
+    , ecmDensityMatrix{boostMatrix::zero_matrix<double>(matrixElementCount, matrixElementCount)}
+    , ecmAnisotropyMatrix{boostMatrix::zero_matrix<double>(matrixElementCount, matrixElementCount)}
+    , ecmUpdateWeightMatrix{boostMatrix::zero_matrix<double>(matrixElementCount, matrixElementCount)}
     , cellType0CountMatrix{boostMatrix::zero_matrix<int>(collisionElementCount, collisionElementCount)}
     , cellType1CountMatrix{boostMatrix::zero_matrix<int>(collisionElementCount, collisionElementCount)}
     , cellHeadingMatrix{boostMatrix::zero_matrix<double>(collisionElementCount, collisionElementCount)}
@@ -39,12 +41,28 @@ double ECMField::getHeading(int i, int j) const {
     return ecmHeadingMatrix(i, j);
 }
 
-double ECMField::getMatrixPresent(std::tuple<double, double> position) const {
+double ECMField::getMatrixDensity(std::tuple<double, double> position) const {
     auto [i, j] = getMatrixIndexFromLocation(position);
-    return ecmPresentMatrix(i, j);
+    return ecmDensityMatrix(i, j);
 }
-double ECMField::getMatrixPresent(int i, int j) const {
-    return ecmPresentMatrix(i, j);
+double ECMField::getMatrixDensity(int i, int j) const {
+    return ecmDensityMatrix(i, j);
+}
+
+double ECMField::getMatrixAnisotropy(std::tuple<double, double> position) const {
+    auto [i, j] = getMatrixIndexFromLocation(position);
+    return ecmDensityMatrix(i, j);
+}
+double ECMField::getMatrixAnisotropy(int i, int j) const {
+    return ecmDensityMatrix(i, j);
+}
+
+double ECMField::getMatrixWeighting(std::tuple<double, double> position) const {
+    auto [i, j] = getMatrixIndexFromLocation(position);
+    return ecmUpdateWeightMatrix(i, j);
+}
+double ECMField::getMatrixWeighting(int i, int j) const {
+    return ecmUpdateWeightMatrix(i, j);
 }
 
 std::tuple<double, double> ECMField::getAverageDeltaHeadingAroundPosition(
@@ -191,7 +209,7 @@ boostMatrix::matrix<double> ECMField::getLocalMatrixHeading(std::tuple<double, d
     return localMatrix;
 };
 
-boostMatrix::matrix<double> ECMField::getLocalMatrixPresence(std::tuple<double, double> position) const {
+boostMatrix::matrix<double> ECMField::getLocalMatrixDensity(std::tuple<double, double> position) const {
     auto [i, j] = getMatrixIndexFromLocation(position);
 
     // Instantiating heading matrix:
@@ -208,7 +226,7 @@ boostMatrix::matrix<double> ECMField::getLocalMatrixPresence(std::tuple<double, 
         for (auto & column : columnScan)
         {
             int safeColumn{rollOverMatrixIndex(column)};
-            localMatrix(k, l) = ecmPresentMatrix(safeRow, safeColumn);
+            localMatrix(k, l) = ecmDensityMatrix(safeRow, safeColumn);
 
             // Incrementing column index for local matrix:
             l++;
@@ -248,6 +266,10 @@ void ECMField::setSubMatrix(
     }
 }
 
+void ECMField::setIndividualECMLattice(int i, int j, double heading, double polarity, double weighting) {
+    addToMatrix(i, j, heading, polarity, weighting);
+}
+
 void ECMField::setCellPresence(std::tuple<double, double> position, int cellType, double cellHeading) {
     auto [i, j] = getCollisionIndexFromLocation(position);
     // Adding to cell count matrices:
@@ -279,25 +301,24 @@ void ECMField::removeCellPresence(std::tuple<double, double> position, int cellT
 // Simulation functions:
 void ECMField::addToMatrix(int i, int j, double cellHeading, double polarity, double kernelWeighting) {
     // If no matrix present, set to cellHeading:
-    if (ecmPresentMatrix(i, j) == 0) {
+    if (ecmDensityMatrix(i, j) == 0) {
         double newECMHeading{cellHeading};
         if (newECMHeading < 0) {newECMHeading += M_PI;};
         ecmHeadingMatrix(i, j) = newECMHeading;
-        ecmPresentMatrix(i, j) = polarity*kernelWeighting*matrixAdditionRate;
+        ecmDensityMatrix(i, j) = polarity*kernelWeighting*matrixAdditionRate;
+        ecmAnisotropyMatrix(i, j) = 0;
+        ecmUpdateWeightMatrix(i, j) += polarity*kernelWeighting*matrixAdditionRate;
         return;
     };
 
-    assert(ecmPresentMatrix(i, j) != 0);
-    assert(ecmPresentMatrix(i, j) <= 1);
+    assert(ecmDensityMatrix(i, j) != 0);
+    assert(ecmDensityMatrix(i, j) <= 1);
 
     // Calculating delta between cell heading and ecm heading:
     double currentECMHeading{ecmHeadingMatrix(i, j)};
-    double currentECMDensity{ecmPresentMatrix(i, j)};
+    double currentECMDensity{ecmDensityMatrix(i, j)};
     double smallestDeltaInECM{calculateECMDeltaTowardsCell(currentECMHeading, cellHeading)};
     double propsedECMHeading{currentECMHeading + smallestDeltaInECM};
-
-    // Persistence weighting:
-    // double currentPersistence{currentECMDensity*matrixPersistence};
 
     // Calculaing weighted average of current and proposed ECM:
     double combinedWeighting{polarity * kernelWeighting * matrixAdditionRate};
@@ -314,22 +335,46 @@ void ECMField::addToMatrix(int i, int j, double cellHeading, double polarity, do
         std::sqrt(std::pow(sineMean, 2) + std::pow(cosineMean, 2))
     };
 
-    // Ensuring ECM angles are not vectors:
+    // Ensuring ECM angles are within [0, pi] range:
     if (newECMHeading < 0) {newECMHeading += M_PI;};
     if (newECMHeading >= M_PI) {newECMHeading -= M_PI;};
     assert((newECMHeading >= 0) & (newECMHeading < M_PI));
+
+    // Updating anisotropy value:
+    // Taken from https://math.stackexchange.com/questions/102978/incremental-computation-of-standard-deviation
+    // double netWeightedUpdates{std::min(ecmUpdateWeightMatrix(i, j), 100.0)};
+    double netWeightedUpdates{ecmUpdateWeightMatrix(i, j)};
+    double currentAnisotropy{ecmAnisotropyMatrix(i, j)};
+    double headingDifferenceCurrentMean{smallestDeltaInECM};
+    double headingDifferenceNewMean{calculateECMDeltaTowardsCell(newECMHeading, cellHeading)};
+    double newAnisotropy{currentAnisotropy + combinedWeighting*headingDifferenceCurrentMean*headingDifferenceNewMean};
 
     // Setting matrix values:
     if (newECMDensity > 1) {
         const double epsilon{std::numeric_limits<double>::epsilon()};
         newECMDensity = 1 - epsilon;
     };
-    ecmPresentMatrix(i, j) = newECMDensity;
+    ecmDensityMatrix(i, j) = newECMDensity;
     ecmHeadingMatrix(i, j) = newECMHeading;
+    ecmAnisotropyMatrix(i, j) = newAnisotropy;
+    ecmUpdateWeightMatrix(i, j) += combinedWeighting;
 }
 
 void ECMField::ageMatrix() {
-    ecmPresentMatrix = ecmPresentMatrix - matrixTurnoverRate*(ecmPresentMatrix);
+    // Putting basic Michaelis-Menten Kinetics into a form that the Boost matrix library can understand:
+    boostMatrix::matrix<double> onesMatrix{boostMatrix::scalar_matrix<double>(matrixElementCount, matrixElementCount, 1)};
+    boostMatrix::matrix<double> reactionMatrix{
+        boostMatrix::element_div(ecmDensityMatrix, ecmDensityMatrix + (onesMatrix * 0.35))
+    };
+
+    // Simulating degradation of the ECM:
+    ecmDensityMatrix = ecmDensityMatrix - matrixTurnoverRate*reactionMatrix;
+}
+
+void ECMField::ageIndividualECMLattice(int i, int j) {
+    double localDensity{ecmDensityMatrix(i, j)};
+    double reactionTerm{(matrixTurnoverRate*localDensity) / (0.5 + localDensity)};
+    ecmDensityMatrix(i, j) = localDensity - reactionTerm;
 }
 
 // Utility functions:
@@ -398,6 +443,29 @@ double ECMField::calculateECMDeltaTowardsCell(double ecmHeading, double cellHead
         assert((std::abs(flippedHeading) <= M_PI/2));
         return flippedHeading;
     }; 
+}
+
+double ECMField::calculateMinimumAngularDistance(double headingA, double headingB) const {
+    // Calculating change in theta:
+    double deltaHeading{headingA - headingB};
+    while (deltaHeading <= -M_PI) {deltaHeading += 2*M_PI;}
+    while (deltaHeading > M_PI) {deltaHeading -= 2*M_PI;}
+
+    double flippedHeading;
+    if (deltaHeading < 0) {
+        flippedHeading = M_PI + deltaHeading;
+    } else {
+        flippedHeading = -(M_PI - deltaHeading);
+    }
+
+    // Selecting smallest change in theta and ensuring correct range:
+    if (std::abs(deltaHeading) < std::abs(flippedHeading)) {
+        assert((std::abs(deltaHeading) <= M_PI/2));
+        return deltaHeading;
+    } else {
+        assert((std::abs(flippedHeading) <= M_PI/2));
+        return flippedHeading;
+    };
 }
 
 std::array<int, 2> ECMField::getMatrixIndexFromLocation(std::tuple<double, double> position) const {

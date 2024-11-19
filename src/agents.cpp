@@ -176,34 +176,27 @@ void CellAgent::setLocalECMDensity(double setLocalDensity) {
 
 // Simulation code:
 void CellAgent::takeRandomStep() {
-    // // Calculating new attachment:
-    // if (thereIsMatrixInteraction) {
-    //     // Calculate mean for von mises distribution by taking average of local ECM:
-    //     double relativeECMDirection;
-    //     double ecmCoherence;
-    //     std::tie(relativeECMDirection, ecmCoherence) = getAverageDeltaHeading();
-
-    //     // Recording values as member variables to be output at end of global timestep:
-    //     directionalInfluence = relativeECMDirection;
-    //     directionalIntensity = ecmCoherence;
-    // }
-
     assert(directionalIntensity <= 1);
 
+    // localECMDensity = 0;
+
     // Determine protrusion - polarity centered or ECM centered:
-    double thresholdValue{findPolarityExtent() / (findPolarityExtent() + directionalIntensity)};
+    double thresholdValue{findPolarityExtent() / (findPolarityExtent() + localECMDensity)};
     assert(thresholdValue <= 1 && thresholdValue >= 0);
     double randomDeterminant{uniformDistribution(generatorInfluence)};
 
     if (randomDeterminant < thresholdValue) {
-        double angleDelta = sampleVonMises(
-            kappa + findPolarityExtent()*polarityTurningCoupling
-        );
+        // Calculate matrix direction selection parameters using MM kinetics
+        // - we're assuming directionality saturates at some value of kappa.
+        double currentPolarity{findPolarityExtent()};
+        double effectivePolarity{(polarityTurningCoupling * currentPolarity) / (kappa + currentPolarity)};
+        double angleDelta = sampleVonMises(effectivePolarity);
         movementDirection = angleMod(findPolarityDirection() + angleDelta);
     } else {
-        double angleDelta = sampleVonMises(
-            matrixKappa*directionalIntensity
-        );
+        // Calculate matrix direction selection parameters using MM kinetics
+        // - we're assuming directionality saturates at some value of kappa.
+        double effectiveKappa{(matrixKappa * directionalIntensity) / (0.2 + directionalIntensity)};
+        double angleDelta = sampleVonMises(effectiveKappa);
         movementDirection = angleMod(
             findPolarityDirection() + directionalInfluence + angleDelta
         );
@@ -236,30 +229,25 @@ void CellAgent::takeRandomStep() {
             effectiveRepolarisationRate*polarityChangeX;
         polarityY = (1-effectiveRepolarisationRate)*polarityY +
             effectiveRepolarisationRate*polarityChangeY;
-
     }
 
-    // Calculating actin flow in protrusion:
-
-    // std::weibull_distribution<double> weibullDistribution{
-    //     std::weibull_distribution<double>(actinModulatorK, actinModulatorLambda)
-    // };
-    // actinFlow = weibullDistribution(generatorWeibull);
-
-    // actinFlow = sampleLevyDistribution(0, 1);
-
-    std::poisson_distribution<int> protrusionDistribution(findPolarityExtent()*poissonLambda);
+    // Calculating actin flow in protrusion, via MM kinetics:
+    double effectivePolarity{(poissonLambda * findPolarityExtent()) / (0.1 + findPolarityExtent())};
+    std::poisson_distribution<int> protrusionDistribution(effectivePolarity);
     const int protrusionCount{protrusionDistribution(generatorProtrusion)};
 
     actinFlow = protrusionCount;
 
     // // Update position:
-    double dx{actinFlow * cos(movementDirection) * flowScaling * std::pow(localECMDensity, 2)};
-    double dy{actinFlow * sin(movementDirection) * flowScaling * std::pow(localECMDensity, 2)};
+    // * std::pow(localECMDensity, 2)
+    // * std::pow(localECMDensity, 2)
+    double dx{actinFlow * cos(movementDirection) * flowScaling};
+    double dy{actinFlow * sin(movementDirection) * flowScaling};
     x = x + dx;
     y = y + dy;
 
     // // Update polarity based on movement direction and actin flow:
+    // *localECMDensity
     double polarityChangeExtent{std::tanh(actinFlow*flowPolarityCoupling)};
     double polarityChangeX{polarityChangeExtent*cos(movementDirection)};
     double polarityChangeY{polarityChangeExtent*sin(movementDirection)};

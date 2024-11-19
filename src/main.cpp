@@ -191,10 +191,12 @@ int main(int argc, char** argv) {
         };
         for (int i = 0; i < timeStepsToRun; ++i) {
             mainWorld.runSimulationStep();
-            mainWorld.writePositionsToCSV(csvFile);
-            mainWorld.writeMatrixToCSV(matrixFile);
+            if (((i + 1) % 10) == 0) {
+                mainWorld.writePositionsToCSV(csvFile);
+                mainWorld.writeMatrixToCSV(matrixFile);
+            }
         }
-        
+
         // We need to close files to flush remaining outputs to buffer.
         csvFile.close();
         matrixFile.close();
