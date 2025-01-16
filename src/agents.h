@@ -9,14 +9,25 @@ class CellAgent {
 public:
     // Constructor and intialisation:
     CellAgent(
-        double startX, double startY, double startHeading,
-        unsigned int setCellSeed, int setCellID, int setCellType,
-        double setPoissonLambda, double setKappa, double setMatrixKappa,
-        double setHomotypicInhibition, double setHeterotypicInhibiton,
-        double setPolarityPersistence, double setPolarityTurningCoupling,
-        double setFlowScaling, double setFlowPolarityCoupling,
-        double setCollisionRepolarisation, double setRepolarisationRate,
-        double setPolarityNoiseSigma
+        // Defined behaviour parameters:
+        bool setMatrixInteraction, unsigned int setCellSeed, int setCellID,
+
+        // Cell motility and polarisation dynamics:
+        double setHalfSatCellAngularConcentration, double setMaxCellAngularConcentration,
+        double setHalfSatMeanActinFlow, double setMaxMeanActinFlow,
+        double setFlowScaling, double setPolarityPersistence,
+        double setActinPolarityRedistributionRate,
+        double setPolarityNoiseSigma,
+
+        // Matrix sensation parameters:
+        double setHalfSatMatrixAngularConcentration, double setMaxMatrixAngularConcentration,
+
+        // Collision parameters:
+        int setCellType, double setHomotypicInhibitionRate, double setHeterotypicInhibitionRate,
+        double setCollisionRepolarisation, double setCollisionRepolarisationRate,
+
+        // Randomised initial state parameters:
+        double startX, double startY, double startHeading
     );
 
     // Getters:
@@ -78,15 +89,22 @@ private:
     double polarityY;
     std::vector<double> attachmentHistory;
 
-    // Constant cell properties:
-    double kappa;
-    double matrixKappa;
-    double polarityPersistence;
-    double polarityTurningCoupling;
-    double flowPolarityCoupling;
+    // Polarisation and movement parameters:
+    double halfSatCellAngularConcentration;
+    double maxCellAngularConcentration;
+    double halfSatMeanActinFlow;
+    double maxMeanActinFlow;
     double flowScaling;
+    double actinPolarityRedistributionRate;
+    double polarityPersistence;
+
+    // Matrix sensation properties:
+    double halfSatMatrixAngularConcentration;
+    double maxMatrixAngularConcentration;
+
+    // Constant cell properties:
     double collisionRepolarisation;
-    double repolarisationRate;
+    double collisionRepolarisationRate;
 
     // Infrastructure for additive polarisation noise:
     double polarityNoiseSigma;
@@ -103,7 +121,6 @@ private:
     double directionalShift; // -pi <= theta < pi
     double sampledAngle;
 
-
     // Percepts:
     boostMatrix::matrix<double> localMatrixHeading;
     boostMatrix::matrix<double> localMatrixPresence;
@@ -119,9 +136,6 @@ private:
     // Levy sampling for step size:
     std::mt19937 generatorLevy;
     boost::math::normal_distribution<> normalDistribution;
-
-    // std::tuple<double, double> getAverageDeltaHeading();
-    // double calculateCellDeltaTowardsECM(double ecmHeading, double cellHeading);
 
     // We need to use a special distribution (von Mises) to sample from a random
     // direction over a circle - unfortunately not included in std

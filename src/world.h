@@ -5,9 +5,12 @@
 
 // Structure to store necessary parameters for the simulation:
 struct CellParameters {
-    double poissonLambda, kappa, matrixKappa, homotypicInhibition, heterotypicInhibition,
-    polarityPersistence, polarityTurningCoupling, flowScaling, flowPolarityCoupling,
-    collisionRepolarisation, repolarisationRate, polarityNoiseSigma;
+    double halfSatCellAngularConcentration, maxCellAngularConcentration,
+    halfSatMeanActinFlow, maxMeanActinFlow, flowScaling,
+    polarityPersistence, actinPolarityRedistributionRate, polarityNoiseSigma,
+    halfSatMatrixAngularConcentration, maxMatrixAngularConcentration,
+    homotypicInhibitionRate, heterotypicInhibitionRate,
+    collisionRepolarisation, collisionRepolarisationRate;
 };
 
 class World {
@@ -55,6 +58,7 @@ private:
 
     // Cell population characteristics:
     int numberOfCells;
+    int attachmentNumber;
     double cellTypeProportions;
     double cellDepositionSigma;
     double cellSensationSigma;

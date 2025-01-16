@@ -19,15 +19,19 @@ namespace po = boost::program_options;
 Hello! There are a lot of command line arguments, for which I apologise. It makes
 parallelisation on the cluster easier. If you'd just like to run the simulation, here's what you can paste into
 the terminal after compiling the code:
-./build/src/main --jobArrayID 1 --superIterationCount 10 --timestepsToRun 576 --numberOfCells 70 \
+./build/src/main \
+--jobArrayID 1 --superIterationCount 10 --timestepsToRun 576 --numberOfCells 70 \
 --worldSize 2048 --gridSize 32 \
 --cellTypeProportions 0 \
 --matrixAdditionRate 0.155 --matrixTurnoverRate 9.5e-4 \
 --cellDepositionSigma 70 --cellSensationSigma 70 \
---poissonLambda 5.325 --kappa 0.5 --matrixKappa 2.5 --homotypicInhibition 0.834 --heterotypicInhibition 0 \
---polarityPersistence 0.586 --polarityTurningCoupling 0.1 --flowScaling 2.3 \
---flowPolarityCoupling 0.495 --collisionRepolarisation 0.313 --repolarisationRate 0.58 \
---polarityNoiseSigma 0.01
+--halfSatCellAngularConcentration 0.5 --maxCellAngularConcentration 0.5 \
+--halfSatMeanActinFlow 0.5 --maxMeanActinFlow 0.5 \
+--flowScaling 0.5 --polarityPersistence 0.5 \
+--actinPolarityRedistributionRate 0.5 --polarityNoiseSigma 0.5 \
+--halfSatMatrixAngularConcentration 0.5 --maxMatrixAngularConcentration 0.5 \
+--homotypicInhibitionRate 0.5 --heterotypicInhibitionRate 0.5 \
+--collisionRepolarisation 0.5 --collisionRepolarisationRate 0.5
 */
 
 int main(int argc, char** argv) {
@@ -40,8 +44,8 @@ int main(int argc, char** argv) {
     int worldSize;
     int gridSize;
     double cellTypeProportions;
-    double matrixTurnoverRate;
     double matrixAdditionRate;
+    double matrixTurnoverRate;
     double cellDepositionSigma;
     double cellSensationSigma;
 
@@ -78,41 +82,47 @@ int main(int argc, char** argv) {
         ("matrixAdditionRate", po::value<double>(&matrixAdditionRate)->required(),
             "Stability of the matrix under reorientation by cell movement."
         )
-        ("poissonLambda", po::value<double>(&cellParams.poissonLambda)->required(),
-            "Maximum poission scale parameter"
+        ("halfSatCellAngularConcentration", po::value<double>(&cellParams.halfSatCellAngularConcentration)->required(),
+            "Degree of polarisation at which cell angular concentration reaches half its saturation value."
         )
-        ("kappa", po::value<double>(&cellParams.kappa)->required(),
-            "Von Mises distribution kappa parameter for cell intrinsic change in polarity."
+        ("maxCellAngularConcentration", po::value<double>(&cellParams.halfSatCellAngularConcentration)->required(),
+            "Maximum concentration of the angular distribution from which the cell draws its direction of motion."
         )
-        ("matrixKappa", po::value<double>(&cellParams.matrixKappa)->required(),
-            "Von Mises distribution kappa parameter for matrix induced change in polarity."
+        ("halfSatMeanActinFlow", po::value<double>(&cellParams.halfSatMeanActinFlow)->required(),
+            "Degree of polarisation at which cell movement per timeframe reaches half its saturation value."
         )
-        ("homotypicInhibition", po::value<double>(&cellParams.homotypicInhibition)->required(),
-            "Homotypic inhibition rate."
-        )
-        ("heterotypicInhibition", po::value<double>(&cellParams.heterotypicInhibition)->required(),
-            "Heterotypic inhibition rate."
-        )
-        ("polarityPersistence", po::value<double>(&cellParams.polarityPersistence)->required(),
-            "How quickly the polarity of a cell changes when it moves."
-        )
-        ("polarityTurningCoupling", po::value<double>(&cellParams.polarityTurningCoupling)->required(),
-            "Magnitude of the influence that polarity has on turning probability."
+        ("maxMeanActinFlow", po::value<double>(&cellParams.maxMeanActinFlow)->required(),
+            "Maximum mean actin flow per simulation step. Determines distribution from which cell step size is drawn."
         )
         ("flowScaling", po::value<double>(&cellParams.flowScaling)->required(),
-            "The scaling between the amount of actin flow and the cell step size."
+            "The number by which actin flow is multiplied to get actual distance travelled by the cell."
         )
-        ("flowPolarityCoupling", po::value<double>(&cellParams.flowPolarityCoupling)->required(),
-            "Magnitude of the influence that actin flow has on polarity."
-        )
-        ("collisionRepolarisation", po::value<double>(&cellParams.collisionRepolarisation)->required(),
-            "Size of the repolarisation induced by collision."
-        )
-        ("repolarisationRate", po::value<double>(&cellParams.repolarisationRate)->required(),
-            "Rate at which collisions induce repolarisation."
+        ("polarityPersistence", po::value<double>(&cellParams.polarityPersistence)->required(),
+            "The rate at which cell polarisation is updated from timestep to timestep."
+        )     
+        ("actinPolarityRedistributionRate", po::value<double>(&cellParams.actinPolarityRedistributionRate)->required(),
+            "The number by which actin flow is multiplied to get effective polarisation update."
         )
         ("polarityNoiseSigma", po::value<double>(&cellParams.polarityNoiseSigma)->required(),
-            "Size of additive Gaussian noise to add to polarity at every timestep."
+            "Size of random fluctuations in cellular polarisation values."
+        )
+        ("halfSatMatrixAngularConcentration", po::value<double>(&cellParams.halfSatMatrixAngularConcentration)->required(),
+            "The matrix density at which angular concentration conferred by the matrix reaches half its maximum value."
+        )
+        ("maxMatrixAngularConcentration", po::value<double>(&cellParams.maxMatrixAngularConcentration)->required(),
+            "The maximum angular concentration conferred by orientational cues in the matrix."
+        )
+        ("homotypicInhibitionRate", po::value<double>(&cellParams.homotypicInhibitionRate)->required(),
+            "Likelihood that of two cells of the same type will collide if in contact for a given timestep."
+        )
+        ("heterotypicInhibitionRate", po::value<double>(&cellParams.heterotypicInhibitionRate)->required(),
+            "Likelihood that of two cells of different types will collide if in contact for a given timestep."
+        )
+        ("collisionRepolarisation", po::value<double>(&cellParams.collisionRepolarisation)->required(),
+            "The amount of polarisation that is conferred by collisions."
+        )
+        ("collisionRepolarisationRate", po::value<double>(&cellParams.collisionRepolarisationRate)->required(),
+            "The rate at which cellular polarisation is dragged to the collisionRepolarisation value."
         )
         ("cellDepositionSigma", po::value<double>(&cellDepositionSigma)->required(),
             "Standard deviation of gaussian kernel defining spatial extent of matrix deposition."

@@ -4,41 +4,73 @@
 class CellAgentTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        double startX{0}, startY{0}, startHeading{0}, setWbK{3}, setKappa{1};
         // Basic cell agent:
         cellAgent = new CellAgent(
-            startX, startY, startHeading,
-            0, 1, 1,
-            setWbK, setKappa, 1.5,
-            1, 0.2,
-            0.4, 0.75,
-            1, 1,
+            // Defined behaviour parameters:
+            false, 1, 1,
+
+            // Cell motility and polarisation dynamics:
             0.5, 0.5,
-            0.05
+            0.5, 0.5,
+            0.5, 0.5,
+            0.5, 0.5,
+
+            // Matrix sensation parameters:
+            0.5, 0.5,
+
+            // Collision parameters:
+            0,
+            0.5, 0.5,
+            0.5, 0.5,
+
+            // Randomised initial state parameters:
+            1, 1, 1
         );
 
         // Cell agent with the same random seed:
         cellAgentAlt = new CellAgent(
-            startX, startY, startHeading,
-            0, 1, 1,
-            setWbK, setKappa, 1.5,
-            1, 0.2,
-            0.4, 0.75,
-            1, 1,
+            // Defined behaviour parameters:
+            false, 1, 1,
+
+            // Cell motility and polarisation dynamics:
             0.5, 0.5,
-            0.05
+            0.5, 0.5,
+            0.5, 0.5,
+            0.5, 0.5,
+
+            // Matrix sensation parameters:
+            0.5, 0.5,
+
+            // Collision parameters:
+            0,
+            0.5, 0.5,
+            0.5, 0.5,
+
+            // Randomised initial state parameters:
+            1, 1, 1
         );
 
         // Cell agent with a different random seed:
         cellAgentDifferent = new CellAgent(
-            startX, startY, startHeading,
-            1, 1, 1,
-            setWbK, setKappa, 1.5,
-            1, 0.2,
-            0.4, 0.75,
-            1, 1,
+            // Defined behaviour parameters:
+            false, 2, 1,
+
+            // Cell motility and polarisation dynamics:
             0.5, 0.5,
-            0.05
+            0.5, 0.5,
+            0.5, 0.5,
+            0.5, 0.5,
+
+            // Matrix sensation parameters:
+            0.5, 0.5,
+
+            // Collision parameters:
+            0,
+            0.5, 0.5,
+            0.5, 0.5,
+
+            // Randomised initial state parameters:
+            1, 1, 1
         );
     }
 

@@ -39,6 +39,7 @@ World::World
     , cellParameters{setCellParameters}
     , cellSensationKernel{generateGaussianKernel(setCellSensationSigma)}
     , cellDepositionKernel{generateGaussianKernel(setCellDepositionSigma)}
+    , attachmentNumber{4}
 {
     // Initialising randomness:
     seedGenerator = std::mt19937(worldSeed);
@@ -136,17 +137,26 @@ CellAgent World::initialiseCell(int setCellID) {
     const double inhibitionBoolean{contactInhibitionDistribution(contactInhibitionGenerator)};
 
     return CellAgent(
-        startX, startY, startHeading,
-        setCellSeed, setCellID, int(inhibitionBoolean < cellTypeProportions),
-        cellParameters.poissonLambda, cellParameters.kappa, cellParameters.matrixKappa,
-        cellParameters.homotypicInhibition, cellParameters.heterotypicInhibition,
-        cellParameters.polarityPersistence, cellParameters.polarityTurningCoupling,
-        cellParameters.flowScaling, cellParameters.flowPolarityCoupling,
-        cellParameters.collisionRepolarisation, cellParameters.repolarisationRate,
-        cellParameters.polarityNoiseSigma
+        // Defined behaviour parameters:
+        false, setCellSeed, setCellID,
+
+        // Cell motility and polarisation dynamics:
+        cellParameters.halfSatCellAngularConcentration, cellParameters.maxCellAngularConcentration,
+        cellParameters.halfSatMeanActinFlow, cellParameters.maxMeanActinFlow,
+        cellParameters.flowScaling, cellParameters.polarityPersistence,
+        cellParameters.actinPolarityRedistributionRate, cellParameters.polarityNoiseSigma,
+
+        // Matrix sensation parameters:
+        cellParameters.halfSatMatrixAngularConcentration, cellParameters.maxMatrixAngularConcentration,
+
+        // Collision parameters:
+        int(inhibitionBoolean < cellTypeProportions),
+        cellParameters.homotypicInhibitionRate, cellParameters.heterotypicInhibitionRate,
+        cellParameters.collisionRepolarisation, cellParameters.collisionRepolarisationRate,
+
+        // Randomised initial state parameters:
+        startX, startY, startHeading
     );
-    // Higher alpha = higher concentration
-    // Higher beta = lower lambda
 }
 
 // Simulation functions:
@@ -178,22 +188,6 @@ void World::runCellStep(CellAgent& actingCell) {
     actingCell.setDirectionalIntensity(angleIntensity);
     actingCell.setLocalECMDensity(localDensity);
 
-    // actingCell.setLocalMatrixHeading(
-    //     ecmField.getLocalMatrixHeading(cellStart)
-    // );
-    // actingCell.setLocalMatrixPresence(
-    //     ecmField.getLocalMatrixPresence(cellStart)
-    // );
-
-    // if (actingCell.getID() == 1) {
-    //     double angle, intensity;
-    //     std::tie(angle, intensity) = ecmField.getAverageDeltaHeadingAroundIndex(
-    //         startIndex[0], startIndex[1], actingCell.getPolarity()
-    //     );
-    //     std::cout << angle << " -- " << intensity << "\n";
-    // }
-
-
     // Determine contact status of cell (i.e. cells in Moore neighbourhood of current cell):
     // Cell type 0:
     actingCell.setContactStatus(
@@ -214,12 +208,8 @@ void World::runCellStep(CellAgent& actingCell) {
 
     // Calculate and set effects of cell on world:
     const std::tuple<double, double> cellFinish{actingCell.getPosition()};
-    double attachmentWeighting{1./3.};
+    double attachmentWeighting{1.0 / attachmentNumber};
     depositAtAttachments(attachmentIndices, actingCell.getMovementDirection(), actingCell.getPolarityExtent(), attachmentWeighting);
-    // setMovementOnMatrix(
-    //     cellStart, cellFinish,
-    //     actingCell.getMovementDirection(), actingCell.getPolarityExtent()
-    // );
 
     // Rollover the cell if out of bounds:
     actingCell.setPosition(rollPosition(cellFinish));
@@ -417,9 +407,9 @@ World::sampleAttachmentHeadings(CellAgent queryCell) {
     double sineMean{0};
     double cosineMean{0};
     double localDensity{0};
-    int attachmentCount{0};
+    double attachmentCount{0};
     std::vector<std::tuple<int, int>> attachmentIndices{};
-    while (attachmentCount < 3) {
+    while (attachmentCount < attachmentNumber) {
         // Sampling random site within kernel:
         const int i{indexDistribution(kernelSamplingGenerator)};
         const int j{indexDistribution(kernelSamplingGenerator)};

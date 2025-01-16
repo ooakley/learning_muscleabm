@@ -30,27 +30,56 @@ vectorOfTuples HEADING_CONTACT_MAPPING{
 
 // Constructor:
 CellAgent::CellAgent(
-    double startX, double startY, double startHeading,
-    unsigned int setCellSeed, int setCellID, int setCellType,
-    double setPoissonLambda, double setKappa, double setMatrixKappa,
-    double setHomotypicInhibition, double setHeterotypicInhibition,
-    double setPolarityPersistence, double setPolarityTurningCoupling,
-    double setFlowScaling, double setFlowPolarityCoupling,
-    double setCollisionRepolarisation, double setRepolarisationRate,
-    double setPolarityNoiseSigma
+    // Defined behaviour parameters:
+    bool setMatrixInteraction, unsigned int setCellSeed, int setCellID,
+
+    // Cell motility and polarisation dynamics:
+    double setHalfSatCellAngularConcentration, double setMaxCellAngularConcentration,
+    double setHalfSatMeanActinFlow, double setMaxMeanActinFlow,
+    double setFlowScaling, double setPolarityPersistence,
+    double setActinPolarityRedistributionRate,
+    double setPolarityNoiseSigma,
+
+    // Matrix sensation parameters:
+    double setHalfSatMatrixAngularConcentration, double setMaxMatrixAngularConcentration,
+
+    // Collision parameters:
+    int setCellType, double setHomotypicInhibitionRate, double setHeterotypicInhibitionRate,
+    double setCollisionRepolarisation, double setCollisionRepolarisationRate,
+
+    // Randomised initial state parameters:
+    double startX, double startY, double startHeading
     )
-    : thereIsMatrixInteraction{true}
+    // Model infrastructure:
+    : thereIsMatrixInteraction{setMatrixInteraction}
+    , cellSeed{setCellSeed}
+    , cellID{setCellID}
+
+    // Polarisation and movement parameters:
+    , halfSatCellAngularConcentration{setHalfSatCellAngularConcentration}
+    , maxCellAngularConcentration{setMaxCellAngularConcentration}
+    , halfSatMeanActinFlow{setHalfSatMeanActinFlow}
+    , maxMeanActinFlow{setMaxMeanActinFlow}
+    , flowScaling{setFlowScaling}
+    , polarityPersistence{setPolarityPersistence}
+    , actinPolarityRedistributionRate{setActinPolarityRedistributionRate}
+    , polarityNoiseSigma{setPolarityNoiseSigma}
+
+    // Matrix sensation parameters:
+    , halfSatMatrixAngularConcentration{setHalfSatMatrixAngularConcentration}
+    , maxMatrixAngularConcentration{setMaxMatrixAngularConcentration}
+
+    // Collision parameters:
+    , cellType{setCellType}
+    , homotypicInhibitionRate{setHomotypicInhibitionRate}
+    , heterotypicInhibitionRate{setHeterotypicInhibitionRate}
+    , collisionRepolarisation{setCollisionRepolarisation}
+
+    // State parameters:
     , x{startX}
     , y{startY}
     , polarityX{1e-5 * cos(startHeading)}
     , polarityY{1e-5 * sin(startHeading)}
-    , polarityPersistence{setPolarityPersistence}
-    , polarityTurningCoupling{setPolarityTurningCoupling}
-    , flowPolarityCoupling{setFlowPolarityCoupling}
-    , flowScaling{setFlowScaling}
-    , collisionRepolarisation{setCollisionRepolarisation}
-    , repolarisationRate{setRepolarisationRate}
-    , polarityNoiseSigma{setPolarityNoiseSigma}
     , movementDirection{0}
     , actinFlow{0}
     , directionalInfluence{0}
@@ -58,19 +87,11 @@ CellAgent::CellAgent(
     , localECMDensity{0}
     , directionalShift{0}
     , sampledAngle{0}
-    , kappa{setKappa}
-    , matrixKappa{setMatrixKappa}
     , localMatrixHeading{boostMatrix::zero_matrix<double>(3, 3)}
     , localMatrixPresence{boostMatrix::zero_matrix<double>(3, 3)}
     , cellType0ContactState{boostMatrix::zero_matrix<bool>(3, 3)}
     , cellType1ContactState{boostMatrix::zero_matrix<bool>(3, 3)}
     , localCellHeadingState{boostMatrix::zero_matrix<double>(3, 3)}
-    , cellSeed{setCellSeed}
-    , cellID{setCellID}
-    , poissonLambda{setPoissonLambda}
-    , homotypicInhibitionRate{setHomotypicInhibition}
-    , heterotypicInhibitionRate{setHeterotypicInhibition}
-    , cellType{setCellType}
 {
     // Initialising randomness:
     seedGenerator = std::mt19937(cellSeed);
@@ -109,6 +130,7 @@ CellAgent::CellAgent(
         std::normal_distribution<double>(0, polarityNoiseSigma);
 
 }
+
 // Public Definitions:
 
 // Getters:
@@ -187,16 +209,23 @@ void CellAgent::takeRandomStep() {
 
     if (randomDeterminant < thresholdValue) {
         // Calculate matrix direction selection parameters using MM kinetics
-        // - we're assuming directionality saturates at some value of kappa.
+        // - we're assuming directionality saturates at some degree of polarisation.
         double currentPolarity{findPolarityExtent()};
-        double effectivePolarity{(polarityTurningCoupling * currentPolarity) / (kappa + currentPolarity)};
-        double angleDelta = sampleVonMises(effectivePolarity);
+        double cellAngularConcentration{
+            (maxCellAngularConcentration * currentPolarity) /
+            (halfSatCellAngularConcentration + currentPolarity)
+        };
+        double angleDelta = sampleVonMises(cellAngularConcentration);
         movementDirection = angleMod(findPolarityDirection() + angleDelta);
     } else {
         // Calculate matrix direction selection parameters using MM kinetics
-        // - we're assuming directionality saturates at some value of kappa.
-        double effectiveKappa{(matrixKappa * directionalIntensity) / (0.2 + directionalIntensity)};
-        double angleDelta = sampleVonMises(effectiveKappa);
+        // - we're assuming directionality saturates at some value of matrix
+        // directional homogeneity.
+        double matrixAngularConcentration{
+            (maxMatrixAngularConcentration * directionalIntensity) /
+            (halfSatMatrixAngularConcentration + directionalIntensity)
+        };
+        double angleDelta = sampleVonMises(matrixAngularConcentration);
         movementDirection = angleMod(
             findPolarityDirection() + directionalInfluence + angleDelta
         );
@@ -210,7 +239,7 @@ void CellAgent::takeRandomStep() {
             collisionRepolarisation * std::abs(std::sin(collision.second))
         };
         double effectiveRepolarisationRate{
-            repolarisationRate * std::abs(std::sin(collision.second))
+            collisionRepolarisationRate * std::abs(std::sin(collision.second))
         };
         double repolarisationAbsoluteDirection{
             angleMod(findPolarityDirection() + collision.second)
@@ -232,11 +261,12 @@ void CellAgent::takeRandomStep() {
     }
 
     // Calculating actin flow in protrusion, via MM kinetics:
-    double effectivePolarity{(poissonLambda * findPolarityExtent()) / (0.1 + findPolarityExtent())};
-    std::poisson_distribution<int> protrusionDistribution(effectivePolarity);
-    const int protrusionCount{protrusionDistribution(generatorProtrusion)};
-
-    actinFlow = protrusionCount;
+    double meanActinFlow{
+        (maxMeanActinFlow * findPolarityExtent()) /
+        (halfSatMeanActinFlow + findPolarityExtent())
+    };
+    std::poisson_distribution<int> protrusionDistribution(meanActinFlow);
+    const int actinFlow{protrusionDistribution(generatorProtrusion)};
 
     // // Update position:
     // * std::pow(localECMDensity, 2)
@@ -247,13 +277,10 @@ void CellAgent::takeRandomStep() {
     y = y + dy;
 
     // // Update polarity based on movement direction and actin flow:
-    // *localECMDensity
-    double polarityChangeExtent{std::tanh(actinFlow*flowPolarityCoupling)};
+    double polarityChangeExtent{std::tanh(actinFlow*actinPolarityRedistributionRate)};
     double polarityChangeX{polarityChangeExtent*cos(movementDirection)};
     double polarityChangeY{polarityChangeExtent*sin(movementDirection)};
 
-    // Trying out extent-defined persistence:
-    // double testPersistence{findPolarityExtent()};
     double newPolarityX{polarityPersistence*polarityX + (1-polarityPersistence)*polarityChangeX};
     double newPolarityY{polarityPersistence*polarityY + (1-polarityPersistence)*polarityChangeY};
 
