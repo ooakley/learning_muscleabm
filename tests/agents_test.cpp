@@ -22,6 +22,7 @@ protected:
             0,
             0.5, 0.5,
             0.5, 0.5,
+            1, 1, 1,
 
             // Randomised initial state parameters:
             1, 1, 1
@@ -45,6 +46,7 @@ protected:
             0,
             0.5, 0.5,
             0.5, 0.5,
+            1, 1, 1,
 
             // Randomised initial state parameters:
             1, 1, 1
@@ -68,6 +70,7 @@ protected:
             0,
             0.5, 0.5,
             0.5, 0.5,
+            1, 1, 1,
 
             // Randomised initial state parameters:
             1, 1, 1

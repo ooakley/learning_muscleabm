@@ -1,6 +1,7 @@
 #include "world.h"
 #include "agents.h"
 #include "ecm.h"
+#include "collision.h"
 
 #include <stdio.h>
 #include <iostream>
@@ -20,6 +21,7 @@ World::World
     int setECMElementCount,
     int setNumberOfCells,
     double setCellTypeProportions,
+    bool setThereIsMatrixInteraction,
     double setMatrixTurnoverRate,
     double setMatrixAdditionRate,
     double setCellDepositionSigma,
@@ -33,6 +35,7 @@ World::World
     , ecmField{ECMField(countECMElement, 16, setWorldSideLength, setMatrixTurnoverRate, setMatrixAdditionRate)}
     , numberOfCells{setNumberOfCells}
     , cellTypeProportions{setCellTypeProportions}
+    , thereIsMatrixInteraction{setThereIsMatrixInteraction}
     , cellDepositionSigma{setCellDepositionSigma}
     , cellSensationSigma{setCellSensationSigma}
     , simulationTime{0}
@@ -40,6 +43,7 @@ World::World
     , cellSensationKernel{generateGaussianKernel(setCellSensationSigma)}
     , cellDepositionKernel{generateGaussianKernel(setCellDepositionSigma)}
     , attachmentNumber{4}
+    , collisionCellList{CollisionCellList(8, 2048)}
 {
     // Initialising randomness:
     seedGenerator = std::mt19937(worldSeed);
@@ -72,18 +76,18 @@ World::World
 void World::writePositionsToCSV(std::ofstream& csvFile) {
     for (int i = 0; i < numberOfCells; ++i) {
         csvFile << simulationTime << ",";
-        csvFile << cellAgentVector[i].getID() << ",";
-        csvFile << cellAgentVector[i].getX() << ",";
-        csvFile << cellAgentVector[i].getY() << ","; 
-        csvFile << cellAgentVector[i].getPolarity() << ",";
-        csvFile << cellAgentVector[i].getPolarityExtent() << ",";
-        csvFile << cellAgentVector[i].getDirectionalInfluence() << ",";
-        csvFile << cellAgentVector[i].getDirectionalIntensity() << ",";
-        csvFile << cellAgentVector[i].getActinFlow() << ",";
-        csvFile << cellAgentVector[i].getMovementDirection() << ",";
-        csvFile << cellAgentVector[i].getDirectionalShift() << ",";
-        csvFile << cellAgentVector[i].getSampledAngle() << ",";
-        csvFile << cellAgentVector[i].getCellType() << "\n"; 
+        csvFile << cellAgentVector[i]->getID() << ",";
+        csvFile << cellAgentVector[i]->getX() << ",";
+        csvFile << cellAgentVector[i]->getY() << ","; 
+        csvFile << cellAgentVector[i]->getPolarity() << ",";
+        csvFile << cellAgentVector[i]->getPolarityExtent() << ",";
+        csvFile << cellAgentVector[i]->getDirectionalInfluence() << ",";
+        csvFile << cellAgentVector[i]->getDirectionalIntensity() << ",";
+        csvFile << cellAgentVector[i]->getActinFlow() << ",";
+        csvFile << cellAgentVector[i]->getMovementDirection() << ",";
+        csvFile << cellAgentVector[i]->getDirectionalShift() << ",";
+        csvFile << cellAgentVector[i]->getSampledAngle() << ",";
+        csvFile << cellAgentVector[i]->getCellType() << "\n"; 
     }
 }
 
@@ -113,22 +117,20 @@ void World::writeMatrixToCSV(std::ofstream& matrixFile) {
 
 // Initialisation Functions:
 void World::initialiseCellVector() {
-    for (int i = 0; i < numberOfCells; ++i) {
+    for (int cellID = 0; cellID < numberOfCells; ++cellID) {
         // Initialising cell:
-        CellAgent newCell{initialiseCell(i)};
+        std::shared_ptr<CellAgent> newCell{initialiseCell(cellID)};
 
-        // Putting cell into count matrix:
-        ecmField.setCellPresence(
-            newCell.getPosition(),
-            newCell.getCellType(), newCell.getPolarity()
-        );
+        // Putting cell into collisions matrix:
+        auto [x, y] = newCell->getPosition();
+        collisionCellList.addToCollisionMatrix(x, y, newCell);
 
         // Adding newly initialised cell to CellVector:
         cellAgentVector.push_back(newCell);
     }
 }
 
-CellAgent World::initialiseCell(int setCellID) {
+std::shared_ptr<CellAgent> World::initialiseCell(int setCellID) {
     // Generating positions and randomness:
     const double startX{positionDistribution(xPositionGenerator)};
     const double startY{positionDistribution(yPositionGenerator)};
@@ -136,7 +138,7 @@ CellAgent World::initialiseCell(int setCellID) {
     const unsigned int setCellSeed{seedDistribution(cellSeedGenerator)};
     const double inhibitionBoolean{contactInhibitionDistribution(contactInhibitionGenerator)};
 
-    return CellAgent(
+    return std::make_shared<CellAgent>(
         // Defined behaviour parameters:
         false, setCellSeed, setCellID,
 
@@ -153,6 +155,7 @@ CellAgent World::initialiseCell(int setCellID) {
         int(inhibitionBoolean < cellTypeProportions),
         cellParameters.homotypicInhibitionRate, cellParameters.heterotypicInhibitionRate,
         cellParameters.collisionRepolarisation, cellParameters.collisionRepolarisationRate,
+        cellParameters.cellBodyRadius, cellParameters.maxCellExtension, cellParameters.inhibitionStrength,
 
         // Randomised initial state parameters:
         startX, startY, startHeading
@@ -175,50 +178,43 @@ void World::runSimulationStep() {
     simulationTime += 1;
 }
 
-void World::runCellStep(CellAgent& actingCell) {
+void World::runCellStep(std::shared_ptr<CellAgent> actingCell) {
     // Getting initial cell position:
-    const std::tuple<double, double> cellStart{actingCell.getPosition()};
+    const std::tuple<double, double> cellStart{actingCell->getPosition()};
 
     // // Setting cell percepts:
-
     // Calculating matrix percept:
-    // Setting percepts of local matrix:
     const auto [angleAverage, angleIntensity, localDensity, attachmentIndices] = sampleAttachmentHeadings(actingCell);
-    actingCell.setDirectionalInfluence(angleAverage);
-    actingCell.setDirectionalIntensity(angleIntensity);
-    actingCell.setLocalECMDensity(localDensity);
+    // Setting percepts of local matrix:
+    if (thereIsMatrixInteraction) {
+        actingCell->setDirectionalInfluence(angleAverage);
+        actingCell->setDirectionalIntensity(angleIntensity);
+        actingCell->setLocalECMDensity(localDensity);
+    }
 
-    // Determine contact status of cell (i.e. cells in Moore neighbourhood of current cell):
-    // Cell type 0:
-    actingCell.setContactStatus(
-        ecmField.getCellTypeContactState(cellStart, 0), 0
-    );
-    // Cell type 1:
-    actingCell.setContactStatus(
-        ecmField.getCellTypeContactState(cellStart, 1), 1
-    );
-    // Local cell heading state:
-    actingCell.setLocalCellHeadingState(
-        ecmField.getLocalCellHeadingState(cellStart)
-    );
-
-    // // Run cell intrinsic movement:
-    ecmField.removeCellPresence(cellStart, actingCell.getCellType());
-    actingCell.takeRandomStep();
+    // Run cell intrinsic movement:
+    auto [startX, startY] = actingCell->getPosition();
+    collisionCellList.removeFromCollisionMatrix(startX, startY, actingCell);
+    actingCell->setLocalCellList(collisionCellList.getLocalAgents(startX, startY));
+    actingCell->takeRandomStep();
 
     // Calculate and set effects of cell on world:
-    const std::tuple<double, double> cellFinish{actingCell.getPosition()};
-    double attachmentWeighting{1.0 / attachmentNumber};
-    depositAtAttachments(attachmentIndices, actingCell.getMovementDirection(), actingCell.getPolarityExtent(), attachmentWeighting);
+    const std::tuple<double, double> cellFinish{actingCell->getPosition()};
+    if (thereIsMatrixInteraction) {
+        double attachmentWeighting{1.0 / attachmentNumber};
+        depositAtAttachments(
+            attachmentIndices,
+            actingCell->getMovementDirection(), actingCell->getPolarityExtent(),
+            attachmentWeighting
+        );
+    }
 
     // Rollover the cell if out of bounds:
-    actingCell.setPosition(rollPosition(cellFinish));
+    actingCell->setPosition(rollPosition(cellFinish));
 
     // Set new count:
-    ecmField.setCellPresence(
-        rollPosition(cellFinish),
-        actingCell.getCellType(), actingCell.getPolarity()
-    );
+    auto [finishX, finishY] = actingCell->getPosition();
+    collisionCellList.addToCollisionMatrix(finishX, finishY, actingCell);
 }
 
 void World::setMovementOnMatrix(
@@ -374,7 +370,7 @@ std::tuple<double, double, double> World::getAverageDeltaHeading(CellAgent query
 
 
 std::tuple<double, double, double, std::vector<std::tuple<int, int>>>
-World::sampleAttachmentHeadings(CellAgent queryCell) {
+World::sampleAttachmentHeadings(std::shared_ptr<CellAgent> queryCell) {
     // Getting kernel definition:
     const int numRows = cellSensationKernel.size1();
     const int numCols = cellSensationKernel.size2();
@@ -400,8 +396,8 @@ World::sampleAttachmentHeadings(CellAgent queryCell) {
     std::uniform_real_distribution<> acceptanceDistribution(0, centralWeighting);
 
     // Getting cell location and polarity heading:
-    const auto [iECM, jECM] = getECMIndexFromLocation(queryCell.getPosition());
-    const double polarityDirection{queryCell.getPolarity()};
+    const auto [iECM, jECM] = getECMIndexFromLocation(queryCell->getPosition());
+    const double polarityDirection{queryCell->getPolarity()};
 
     // Sampling from local sites on ECM lattice:
     double sineMean{0};

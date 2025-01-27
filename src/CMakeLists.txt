@@ -1,6 +1,7 @@
 # Building nodes of dependency tree:
 add_library(agents agents.cpp agents.h)
 add_library(ecm ecm.cpp ecm.h)
+add_library(collision collision.cpp collision.h)
 
 # Building world, and link to agents and ecm to ensure transitivity:
 add_library(world world.cpp world.h)
@@ -8,6 +9,7 @@ target_link_libraries(world
     PRIVATE
     agents
     ecm
+    collision
 )
 
 # Building main executable:
@@ -18,6 +20,7 @@ target_link_libraries(main
     world
     agents
     ecm
+    collision
     ${Boost_LIBRARIES}
     ${Boost_FILESYSTEM_LIBRARY}
     ${Boost_SYSTEM_LIBRARY}

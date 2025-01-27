@@ -1,8 +1,9 @@
 #pragma once
 #include <random>
+#include <deque>
+#include <utility>
 #include <boost/numeric/ublas/matrix.hpp>
 #include <boost/math/distributions/normal.hpp>
-#include <utility>
 namespace boostMatrix = boost::numeric::ublas;
 
 class CellAgent {
@@ -25,6 +26,7 @@ public:
         // Collision parameters:
         int setCellType, double setHomotypicInhibitionRate, double setHeterotypicInhibitionRate,
         double setCollisionRepolarisation, double setCollisionRepolarisationRate,
+        double setCellBodyRadius, double setMaxCellExtension, double setInhibitionStrength,
 
         // Randomised initial state parameters:
         double startX, double startY, double startHeading
@@ -40,7 +42,7 @@ public:
     double getX() const;
     double getY() const;
     std::tuple<double, double> getPosition() const;
-    double getPolarity() const;
+    double getPolarity();
     double getPolarityExtent() const;
     std::vector<double> getAttachmentHistory() const;
 
@@ -50,24 +52,25 @@ public:
     double getActinFlow() const;
     double getDirectionalInfluence() const;
     double getDirectionalIntensity() const;
-    // double getAverageAttachmentHeading() const;
     double getDirectionalShift() const;
     double getSampledAngle() const;
 
     // Setters:
     // Setters for simulation (moving cells around etc.):
     void setPosition(std::tuple<double, double> newPosition);
-    void setLocalCellHeadingState(const boostMatrix::matrix<double>& stateToSet);
+    // void setLocalCellHeadingState(const boostMatrix::matrix<double>& stateToSet);
 
     // Setters for simulating cell perception (e.g. updating cell percepts):
     void setLocalMatrixHeading(const boostMatrix::matrix<double>& matrixToSet);
     void setLocalMatrixPresence(const boostMatrix::matrix<double>& matrixToSet);
-    void setContactStatus(const boostMatrix::matrix<bool>& stateToSet, int cellType);
+    // void setContactStatus(const boostMatrix::matrix<bool>& stateToSet, int cellType);
 
     void setDirectionalInfluence(double setDirectionalInfluence);
     void setDirectionalIntensity(double setDirectiontalIntensity);
 
     void setLocalECMDensity(double setLocalDensity);
+
+    void setLocalCellList(std::vector<std::shared_ptr<CellAgent>> setLocalAgents);
 
     // Simulation code:
     void takeRandomStep();
@@ -85,9 +88,11 @@ private:
     // Dynamic cell state data:
     double x;
     double y;
-    double polarityX;
-    double polarityY;
+    std::deque<double> xPolarityHistory;
+    std::deque<double> yPolarityHistory;
     std::vector<double> attachmentHistory;
+    std::deque<double> xMovementHistory;
+    std::deque<double> yMovementHistory;
 
     // Polarisation and movement parameters:
     double halfSatCellAngularConcentration;
@@ -97,6 +102,11 @@ private:
     double flowScaling;
     double actinPolarityRedistributionRate;
     double polarityPersistence;
+
+    // Contact inhibition parameters:
+    double cellBodyRadius;
+    double maxCellExtension;
+    double inhibitionStrength;
 
     // Matrix sensation properties:
     double halfSatMatrixAngularConcentration;
@@ -124,6 +134,7 @@ private:
     // Percepts:
     boostMatrix::matrix<double> localMatrixHeading;
     boostMatrix::matrix<double> localMatrixPresence;
+    std::vector<std::shared_ptr<CellAgent>> localAgents;
 
     boostMatrix::matrix<bool> cellType0ContactState;
     boostMatrix::matrix<bool> cellType1ContactState;
@@ -173,9 +184,20 @@ private:
     double angleMod(double angle) const;
     double calculateMinimumAngularDistance(double headingA, double headingB) const;
     double calculateAngularDistance(double headingA, double headingB) const;
-    double findPolarityDirection() const;
+    double findPolarityDirection();
     double findPolarityExtent() const;
 
+    void addToPolarisationHistory(double actinFlowX, double actinFlowY);
+    double findTotalFlow();
+
+    void addToMovementHistory(double movementX, double movementY);
+    double findDirectionalConcentration();
+    double findShapeDirection();
+
+    std::vector<double> crossProduct(
+        std::vector<double> const a, std::vector<double> const b
+    );
+
     // Function to prevent 0 polarisation:
-    void safeZeroPolarisation();
+    // void safeZeroPolarisation();
 };

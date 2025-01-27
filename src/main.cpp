@@ -31,7 +31,9 @@ the terminal after compiling the code:
 --actinPolarityRedistributionRate 0.5 --polarityNoiseSigma 0.5 \
 --halfSatMatrixAngularConcentration 0.5 --maxMatrixAngularConcentration 0.5 \
 --homotypicInhibitionRate 0.5 --heterotypicInhibitionRate 0.5 \
---collisionRepolarisation 0.5 --collisionRepolarisationRate 0.5
+--cellBodyRadius 20 --maxCellExtension 200 --inhibitionStrength 1 \
+--collisionRepolarisation 0.5 --collisionRepolarisationRate 0.5 \
+--thereIsMatrixInteraction false
 */
 
 int main(int argc, char** argv) {
@@ -44,6 +46,7 @@ int main(int argc, char** argv) {
     int worldSize;
     int gridSize;
     double cellTypeProportions;
+    bool thereIsMatrixInteraction;
     double matrixAdditionRate;
     double matrixTurnoverRate;
     double cellDepositionSigma;
@@ -124,11 +127,23 @@ int main(int argc, char** argv) {
         ("collisionRepolarisationRate", po::value<double>(&cellParams.collisionRepolarisationRate)->required(),
             "The rate at which cellular polarisation is dragged to the collisionRepolarisation value."
         )
+        ("cellBodyRadius", po::value<double>(&cellParams.cellBodyRadius)->required(),
+            "Radius of the cell body for collision calculations.."
+        )
+        ("maxCellExtension", po::value<double>(&cellParams.maxCellExtension)->required(),
+            "Maximum length of polarisation-induced cell extensions."
+        )
+        ("inhibitionStrength", po::value<double>(&cellParams.inhibitionStrength)->required(),
+            "Rate at which actin flow in the direction of a collision is reduced by such a collision."
+        )
         ("cellDepositionSigma", po::value<double>(&cellDepositionSigma)->required(),
             "Standard deviation of gaussian kernel defining spatial extent of matrix deposition."
         )
         ("cellSensationSigma", po::value<double>(&cellSensationSigma)->required(),
             "Standard deviation of gaussian kernel defining spatial extent of matrix sensation."
+        )
+        ("thereIsMatrixInteraction", po::value<bool>(&thereIsMatrixInteraction)->required(),
+            "Whether or not cells undergo interaction with the matrx."
         )
     ;
 
@@ -192,6 +207,7 @@ int main(int argc, char** argv) {
                 gridSize,
                 numberOfCells,
                 cellTypeProportions,
+                thereIsMatrixInteraction,
                 matrixTurnoverRate,
                 matrixAdditionRate,
                 cellDepositionSigma,
@@ -201,10 +217,8 @@ int main(int argc, char** argv) {
         };
         for (int i = 0; i < timeStepsToRun; ++i) {
             mainWorld.runSimulationStep();
-            if (((i + 1) % 10) == 0) {
-                mainWorld.writePositionsToCSV(csvFile);
-                mainWorld.writeMatrixToCSV(matrixFile);
-            }
+            mainWorld.writePositionsToCSV(csvFile);
+            mainWorld.writeMatrixToCSV(matrixFile);
         }
 
         // We need to close files to flush remaining outputs to buffer.

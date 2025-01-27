@@ -2,6 +2,7 @@
 #include <random>
 #include "agents.h"
 #include "ecm.h"
+#include "collision.h"
 
 // Structure to store necessary parameters for the simulation:
 struct CellParameters {
@@ -10,7 +11,8 @@ struct CellParameters {
     polarityPersistence, actinPolarityRedistributionRate, polarityNoiseSigma,
     halfSatMatrixAngularConcentration, maxMatrixAngularConcentration,
     homotypicInhibitionRate, heterotypicInhibitionRate,
-    collisionRepolarisation, collisionRepolarisationRate;
+    collisionRepolarisation, collisionRepolarisationRate,
+    cellBodyRadius, maxCellExtension, inhibitionStrength;
 };
 
 class World {
@@ -23,6 +25,7 @@ public:
         int setECMElementCount,
         int setNumberOfCells,
         double setCellTypeProportions,
+        bool setThereIsMatrixInteraction,
         double setMatrixTurnoverRate,
         double setMatrixAdditionRate,
         double setCellDepositionSigma,
@@ -50,11 +53,13 @@ private:
     double lengthECMElement;
     boostMatrix::matrix<double> cellSensationKernel;
     boostMatrix::matrix<double> cellDepositionKernel;
+    bool thereIsMatrixInteraction;
 
     // Complex objects from our libraries:
-    std::vector<CellAgent> cellAgentVector;
+    std::vector<std::shared_ptr<CellAgent>> cellAgentVector;
     ECMField ecmField;
     CellParameters cellParameters;
+    CollisionCellList collisionCellList;
 
     // Cell population characteristics:
     int numberOfCells;
@@ -87,10 +92,10 @@ private:
     // Private member functions:
     // Initialisation Functions:
     void initialiseCellVector();
-    CellAgent initialiseCell(int setCellID);
+    std::shared_ptr<CellAgent> initialiseCell(int setCellID);
 
     // Simulation functions:
-    void runCellStep(CellAgent& actingCell);
+    void runCellStep(std::shared_ptr<CellAgent> actingCell);
     void setMovementOnMatrix(
         std::tuple<double, double> cellStart,
         std::tuple<double, double> cellFinish,
@@ -104,7 +109,7 @@ private:
     // Calculating percepts for cells:
     std::tuple<double, double, double> getAverageDeltaHeading(CellAgent queryCell);
     std::tuple<double, double, double, std::vector<std::tuple<int, int>>>
-        sampleAttachmentHeadings(CellAgent queryCell);
+        sampleAttachmentHeadings(std::shared_ptr<CellAgent> queryCell);
     double calculateCellDeltaTowardsECM(double ecmHeading, double cellHeading);
 
     // World utility functions:

@@ -1,31 +1,73 @@
 #include "collision.h"
+
 #include <unordered_map>
 
-using AgentPointer = CellAgent*;
+using AgentPointer = std::shared_ptr<CellAgent>;
 using GridUnit = std::unordered_map<int, AgentPointer>;
 using CollisionRow = std::vector<GridUnit>;
 using CollisionMatrix = std::vector<CollisionRow>;
 
 CollisionCellList::CollisionCellList(
     int setCollisionElements, double fieldSize
-    )
+)
+    : collisionElements{setCollisionElements}
+    , lengthCollisionElement{fieldSize / setCollisionElements}
 {
     // Initialise the collision matrix:
-    CollisionMatrix collisionMatrix{};
-    for (int i = 0; i < setCollisionElements; ++i) {
+    for (int i = 0; i < collisionElements; ++i) {
         CollisionRow rowConstruct{};
-        for (int j = 0; j < setCollisionElements; ++j) {
-            rowConstruct.push_back(GridUnit());
+        for (int j = 0; j < collisionElements; ++j) {
+            GridUnit emptyUnit;
+            rowConstruct.push_back(emptyUnit);
         }
         collisionMatrix.push_back(rowConstruct);
     }
 }
 
-void CollisionCellList::addToCollisionMatrix(int i, int j, AgentPointer agentPointer) {
-    std::pair<int, AgentPointer> valuePair{agentPointer->getID(), agentPointer};
-    collisionMatrix[i][j].insert(valuePair);
+void CollisionCellList::addToCollisionMatrix(double x, double y, AgentPointer agentPointer) {
+    std::vector<int> indices{getIndexFromLocation(x, y)};
+    collisionMatrix[indices[0]][indices[1]].insert({agentPointer->getID(), agentPointer});
 }
 
-void CollisionCellList::removeFromCollisionMatrix(int i, int j, AgentPointer agentPointer) {
-    collisionMatrix[i][j].erase(agentPointer->getID());
+void CollisionCellList::removeFromCollisionMatrix(double x, double y, AgentPointer agentPointer) {
+    std::vector<int> indices{getIndexFromLocation(x, y)};
+    collisionMatrix[indices[0]][indices[1]].erase(agentPointer->getID());
+}
+
+std::vector<AgentPointer> CollisionCellList::getLocalAgents(double x, double y) {
+    // Instantianting result accumulator:
+    std::vector<AgentPointer> localAgents{};
+    std::vector<int> indices{getIndexFromLocation(x, y)};
+
+    // Looping through neighbourhood:
+    for (int k = -1; k < 2; ++k) {
+        for (int l = -1; l < 2; ++l) {
+            int safeRow{rollOverIndex(indices[0] + k)};
+            int safeCol{rollOverIndex(indices[1] + l)};
+            for (auto& [agentID, pointer]: collisionMatrix[safeRow][safeCol]) {
+                localAgents.emplace_back(pointer);
+            }
+        }
+    }
+
+    return localAgents;
+}
+
+int CollisionCellList::rollOverIndex(int index) const {
+    while (index < 0) {
+        index = index + collisionElements;
+    }
+    return index % collisionElements;
+}
+
+std::vector<int> CollisionCellList::getIndexFromLocation(double positionX, double positionY) {
+    // Getting indices:
+    int xIndex{int(std::floor(positionX / lengthCollisionElement))};
+    int yIndex{int(std::floor(positionY / lengthCollisionElement))};
+
+    // Note that the y index goes first here because of how we index matrices:
+    std::vector<int> positionIndex(2);
+    positionIndex[0] = yIndex;
+    positionIndex[1] = xIndex;
+    return positionIndex;
 }
