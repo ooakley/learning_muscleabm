@@ -102,14 +102,15 @@ private:
         double cellHeading, double cellPolarity
     );
     void depositAtAttachments(
-        std::vector<std::tuple<int, int>> attachmentIndices,
+        std::vector<double> attachmentPoint,
         double heading, double polarity, double weighting
     );
 
     // Calculating percepts for cells:
     std::tuple<double, double, double> getAverageDeltaHeading(CellAgent queryCell);
-    std::tuple<double, double, double, std::vector<std::tuple<int, int>>>
-        sampleAttachmentHeadings(std::shared_ptr<CellAgent> queryCell);
+    std::tuple<double, double> sampleAttachmentHeadings(
+        std::vector<double> attachmentPoint, double cellPolarity
+    );
     double calculateCellDeltaTowardsECM(double ecmHeading, double cellHeading);
 
     // World utility functions:

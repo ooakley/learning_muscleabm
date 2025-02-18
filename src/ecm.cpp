@@ -394,8 +394,8 @@ int ECMField::rollOverCollisionIndex(int index) const {
 
 double ECMField::calculateCellDeltaTowardsECM(double ecmHeading, double cellHeading) const {
     // Ensuring input values are in the correct range:
-    assert((ecmHeading >= 0) & (ecmHeading < M_PI));
-    assert((cellHeading >= -M_PI) & (cellHeading < M_PI));
+    assert((ecmHeading >= 0) & (ecmHeading <= M_PI));
+    assert((cellHeading >= -M_PI) & (cellHeading <= M_PI));
 
     // Calculating change in theta (ECM is direction agnostic so we have to reverse it):
     double deltaHeading{ecmHeading - cellHeading};
@@ -421,8 +421,8 @@ double ECMField::calculateCellDeltaTowardsECM(double ecmHeading, double cellHead
 
 double ECMField::calculateECMDeltaTowardsCell(double ecmHeading, double cellHeading) const {
     // Ensuring input values are in the correct range:
-    assert((ecmHeading >= 0) & (ecmHeading < M_PI));
-    assert((cellHeading >= -M_PI) & (cellHeading < M_PI));
+    assert((ecmHeading >= 0) & (ecmHeading <= M_PI));
+    assert((cellHeading >= -M_PI) & (cellHeading <= M_PI));
 
     // Calculating change in theta (ECM is direction agnostic so we have to reverse it):
     double deltaHeading{cellHeading - ecmHeading};

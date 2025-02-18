@@ -2,6 +2,7 @@
 #include <random>
 #include <deque>
 #include <utility>
+#include <list>
 #include <boost/numeric/ublas/matrix.hpp>
 #include <boost/math/distributions/normal.hpp>
 namespace boostMatrix = boost::numeric::ublas;
@@ -32,6 +33,9 @@ public:
         double startX, double startY, double startHeading
     );
 
+    // Actual simulations that the cell runs:
+    std::vector<double> sampleAttachmentPoint();
+
     // Getters:
     // Getters for values that shouldn't change:
     double getID() const;
@@ -42,14 +46,16 @@ public:
     double getX() const;
     double getY() const;
     std::tuple<double, double> getPosition() const;
-    double getPolarity();
-    double getPolarityExtent() const;
-    std::vector<double> getAttachmentHistory() const;
+    double getPolarityDirection() const;
+    double getPolarityMagnitude() const;
+    // std::vector<double> getAttachmentHistory() const;
 
     // Instantaneous variable getters: (these variables are updated each timestep,
     // and represent the cell's percepts/actions)
     double getMovementDirection() const;
-    double getActinFlow() const;
+    double getActinFlowDirection() const;
+    double getActinFlowMagnitude() const;
+    double getScaledActinFlowMagnitude() const;
     double getDirectionalInfluence() const;
     double getDirectionalIntensity() const;
     double getDirectionalShift() const;
@@ -88,11 +94,17 @@ private:
     // Dynamic cell state data:
     double x;
     double y;
-    std::deque<double> xPolarityHistory;
-    std::deque<double> yPolarityHistory;
-    std::vector<double> attachmentHistory;
+    std::list<std::vector<double>> actinHistory;
     std::deque<double> xMovementHistory;
     std::deque<double> yMovementHistory;
+    double polarityX;
+    double polarityY;
+    double polarityDirection;
+    double polarityMagnitude;
+    double flowDirection;
+    double flowMagnitude;
+    double scaledFlowMagnitude;
+    double eccentricityConstant;
 
     // Polarisation and movement parameters:
     double halfSatCellAngularConcentration;
@@ -121,10 +133,10 @@ private:
     std::mt19937 generatorPolarityNoiseX;
     std::mt19937 generatorPolarityNoiseY;
     std::normal_distribution<double> polarityNoiseDistribution;
+    std::normal_distribution<double> positionalNoiseDistribution;
 
     // Properties calculated each timestep:
     double movementDirection;
-    double actinFlow;
     double directionalInfluence; // -pi <= theta < pi
     double directionalIntensity; // 0 <= I < 1
     double localECMDensity; // 0 <= D < 1
@@ -172,7 +184,7 @@ private:
     std::mt19937 generatorRandomRepolarisation;
 
     // Collision detection behaviour:
-    std::pair<bool, double> checkForCollisions();
+    // std::pair<bool, double> checkForCollisions();
 
     // Member functions for von Mises sampling:
     double sampleVonMises(double kappa);
@@ -184,11 +196,13 @@ private:
     double angleMod(double angle) const;
     double calculateMinimumAngularDistance(double headingA, double headingB) const;
     double calculateAngularDistance(double headingA, double headingB) const;
-    double findPolarityDirection();
-    double findPolarityExtent() const;
+    double findTotalActinFlowDirection() const;
+    double findTotalActinFlowMagnitude() const;
+    std::vector<double> findTotalActinFlowComponents() const;
 
-    void addToPolarisationHistory(double actinFlowX, double actinFlowY);
-    double findTotalFlow();
+    void addToActinHistory(double actinFlowX, double actinFlowY);
+    void ageActinHistory();
+    double findCellMovementMagnitude();
 
     void addToMovementHistory(double movementX, double movementY);
     double findDirectionalConcentration();
