@@ -2,7 +2,7 @@
 *.d
 .DS_Store
 *.npy
-*.json
+*gitignore.json
 
 # Compiled Object files
 *.slo

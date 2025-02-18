@@ -1,18 +1,14 @@
 """
 Script to run analysis of model output data.
 
-Outputs trajectory images, matrix images, and a large set of derived
+Outputs trajectory images, matrix images, and a small set of derived
 statistics.
 """
 import argparse
 import os
-import copy
-import scipy
 
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-
 
 SIMULATION_OUTPUTS_FOLDER = "./fileOutputs/"
 CSV_COLUMN_NAMES = [

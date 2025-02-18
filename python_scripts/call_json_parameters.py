@@ -1,4 +1,6 @@
 """A script to run the simulation based on a set of parameters in a .json file."""
+# flake8: noqa: E501
+# ^ disabling line length linting warnings.
 import argparse
 import os
 import json

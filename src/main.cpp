@@ -16,10 +16,9 @@ namespace boostfs = boost::filesystem;
 namespace po = boost::program_options;
 
 /*
-Hello! There are a lot of command line arguments, for which I apologise. It makes
-parallelisation on the cluster easier. If you'd just like to run the simulation, here's what you can paste into
-the terminal after compiling the code:
-python ./python_scripts/call_json_parameters.py --path_to_config ./example_config.json
+Hello! There are a lot of command line arguments, for which I apologise.If you'd just like to run the simulation,
+here's a handy python command that you can paste into the terminal after compiling the code:
+python3 ./python_scripts/call_json_parameters.py --path_to_config ./example_config.json
 */
 
 int main(int argc, char** argv) {
