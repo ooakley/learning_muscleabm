@@ -20,12 +20,9 @@ World::World
     double setWorldSideLength,
     int setECMElementCount,
     int setNumberOfCells,
-    double setCellTypeProportions,
     bool setThereIsMatrixInteraction,
     double setMatrixTurnoverRate,
     double setMatrixAdditionRate,
-    double setCellDepositionSigma,
-    double setCellSensationSigma,
     CellParameters setCellParameters
 )
     : worldSeed{setWorldSeed}
@@ -34,15 +31,9 @@ World::World
     , lengthECMElement{worldSideLength/countECMElement}
     , ecmField{ECMField(countECMElement, 16, setWorldSideLength, setMatrixTurnoverRate, setMatrixAdditionRate)}
     , numberOfCells{setNumberOfCells}
-    , cellTypeProportions{setCellTypeProportions}
     , thereIsMatrixInteraction{setThereIsMatrixInteraction}
-    , cellDepositionSigma{setCellDepositionSigma}
-    , cellSensationSigma{setCellSensationSigma}
     , simulationTime{0}
     , cellParameters{setCellParameters}
-    , cellSensationKernel{generateGaussianKernel(setCellSensationSigma)}
-    , cellDepositionKernel{generateGaussianKernel(setCellDepositionSigma)}
-    , attachmentNumber{4}
     , collisionCellList{CollisionCellList(6, 2048)}
 {
     // Initialising randomness:
@@ -87,7 +78,6 @@ void World::writePositionsToCSV(std::ofstream& csvFile) {
         csvFile << cellAgentVector[i]->getMovementDirection() << ",";
         csvFile << cellAgentVector[i]->getDirectionalShift() << ",";
         csvFile << cellAgentVector[i]->getSampledAngle() << ",";
-        csvFile << cellAgentVector[i]->getCellType() << "\n"; 
     }
 }
 
@@ -112,6 +102,23 @@ void World::writeMatrixToCSV(std::ofstream& matrixFile) {
 }
 
 // Setters:
+
+// Public simulation functions:
+
+void World::runSimulationStep() {
+    // Shuffling acting order of cells:
+    std::shuffle(std::begin(cellAgentVector), std::end(cellAgentVector), shuffleGenerator);
+
+    // Looping through cells and running their behaviour:
+    for (int i = 0; i < numberOfCells; ++i) {
+        runCellStep(cellAgentVector[i]);
+    }
+
+    // Updating ECM:
+    // ecmField.ageMatrix();
+
+    simulationTime += 1;
+}
 
 // Private member functions:
 
@@ -142,40 +149,31 @@ std::shared_ptr<CellAgent> World::initialiseCell(int setCellID) {
         // Defined behaviour parameters:
         false, setCellSeed, setCellID,
 
-        // Cell motility and polarisation dynamics:
-        cellParameters.halfSatCellAngularConcentration, cellParameters.maxCellAngularConcentration,
-        cellParameters.halfSatMeanActinFlow, cellParameters.maxMeanActinFlow,
-        cellParameters.flowScaling, cellParameters.polarityPersistence,
-        cellParameters.actinPolarityRedistributionRate, cellParameters.polarityNoiseSigma,
+        // Cell movement parameters:
+        cellParameters.halfSatCellAngularConcentration,
+        cellParameters.maxCellAngularConcentration,
+        cellParameters.halfSatMeanActinFlow,
+        cellParameters.maxMeanActinFlow,
+        cellParameters.flowScaling,
+
+        // Polarisation system parameters:
+        cellParameters.polarityDiffusionRate,
+        cellParameters.actinAdvectionRate,
+        cellParameters.contactAdvectionRate,
 
         // Matrix sensation parameters:
-        cellParameters.halfSatMatrixAngularConcentration, cellParameters.maxMatrixAngularConcentration,
+        cellParameters.halfSatMatrixAngularConcentration,
+        cellParameters.maxMatrixAngularConcentration,
 
         // Collision parameters:
-        int(inhibitionBoolean < cellTypeProportions),
-        cellParameters.homotypicInhibitionRate, cellParameters.heterotypicInhibitionRate,
-        cellParameters.collisionRepolarisation, cellParameters.collisionRepolarisationRate,
-        cellParameters.cellBodyRadius, cellParameters.maxCellExtension, cellParameters.inhibitionStrength,
+        cellParameters.cellBodyRadius,
+        cellParameters.eccentricity,
+        cellParameters.sharpness,
+        cellParameters.inhibitionStrength,
 
         // Randomised initial state parameters:
         startX, startY, startHeading
     );
-}
-
-// Simulation functions:
-void World::runSimulationStep() {
-    // Shuffling acting order of cells:
-    std::shuffle(std::begin(cellAgentVector), std::end(cellAgentVector), shuffleGenerator);
-
-    // Looping through cells and running their behaviour:
-    for (int i = 0; i < numberOfCells; ++i) {
-        runCellStep(cellAgentVector[i]);
-    }
-
-    // Updating ECM:
-    // ecmField.ageMatrix();
-
-    simulationTime += 1;
 }
 
 void World::runCellStep(std::shared_ptr<CellAgent> actingCell) {
@@ -186,7 +184,7 @@ void World::runCellStep(std::shared_ptr<CellAgent> actingCell) {
     // Calculating matrix percept:
     std::vector<double> attachmentPoint{actingCell->sampleAttachmentPoint()};
     double cellPolarityDirection{actingCell->getPolarityDirection()};
-    const auto [matrixAngle, localDensity] = sampleAttachmentHeadings(attachmentPoint, cellPolarityDirection);
+    const auto [matrixAngle, localDensity] = getPerceptAtAttachment(attachmentPoint, cellPolarityDirection);
     // Setting percepts of local matrix:
     if (thereIsMatrixInteraction) {
         actingCell->setDirectionalInfluence(matrixAngle);
@@ -209,7 +207,7 @@ void World::runCellStep(std::shared_ptr<CellAgent> actingCell) {
     double angleFromCellToAttachment{std::atan2(dy, dx)};
 
     // double attachmentWeighting{1.0 / attachmentNumber};
-    depositAtAttachments(
+    depositAtAttachment(
         attachmentPoint,
         actingCell->getPolarityDirection(), actingCell->getPolarityMagnitude(),
         1
@@ -217,52 +215,13 @@ void World::runCellStep(std::shared_ptr<CellAgent> actingCell) {
 
     // Rollover the cell if out of bounds:
     actingCell->setPosition(rollPosition(cellFinish));
-    // actingCell->setPosition({1024, 1024});
 
     // Set new count:
     auto [finishX, finishY] = actingCell->getPosition();
     collisionCellList.addToCollisionMatrix(finishX, finishY, actingCell);
 }
 
-void World::setMovementOnMatrix(
-    std::tuple<double, double> cellStart,
-    std::tuple<double, double> cellFinish,
-    double cellHeading, double cellPolarity
-)
-{
-    // Finding gradient of line:
-    double dx{std::get<0>(cellStart) - std::get<0>(cellFinish)};
-    double dy{std::get<1>(cellStart) - std::get<1>(cellFinish)};
-    double pathLength{std::sqrt(pow(dx, 2) + pow(dy, 2))};
-
-    // Getting increments along path:
-    int queryNumber{int(floor(pathLength / (lengthECMElement / 2)))};
-    double roundedPathLength{(lengthECMElement / 2) * queryNumber};
-    double incrementScaling{(roundedPathLength/pathLength)/queryNumber};
-    double xIncrement{dx*incrementScaling};
-    double yIncrement{dy*incrementScaling};
-
-    // Getting blocks to set to heading:
-    std::vector<std::array<int, 2>> blocksToSet;
-    blocksToSet.push_back(getECMIndexFromLocation(cellStart));
-    std::tuple<double, double> currentPosition{cellStart};
-    for (int i = 0; i < queryNumber; ++i) {
-        double newX{std::get<0>(currentPosition) + xIncrement};
-        double newY{std::get<1>(currentPosition) + yIncrement};
-        currentPosition = std::tuple<double, double>{newX, newY};
-        currentPosition = rollPosition(currentPosition);
-        blocksToSet.push_back(getECMIndexFromLocation(currentPosition));
-    }
-
-    // Setting blocks to heading:
-    for (auto& block : blocksToSet) {
-        ecmField.setSubMatrix(block[0], block[1],
-        cellHeading, cellPolarity,
-        cellDepositionKernel);
-    }
-}
-
-void World::depositAtAttachments(
+void World::depositAtAttachment(
     std::vector<double> attachmentPoint,
     double heading, double polarity, double weighting
 )
@@ -276,107 +235,8 @@ void World::depositAtAttachments(
     );
 }
 
-std::array<int, 2> World::getECMIndexFromLocation(std::tuple<double, double> position) {
-    int xIndex{int(std::floor(std::get<0>(position) / lengthECMElement))};
-    int yIndex{int(std::floor(std::get<1>(position) / lengthECMElement))};
-    // Note that the y index goes first here because of how we index matrices:
-    return std::array<int, 2>{{yIndex, xIndex}};
-}
-
-int World::sign(double value) {
-    return (double(0) < value) - (value < double(0));
-}
-
-std::tuple<double, double> World::rollPosition(std::tuple<double, double> position) {
-    double xPosition = std::get<0>(position);
-    double yPosition = std::get<1>(position);
-
-    // Dealing with OOB in the negative numbers:
-    while (xPosition < 0) {
-        xPosition = worldSideLength + xPosition;
-    }
-    while (yPosition < 0) {
-        yPosition = worldSideLength + yPosition;
-    }
-
-    // Dealing with OOB past sidelength boundaries:
-    double newX{fmodf(xPosition, worldSideLength)};
-    double newY{fmodf(yPosition, worldSideLength)};
-
-    return std::tuple<double, double>{newX, newY};
-}
-
-std::tuple<int, int> World::rollIndex(int i, int j) {
-    while (i < 0) {
-        i += countECMElement;
-    }
-    while (i >= countECMElement) {
-        i -= countECMElement;
-    }
-    while (j < 0) {
-        j += countECMElement;
-    }
-    while (j >= countECMElement) {
-        j -= countECMElement;
-    }
-    return {i, j};
-};
-
-
-std::tuple<double, double, double> World::getAverageDeltaHeading(CellAgent queryCell) {
-    // Generate kernel:
-    const int numRows = cellSensationKernel.size1();
-    const int numCols = cellSensationKernel.size2();
-    const int center{(numRows - 1) / 2};
-    assert(numRows == numCols);
-
-    // Finding centre ECM element:
-    const double polarityDirection{queryCell.getPolarityDirection()};
-    const auto [iECM, jECM] = getECMIndexFromLocation(queryCell.getPosition());
-
-    // Getting all headings:
-    double sineMean{0};
-    double cosineMean{0};
-    double localDensity{0};
-    
-    #pragma omp parallel for reduction(+:sineMean,cosineMean,localDensity)
-    for (int i = 0; i < numRows; ++i)
-    {
-        for (int j = 0; j < numCols; ++j)
-        {
-            // Getting rolled-over indices for ECM matrix:
-            const int rowOffset{i - center};
-            const int columnOffset{j - center};
-            const auto [iSafe, jSafe] = rollIndex(iECM + rowOffset, jECM + columnOffset);
-
-            // Getting all weightings from kernel & matrix density:
-            const double ecmHeading{ecmField.getHeading(iSafe, jSafe)};
-            const double ecmDensity{ecmField.getMatrixDensity(iSafe, jSafe)};
-            const double kernelWeighting{cellSensationKernel(i, j)};
-            const double deltaHeading{
-                calculateCellDeltaTowardsECM(ecmHeading, polarityDirection)
-            };
-
-            // Taking reduction:
-            sineMean += std::sin(deltaHeading) * ecmDensity * kernelWeighting;
-            cosineMean += std::cos(deltaHeading) * ecmDensity * kernelWeighting;
-            localDensity += ecmDensity * kernelWeighting;
-        }
-    }
-
-    assert(std::abs(sineMean) <= 1);
-    assert(std::abs(cosineMean) <= 1);
-    // assert(sineMean != 0 & cosineMean != 0);
-    double angleAverage{std::atan2(sineMean, cosineMean)};
-    double angleIntensity{
-        std::sqrt(std::pow(sineMean, 2) + std::pow(cosineMean, 2))
-    };
-
-    return {angleAverage, angleIntensity, localDensity};
-}
-
-
-std::tuple<double, double> World::sampleAttachmentHeadings(std::vector<double> attachmentPoint, double cellPolarity) {
+// Calculating percepts for cells:
+std::tuple<double, double> World::getPerceptAtAttachment(std::vector<double> attachmentPoint, double cellPolarity) {
     // Getting relevant ECM index:
     const auto [iECM, jECM] = getECMIndexFromLocation({attachmentPoint[0], attachmentPoint[1]});
     const auto [iSafe, jSafe] = rollIndex(iECM, jECM);
@@ -422,116 +282,51 @@ double World::calculateCellDeltaTowardsECM(double ecmHeading, double cellHeading
     };
 }
 
-boostMatrix::matrix<double> World::generateGaussianKernel(double sigma) {
-    // Determine size of kernel:
-    // -- Getting size of sigma in matrix units:
-    const double sigmaMatrix{sigma / lengthECMElement};
-    int kernelSize{(int(3 * sigmaMatrix)*2) + 1}; // Capturing variance up to 3 sigma.
-    if (kernelSize < 3) {
-        std::cout << "Warning - Deposition or sensation kernel radius too small for current matrix mesh size." << std::endl;
-        kernelSize = 3;
-    }
-
-    // Creating matrix:
-    boostMatrix::matrix<double> kernel(kernelSize, kernelSize, 0);
-    const int centerValue{(kernelSize-1) / 2};
-
-    // Setting kernel values:
-    double normalisation{0};
-    for (int i = 0; i < kernelSize; ++i) {
-        for (int j = 0; j < kernelSize; ++j) {
-            // Getting location and thus Gaussian value:
-            const int y{i - centerValue};
-            const int x{j - centerValue};
-            const double exponent{-0.5*(std::pow(x / sigmaMatrix, 2.0) + std::pow(y / sigmaMatrix, 2.0))};
-
-            // Assigning value to kernel:
-            kernel(i, j) = std::exp(exponent);
-            normalisation += kernel(i, j);
-        }
-    }
-
-    // Normalising kernel so deposition is constant for different sigma values:
-    kernel /= normalisation;
-
-    return kernel;
+// World utility functions:
+std::array<int, 2> World::getECMIndexFromLocation(std::tuple<double, double> position) {
+    int xIndex{int(std::floor(std::get<0>(position) / lengthECMElement))};
+    int yIndex{int(std::floor(std::get<1>(position) / lengthECMElement))};
+    // Note that the y index goes first here because of how we index matrices:
+    return std::array<int, 2>{{yIndex, xIndex}};
 }
 
-// // Getting kernel definition:
-// const int numRows = cellSensationKernel.size1();
-// const int numCols = cellSensationKernel.size2();
-// const int center{(numRows - 1) / 2};
-// assert(numRows == numCols);
 
-// // Getting maximum normalised PDF density:
-// const boostMatrix::matrix<double> convolvedMatrix{
-//     boostMatrix::element_prod(cellSensationKernel, cellSensationKernel)
-// };
-// const double normalisationFactor{
-//     boostMatrix::sum(
-//         boostMatrix::prod(
-//             boostMatrix::scalar_vector<double>(convolvedMatrix.size1()), convolvedMatrix
-//             )
-//     )
-// };
-// const boostMatrix::matrix<double> discreteProbabilityDensity{convolvedMatrix/normalisationFactor};
-// const double centralWeighting{discreteProbabilityDensity(center, center)};
+// Basic utility functions:
+int World::sign(double value) {
+    return (double(0) < value) - (value < double(0));
+}
 
-// // Defining sampling distribution:
-// std::uniform_int_distribution<> indexDistribution(0, cellSensationKernel.size1()-1);
-// std::uniform_real_distribution<> acceptanceDistribution(0, centralWeighting);
+std::tuple<double, double> World::rollPosition(std::tuple<double, double> position) {
+    double xPosition = std::get<0>(position);
+    double yPosition = std::get<1>(position);
 
-// // Getting cell location and polarity heading:
-// const auto [iECM, jECM] = getECMIndexFromLocation(queryCell->getPosition());
-// const double polarityDirection{queryCell->getPolarityDirection()};
+    // Dealing with OOB in the negative numbers:
+    while (xPosition < 0) {
+        xPosition = worldSideLength + xPosition;
+    }
+    while (yPosition < 0) {
+        yPosition = worldSideLength + yPosition;
+    }
 
-// // Sampling from local sites on ECM lattice:
-// double sineMean{0};
-// double cosineMean{0};
-// double localDensity{0};
-// double attachmentCount{0};
-// std::vector<std::tuple<int, int>> attachmentIndices{};
-// while (attachmentCount < attachmentNumber) {
-//     // Sampling random site within kernel:
-//     const int i{indexDistribution(kernelSamplingGenerator)};
-//     const int j{indexDistribution(kernelSamplingGenerator)};
+    // Dealing with OOB past sidelength boundaries:
+    double newX{fmodf(xPosition, worldSideLength)};
+    double newY{fmodf(yPosition, worldSideLength)};
 
-//     // Sampling from uniform distribution to see if attachment sticks:
-//     if (discreteProbabilityDensity(i, j) > acceptanceDistribution(kernelSamplingGenerator)) {
-//         // Getting ECM data at sampled attachment point:
-//         const int rowOffset{i - center};
-//         const int columnOffset{j - center};
-//         const auto [iSafe, jSafe] = rollIndex(iECM + rowOffset, jECM + columnOffset);
-//         const double ecmHeading{ecmField.getHeading(iSafe, jSafe)};
-//         const double ecmDensity{ecmField.getMatrixDensity(iSafe, jSafe)};
+    return std::tuple<double, double>{newX, newY};
+}
 
-//         // Calculating cellular change in angle:
-//         const double deltaHeading{
-//             calculateCellDeltaTowardsECM(ecmHeading, polarityDirection)
-//         };
-
-//         // Adding to cell-perceptual average:
-//         sineMean += std::sin(deltaHeading) * ecmDensity;
-//         cosineMean += std::cos(deltaHeading) * ecmDensity;
-//         localDensity += ecmDensity;
-//         attachmentCount += 1;
-//         attachmentIndices.emplace_back(iSafe, jSafe);
-//     }
-// }
-
-// // Taking averages:
-// sineMean /= attachmentCount;
-// cosineMean /= attachmentCount;
-// localDensity /= attachmentCount;
-
-// // Ensuring values are in the correct range:
-// assert(std::abs(sineMean) <= 1);
-// assert(std::abs(cosineMean) <= 1);
-
-// // Deriving angle averages from accumulated values:
-// double angleAverage{std::atan2(sineMean, cosineMean)};
-// double angleIntensity{
-//     std::sqrt(std::pow(sineMean, 2) + std::pow(cosineMean, 2))
-// };
-
-// return {angleAverage, angleIntensity, localDensity, attachmentIndices};
+std::tuple<int, int> World::rollIndex(int i, int j) {
+    while (i < 0) {
+        i += countECMElement;
+    }
+    while (i >= countECMElement) {
+        i -= countECMElement;
+    }
+    while (j < 0) {
+        j += countECMElement;
+    }
+    while (j >= countECMElement) {
+        j -= countECMElement;
+    }
+    return {i, j};
+};

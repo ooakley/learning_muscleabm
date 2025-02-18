@@ -4,7 +4,6 @@
 
 #include <iostream>
 namespace boostMatrix = boost::numeric::ublas;
-using std::atan2;
 
 // Constructor:
 ECMField::ECMField(
@@ -95,8 +94,8 @@ std::tuple<double, double> ECMField::getAverageDeltaHeadingAroundPosition(
     double sineMean{0};
     double cosineMean{0};
     for (auto & heading : deltaHeadingVector) {
-        sineMean += sin(heading);
-        cosineMean += cos(heading);
+        sineMean += std::sin(heading);
+        cosineMean += std::cos(heading);
     }
 
     sineMean /= 9;
@@ -104,8 +103,8 @@ std::tuple<double, double> ECMField::getAverageDeltaHeadingAroundPosition(
 
     assert(std::abs(sineMean) <= 1);
     assert(std::abs(cosineMean) <= 1);
-    double angleAverage{atan2(sineMean, cosineMean)};
-    double angleIntensity{sqrt(pow(sineMean, 2) + pow(cosineMean, 2))};
+    double angleAverage{std::atan2(sineMean, cosineMean)};
+    double angleIntensity{std::sqrt(std::pow(sineMean, 2) + std::pow(cosineMean, 2))};
     return {angleAverage, angleIntensity};
 }
 

@@ -9,23 +9,28 @@ protected:
             // Defined behaviour parameters:
             false, 1, 1,
 
-            // Cell motility and polarisation dynamics:
+            // Movement parameters:
             0.5, 0.5,
             0.5, 0.5,
-            0.5, 0.5,
-            0.5, 0.5,
+            0.5,
+
+            // Polarisation parameters:
+            0.5,
+            0.5,
+            0.5,
 
             // Matrix sensation parameters:
-            0.5, 0.5,
+            0.5, 
+            0.5,
 
             // Collision parameters:
-            0,
-            0.5, 0.5,
-            0.5, 0.5,
-            1, 1, 1,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
 
             // Randomised initial state parameters:
-            1, 1, 1
+            1., 1., 1.
         );
 
         // Cell agent with the same random seed:
@@ -33,23 +38,28 @@ protected:
             // Defined behaviour parameters:
             false, 1, 1,
 
-            // Cell motility and polarisation dynamics:
+            // Movement parameters:
             0.5, 0.5,
             0.5, 0.5,
-            0.5, 0.5,
-            0.5, 0.5,
+            0.5,
+
+            // Polarisation parameters:
+            0.5,
+            0.5,
+            0.5,
 
             // Matrix sensation parameters:
-            0.5, 0.5,
+            0.5, 
+            0.5,
 
             // Collision parameters:
-            0,
-            0.5, 0.5,
-            0.5, 0.5,
-            1, 1, 1,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
 
             // Randomised initial state parameters:
-            1, 1, 1
+            1., 1., 1.
         );
 
         // Cell agent with a different random seed:
@@ -57,23 +67,28 @@ protected:
             // Defined behaviour parameters:
             false, 2, 1,
 
-            // Cell motility and polarisation dynamics:
+            // Movement parameters:
             0.5, 0.5,
             0.5, 0.5,
-            0.5, 0.5,
-            0.5, 0.5,
+            0.5,
+
+            // Polarisation parameters:
+            0.5,
+            0.5,
+            0.5,
 
             // Matrix sensation parameters:
-            0.5, 0.5,
+            0.5, 
+            0.5,
 
             // Collision parameters:
-            0,
-            0.5, 0.5,
-            0.5, 0.5,
-            1, 1, 1,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
 
             // Randomised initial state parameters:
-            1, 1, 1
+            1., 1., 1.
         );
     }
 

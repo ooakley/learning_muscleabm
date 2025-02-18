@@ -6,13 +6,27 @@
 
 // Structure to store necessary parameters for the simulation:
 struct CellParameters {
-    double halfSatCellAngularConcentration, maxCellAngularConcentration,
-    halfSatMeanActinFlow, maxMeanActinFlow, flowScaling,
-    polarityPersistence, actinPolarityRedistributionRate, polarityNoiseSigma,
-    halfSatMatrixAngularConcentration, maxMatrixAngularConcentration,
-    homotypicInhibitionRate, heterotypicInhibitionRate,
-    collisionRepolarisation, collisionRepolarisationRate,
-    cellBodyRadius, maxCellExtension, inhibitionStrength;
+    // Cell movement parameters:
+    double halfSatCellAngularConcentration,
+    maxCellAngularConcentration,
+    halfSatMeanActinFlow,
+    maxMeanActinFlow,
+    flowScaling,
+
+    // Polarisation system parameters:
+    polarityDiffusionRate,
+    actinAdvectionRate,
+    contactAdvectionRate,
+
+    // Matrix sensation parameters:
+    halfSatMatrixAngularConcentration,
+    maxMatrixAngularConcentration,
+
+    // Collision parameters:
+    cellBodyRadius,
+    eccentricity,
+    sharpness,
+    inhibitionStrength;
 };
 
 class World {
@@ -24,12 +38,9 @@ public:
         double setWorldSideLength,
         int setECMElementCount,
         int setNumberOfCells,
-        double setCellTypeProportions,
         bool setThereIsMatrixInteraction,
         double setMatrixTurnoverRate,
         double setMatrixAdditionRate,
-        double setCellDepositionSigma,
-        double setCellSensationSigma,
         CellParameters setCellParameters
     );
 
@@ -51,8 +62,6 @@ private:
     // ECM Information:
     int countECMElement;
     double lengthECMElement;
-    boostMatrix::matrix<double> cellSensationKernel;
-    boostMatrix::matrix<double> cellDepositionKernel;
     bool thereIsMatrixInteraction;
 
     // Complex objects from our libraries:
@@ -63,10 +72,6 @@ private:
 
     // Cell population characteristics:
     int numberOfCells;
-    int attachmentNumber;
-    double cellTypeProportions;
-    double cellDepositionSigma;
-    double cellSensationSigma;
 
     // Variables for initialising generators:
     int worldSeed;
@@ -96,26 +101,19 @@ private:
 
     // Simulation functions:
     void runCellStep(std::shared_ptr<CellAgent> actingCell);
-    void setMovementOnMatrix(
-        std::tuple<double, double> cellStart,
-        std::tuple<double, double> cellFinish,
-        double cellHeading, double cellPolarity
-    );
-    void depositAtAttachments(
+    void depositAtAttachment(
         std::vector<double> attachmentPoint,
         double heading, double polarity, double weighting
     );
 
     // Calculating percepts for cells:
-    std::tuple<double, double, double> getAverageDeltaHeading(CellAgent queryCell);
-    std::tuple<double, double> sampleAttachmentHeadings(
+    std::tuple<double, double> getPerceptAtAttachment(
         std::vector<double> attachmentPoint, double cellPolarity
     );
     double calculateCellDeltaTowardsECM(double ecmHeading, double cellHeading);
 
     // World utility functions:
     std::array<int, 2> getECMIndexFromLocation(std::tuple<double, double> position);
-    boostMatrix::matrix<double> generateGaussianKernel(double sigma);
 
     // Basic utility functions:
     int sign(double value);

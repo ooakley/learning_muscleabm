@@ -34,20 +34,25 @@ CellAgent::CellAgent(
     // Defined behaviour parameters:
     bool setMatrixInteraction, unsigned int setCellSeed, int setCellID,
 
-    // Cell motility and polarisation dynamics:
+    // Movement parameters:
     double setHalfSatCellAngularConcentration, double setMaxCellAngularConcentration,
     double setHalfSatMeanActinFlow, double setMaxMeanActinFlow,
-    double setFlowScaling, double setPolarityPersistence,
-    double setActinPolarityRedistributionRate,
-    double setPolarityNoiseSigma,
+    double setFlowScaling,
+
+    // Polarisation system parameters:
+    double setPolarityDiffusionRate,
+    double setActinAdvectionRate,
+    double setContactAdvectionRate,
 
     // Matrix sensation parameters:
-    double setHalfSatMatrixAngularConcentration, double setMaxMatrixAngularConcentration,
+    double setHalfSatMatrixAngularConcentration,
+    double setMaxMatrixAngularConcentration,
 
     // Collision parameters:
-    int setCellType, double setHomotypicInhibitionRate, double setHeterotypicInhibitionRate,
-    double setCollisionRepolarisation, double setCollisionRepolarisationRate,
-    double setCellBodyRadius, double setMaxCellExtension, double setInhibitionStrength,
+    double setCellBodyRadius,
+    double setEccentricity,
+    double setSharpness,
+    double setInhibitionStrength,
 
     // Randomised initial state parameters:
     double startX, double startY, double startHeading
@@ -57,27 +62,26 @@ CellAgent::CellAgent(
     , cellSeed{setCellSeed}
     , cellID{setCellID}
 
-    // Polarisation and movement parameters:
+    // Movement parameters:
     , halfSatCellAngularConcentration{setHalfSatCellAngularConcentration}
     , maxCellAngularConcentration{setMaxCellAngularConcentration}
     , halfSatMeanActinFlow{setHalfSatMeanActinFlow}
     , maxMeanActinFlow{setMaxMeanActinFlow}
     , flowScaling{setFlowScaling}
-    , polarityPersistence{setPolarityPersistence}
-    , actinPolarityRedistributionRate{setActinPolarityRedistributionRate}
-    , polarityNoiseSigma{setPolarityNoiseSigma}
+
+    // Polarisation system parameters:
+    , polarityDiffusionRate{setPolarityDiffusionRate}
+    , actinAdvectionRate{setActinAdvectionRate}
+    , contactAdvectionRate{setContactAdvectionRate}
 
     // Matrix sensation parameters:
     , halfSatMatrixAngularConcentration{setHalfSatMatrixAngularConcentration}
     , maxMatrixAngularConcentration{setMaxMatrixAngularConcentration}
 
     // Collision parameters:
-    , cellType{setCellType}
-    , homotypicInhibitionRate{setHomotypicInhibitionRate}
-    , heterotypicInhibitionRate{setHeterotypicInhibitionRate}
-    , collisionRepolarisation{setCollisionRepolarisation}
     , cellBodyRadius{setCellBodyRadius}
-    , maxCellExtension{setMaxCellExtension}
+    , cellShapeEccentricity{setEccentricity}
+    , contactDistributionSharpness{setSharpness}
     , inhibitionStrength{setInhibitionStrength}
 
     // State parameters:
@@ -90,19 +94,12 @@ CellAgent::CellAgent(
     , flowDirection{startHeading}
     , flowMagnitude{1e-5}
     , scaledFlowMagnitude{1e-5}
-    , eccentricityConstant{0.9}
     , movementDirection{0}
-    // , actinFlow{0}
     , directionalInfluence{0}
     , directionalIntensity{0}
     , localECMDensity{0}
     , directionalShift{0}
     , sampledAngle{0}
-    , localMatrixHeading{boostMatrix::zero_matrix<double>(3, 3)}
-    , localMatrixPresence{boostMatrix::zero_matrix<double>(3, 3)}
-    , cellType0ContactState{boostMatrix::zero_matrix<bool>(3, 3)}
-    , cellType1ContactState{boostMatrix::zero_matrix<bool>(3, 3)}
-    , localCellHeadingState{boostMatrix::zero_matrix<double>(3, 3)}
 {
     // Initialising randomness:
     seedGenerator = std::mt19937(cellSeed);
@@ -111,36 +108,28 @@ CellAgent::CellAgent(
     // Initialising influence selector:
     generatorInfluence = std::mt19937(seedDistribution(seedGenerator));
 
-    // Initialising von Mises distribution:
+    // General Distributions:
+    uniformDistribution = std::uniform_real_distribution<double>(0, 1);
+    angleUniformDistribution = std::uniform_real_distribution<double>(-M_PI, M_PI);
+    bernoulliDistribution = std::bernoulli_distribution();
+    standardNormalDistribution = std::normal_distribution<double>(0, 1);
+
+    // Generators for von Mises sampling:
     generatorU1 = std::mt19937(seedDistribution(seedGenerator));
     generatorU2 = std::mt19937(seedDistribution(seedGenerator));
     generatorB = std::mt19937(seedDistribution(seedGenerator));
 
-    uniformDistribution = std::uniform_real_distribution<double>(0, 1);
-    bernoulliDistribution = std::bernoulli_distribution();
+    // Generators for collision shape sampling:
+    generatorCollisionRadiusSampling = std::mt19937(seedDistribution(seedGenerator));
+    generatorCollisionAngleSampling = std::mt19937(seedDistribution(seedGenerator));
 
-    generatorProtrusion = std::mt19937(seedDistribution(seedGenerator));
-
-    // Initialising Levy distribution:
-    generatorLevy = std::mt19937(seedDistribution(seedGenerator));
-    boost::math::normal_distribution<> normalDistribution(0.0, 1.0);
-
-    // Generators and distribution for contact inhibition calculations:
-    generatorAngleUniform = std::mt19937(seedDistribution(seedGenerator));
-    generatorCornerCorrection = std::mt19937(seedDistribution(seedGenerator));
-    generatorForInhibitionRate = std::mt19937(seedDistribution(seedGenerator));
-    angleUniformDistribution = std::uniform_real_distribution<double>(-M_PI, M_PI);
+    // Generators for matrix shape sampling:
+    generatorMatrixRadiusSampling = std::mt19937(seedDistribution(seedGenerator));
+    generatorMatrixAngleSampling = std::mt19937(seedDistribution(seedGenerator));
 
     // Generator for finding random angle after loss of polarisation:
     generatorRandomRepolarisation = std::mt19937(seedDistribution(seedGenerator));
-
-    // Generator for polarity noise:
-    generatorPolarityNoiseX = std::mt19937(seedDistribution(seedGenerator));
-    generatorPolarityNoiseY = std::mt19937(seedDistribution(seedGenerator)); 
-    polarityNoiseDistribution = \
-        std::normal_distribution<double>(0, polarityNoiseSigma);
-    positionalNoiseDistribution = std::normal_distribution<double>(0, 1);
-
+    randomDeltaSample = std::mt19937(seedDistribution(seedGenerator));
 }
 
 // Public Definitions:
@@ -148,8 +137,6 @@ CellAgent::CellAgent(
 // Getters:
 // Getters for values that shouldn't change:
 double CellAgent::getID() const {return cellID;}
-double CellAgent::getHomotypicInhibitionRate() const {return homotypicInhibitionRate;}
-double CellAgent::getCellType() const {return cellType;}
 
 // Persistent variable getters: (these variables represent aspects of the cell's "memory")
 double CellAgent::getX() const {return x;}
@@ -170,31 +157,10 @@ double CellAgent::getDirectionalIntensity() const {return directionalIntensity;}
 double CellAgent::getDirectionalShift() const {return directionalShift;}
 double CellAgent::getSampledAngle() const {return sampledAngle;}
 
-
 // Setters:
 void CellAgent::setPosition(std::tuple<double, double> newPosition) {
     x = std::get<0>(newPosition);
     y = std::get<1>(newPosition);
-}
-
-// void CellAgent::setContactStatus(const boostMatrix::matrix<bool>& stateToSet, int cellType) {
-//     if (cellType == 0) {
-//         cellType0ContactState = stateToSet;
-//     } else {
-//         cellType1ContactState = stateToSet;
-//     }
-// }
-
-// void CellAgent::setLocalCellHeadingState(const boostMatrix::matrix<double>& stateToSet) {
-//     localCellHeadingState = stateToSet;
-// }
-
-void CellAgent::setLocalMatrixHeading(const boostMatrix::matrix<double>& stateToSet) {
-    localMatrixHeading = stateToSet;
-}
-
-void CellAgent::setLocalMatrixPresence(const boostMatrix::matrix<double>& stateToSet) {
-    localMatrixPresence = stateToSet;
 }
 
 void CellAgent::setDirectionalInfluence(double setDirectionalInfluence) {
@@ -254,8 +220,6 @@ void CellAgent::takeRandomStep() {
     // Update flow history:
     double actinX{actinFlow * cos(movementDirection)};
     double actinY{actinFlow * sin(movementDirection)};
-    double polarityNoiseX{polarityNoiseDistribution(generatorPolarityNoiseX)};
-    double polarityNoiseY{polarityNoiseDistribution(generatorPolarityNoiseY)};
 
     // Seeing which protrusions die off this timestep:
     ageActinHistory();
@@ -267,16 +231,9 @@ void CellAgent::takeRandomStep() {
     double polarityChangeCilX{0.};
     double polarityChangeCilY{0.};
 
-    // Variables of interest - TODO:
-    // double eccentricityRate{2};
-    double solidity{10};
-    double polarityRate{0.0005};
-    double redistRatio{0.4};
-    double advecRatio{0.6};
-
-    double rhoaRedistributionRate{redistRatio*polarityRate};
-    double advectionRate{advecRatio*polarityRate};
-    double polarityDiffusion{1*polarityRate};
+    // Derived variables of interest:
+    double effectiveContactAdvectionRate{contactAdvectionRate*polarityDiffusionRate};
+    double effectiveActinAdvectionRate{actinAdvectionRate*polarityDiffusionRate};
 
     // *** *** Sampling from area of collisions *** ***
     // Useful points:
@@ -284,10 +241,8 @@ void CellAgent::takeRandomStep() {
     double actingCellY{getY()};
 
     // Sampling from random radius in cell area:
-    // angleDelta
-    double samplePointDirection{angleUniformDistribution(generatorAngleUniform)};
-    // uniformDistribution(generatorPolarityNoiseX)
-    double samplePointRadius{1 + (positionalNoiseDistribution(generatorCornerCorrection)/3)};
+    double samplePointDirection{angleUniformDistribution(generatorCollisionAngleSampling)};
+    double samplePointRadius{1 + (standardNormalDistribution(generatorCollisionRadiusSampling)/3)};
     double effectiveRadius{samplePointRadius*cellBodyRadius};
     double samplePointX{effectiveRadius * std::cos(samplePointDirection)};
     double samplePointY{effectiveRadius * std::sin(samplePointDirection)};
@@ -426,13 +381,8 @@ void CellAgent::takeRandomStep() {
         double angleLocalToActing{std::atan2(yDifference, xDifference)};
 
         // Finding probability of collision:
-        double exponentTerm{std::pow(std::pow(minimumDistance, 2)/2, solidity)};
+        double exponentTerm{std::pow(std::pow(minimumDistance, 2)/2, contactDistributionSharpness)};
         double finalProbability{std::exp(-exponentTerm)};
-
-        // (1/std::sqrt(2*M_PI))*
-        // if (finalProbability < 0.1) {
-        //     continue;
-        // } 
 
         // Determining collision:
         double randomDeterminant{uniformDistribution(generatorInfluence)};
@@ -463,15 +413,14 @@ void CellAgent::takeRandomStep() {
             // double normCollisionX{-std::cos(angleFromActingToSample)};
             // double normCollisionY{-std::sin(angleFromActingToSample)};
             double componentOfTensionOntoPolarity{std::cos(polarityDirection - angleLocalToActing)};
-            // componentOfTensionOntoPolarity <= 0
             if (componentOfTensionOntoPolarity <= 0) {
                 // Getting directional effect:
                 double normCollisionX{std::cos(angleLocalToActing)};
                 double normCollisionY{std::sin(angleLocalToActing)};
 
                 // Simulate effect of CIL on RhoA redistribution:
-                polarityChangeCilX += normCollisionX * rhoaRedistributionRate * std::abs(componentOfTensionOntoPolarity);
-                polarityChangeCilY += normCollisionY * rhoaRedistributionRate * std::abs(componentOfTensionOntoPolarity);
+                polarityChangeCilX += normCollisionX * effectiveContactAdvectionRate * std::abs(componentOfTensionOntoPolarity);
+                polarityChangeCilY += normCollisionY * effectiveContactAdvectionRate * std::abs(componentOfTensionOntoPolarity);
             }
         }
     }
@@ -486,13 +435,10 @@ void CellAgent::takeRandomStep() {
     double rawMagnitudeSquared{std::pow(rawPolarityMagnitude, 2)};
     std::vector<double> flowComponents{findTotalActinFlowComponents()};
 
-    double xDiffusiveComponent{polarityDiffusion*rawMagnitudeSquared*std::cos(polarityDirection)};
-    double yDiffusiveComponent{polarityDiffusion*rawMagnitudeSquared*std::sin(polarityDirection)};
-    double xAdvectionComponent{advectionRate*flowComponents[0] + polarityChangeCilX};
-    double yAdvectionComponent{advectionRate*flowComponents[1] + polarityChangeCilY};
-
-    // assert(polarityChangeCilX == 0);
-    // assert(polarityChangeCilY == 0);
+    double xDiffusiveComponent{polarityDiffusionRate*rawMagnitudeSquared*std::cos(polarityDirection)};
+    double yDiffusiveComponent{polarityDiffusionRate*rawMagnitudeSquared*std::sin(polarityDirection)};
+    double xAdvectionComponent{effectiveActinAdvectionRate*flowComponents[0] + polarityChangeCilX};
+    double yAdvectionComponent{effectiveActinAdvectionRate*flowComponents[1] + polarityChangeCilY};
 
     double dPolarityX{xAdvectionComponent - xDiffusiveComponent};
     double dPolarityY{yAdvectionComponent - yDiffusiveComponent};
@@ -514,7 +460,7 @@ void CellAgent::takeRandomStep() {
     polarityMagnitude = std::tanh(std::sqrt(std::pow(polarityX, 2) + std::pow(polarityY, 2)));
     if (polarityMagnitude == 0) {
         polarityMagnitude += 1e-5;
-        polarityDirection = angleUniformDistribution(generatorAngleUniform);
+        polarityDirection = angleUniformDistribution(generatorRandomRepolarisation);
     }
 
     // Update position:
@@ -524,33 +470,6 @@ void CellAgent::takeRandomStep() {
     addToMovementHistory(std::cos(flowDirection), std::sin(flowDirection));
     x += dx;
     y += dy;
-
-    // // // Update polarity based on movement direction and actin flow:
-    // double polarityChangeExtent{std::tanh(actinFlow*actinPolarityRedistributionRate)};
-    // double polarityChangeX{polarityChangeExtent*cos(movementDirection)};
-    // double polarityChangeY{polarityChangeExtent*sin(movementDirection)};
-
-    // double newPolarityX{polarityPersistence*polarityX + (1-polarityPersistence)*polarityChangeX};
-    // double newPolarityY{polarityPersistence*polarityY + (1-polarityPersistence)*polarityChangeY};
-
-    // // Add white noise component to polarity:
-    // double polarityNoiseX{polarityNoiseDistribution(generatorPolarityNoiseX)};
-    // double polarityNoiseY{polarityNoiseDistribution(generatorPolarityNoiseY)};
-    // newPolarityX = newPolarityX + polarityNoiseX;
-    // newPolarityY = newPolarityY + polarityNoiseY;
-
-    // // Clamping polarity components to [-1, 1] (while preserving direction):
-    // double newPolarityExtent{sqrt(pow(newPolarityX, 2) + pow(newPolarityY, 2))};
-    // if (newPolarityExtent > 1) {
-    //     newPolarityExtent = 1;
-    // }
-    // assert(newPolarityExtent <= 1);
-    // const double newPolarityDirection{std::atan2(newPolarityY, newPolarityX)};
-    // polarityX = newPolarityExtent * cos(newPolarityDirection);
-    // polarityY = newPolarityExtent * sin(newPolarityDirection);
-
-    // Check for valid low polarisation values:
-    // safeZeroPolarisation();
 }
 
 std::vector<double> CellAgent::sampleAttachmentPoint() {
@@ -559,12 +478,12 @@ std::vector<double> CellAgent::sampleAttachmentPoint() {
     double actingCellY{getY()};
 
     // Sampling from random radius in cell area:
-    double angleDelta = angleUniformDistribution(generatorAngleUniform);
+    double angleDelta = angleUniformDistribution(generatorMatrixAngleSampling);
     // angleDelta
     // M_PI_2 + (angleDelta / 2)
     double samplePointDirection{angleDelta};
     // uniformDistribution(generatorPolarityNoiseX)
-    double samplePointRadius{1 + (positionalNoiseDistribution(generatorCornerCorrection)/3)};
+    double samplePointRadius{1 + (standardNormalDistribution(generatorMatrixRadiusSampling)/3)};
     double effectiveRadius{samplePointRadius*cellBodyRadius};
     double samplePointX{effectiveRadius * std::cos(samplePointDirection)};
     double samplePointY{effectiveRadius * std::sin(samplePointDirection)};
@@ -596,67 +515,11 @@ std::vector<double> CellAgent::sampleAttachmentPoint() {
 };
 
 // // Private functions for cell behaviour:
-// std::pair<bool, double> CellAgent::checkForCollisions() {
-//     // This checks for which cell in the Moore neighbourhood we need to query:
-//     int stateIndex{int(floor((movementDirection + M_PI + (M_PI/8)) / (M_PI / 4)))};
-//     int iContact{std::get<0>(HEADING_CONTACT_MAPPING[stateIndex])};
-//     int jContact{std::get<1>(HEADING_CONTACT_MAPPING[stateIndex])};
-
-//     // Are any cells nearby?
-//     bool type0Contact = cellType0ContactState(iContact, jContact);
-//     bool type1Contact = cellType1ContactState(iContact, jContact);
-//     if ((!type0Contact) && (!type1Contact)) {
-//         return std::make_pair(false, 0);
-//     }
-
-//     // Calculate corner collision correction:
-//     bool isCorner{(stateIndex == 1 || stateIndex == 3 || stateIndex == 5 || stateIndex == 7)};
-//     const double cornerCorrectionFactor{0.5 + ((9*M_PI)/32) - ((9*sqrt(2))/16)};
-
-//     if (isCorner) {
-//         bool skipCollision{uniformDistribution(generatorCornerCorrection) > cornerCorrectionFactor};
-//         if (skipCollision) {return std::make_pair(false, 0);}
-//     }
-
-//     // Calculate correction for relative cell angles:
-//     double otherCellHeading{localCellHeadingState(iContact, jContact)};
-//     double angularDistance{calculateMinimumAngularDistance(findPolarityDirection(), otherCellHeading)};
-//     double angularCorrectionFactor{cos(angularDistance)};
-
-//     // Calculate homotypic / heterotypic interactions:
-//     std::array<bool, 2> cellTypeContacts{type0Contact, type1Contact};
-//     if (cellTypeContacts[cellType]) {
-//         // Do homotypic interaction if present:
-//         double effectiveHomotypicInhibition{(homotypicInhibitionRate*angularCorrectionFactor)};
-//         if (uniformDistribution(generatorForInhibitionRate) < effectiveHomotypicInhibition) {
-//             double headingDistance{calculateAngularDistance(
-//                 findPolarityDirection(), otherCellHeading
-//             )};
-//             return std::make_pair(true, headingDistance);
-//         }
-//     } else if (cellTypeContacts[std::abs(cellType - 1)]) {
-//         // Do heterotypic interaction if no homotypic interaction:
-//         double effectiveHeterotypicInhibition{
-//             (heterotypicInhibitionRate*angularCorrectionFactor)
-//         };
-//         if (uniformDistribution(generatorForInhibitionRate) < effectiveHeterotypicInhibition) {
-//             double headingDistance{calculateAngularDistance(
-//                 findPolarityDirection(), otherCellHeading
-//             )};
-//             return std::make_pair(true, headingDistance);
-//         }
-//     }
-
-//     // If no collision is ultimately calculated, return no collision:
-//     return std::make_pair(false, 0);
-// }
-
-
 double CellAgent::sampleVonMises(double kappa) {
     // Von Mises sampling quickly overloaded if kappa is very low - can set a minimum and take a
     // uniform distribution instead:
     if (kappa < 1e-3) {
-        return angleUniformDistribution(generatorAngleUniform);
+        return angleUniformDistribution(randomDeltaSample);
     }
     // See Efficient Simulation of the von Mises Distribution - Best & Fisher 1979
     // Calculating distribution parameters:
@@ -695,17 +558,6 @@ double CellAgent::sampleVonMises(double kappa) {
         }
     }
     return sampledVonMises;
-}
-
-
-double CellAgent::sampleLevyDistribution(double mu, double c) {
-    double U{uniformDistribution(generatorLevy)};
-    std::cout << "Uniform sample: " << U << std::endl;
-    std::cout << "Percentile: " << 1 - U/2 << std::endl;
-    double ppf{boost::math::quantile(normalDistribution, 1 - U)};
-    std::cout << "PPF: " << ppf << std::endl;
-    double levyStepSize{mu + (c / (std::pow(ppf, 2)))};
-    return levyStepSize;
 }
 
 
@@ -879,13 +731,3 @@ std::vector<double> CellAgent::crossProduct(std::vector<double> const a, std::ve
     resultVector[2] = a[0]*b[1] - a[1]*b[0];
     return resultVector;
 }
-
-// Getting origin point of protrusion, need to do some rejection sampling for super-Gaussians:
-// double cellAngularConcentration{
-//     (maxCellAngularConcentration * polarityMagnitude) /
-//     (halfSatCellAngularConcentration + polarityMagnitude)
-// };
-// double angleDelta = sampleVonMises(cellAngularConcentration);
-
-// double originMinor{positionalNoiseDistribution(generatorPolarityNoiseX)*cellBodyRadius};
-// double originMajor{positionalNoiseDistribution(generatorPolarityNoiseX)*cellBodyRadius};

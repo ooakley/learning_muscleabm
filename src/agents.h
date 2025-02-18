@@ -14,20 +14,27 @@ public:
         // Defined behaviour parameters:
         bool setMatrixInteraction, unsigned int setCellSeed, int setCellID,
 
-        // Cell motility and polarisation dynamics:
-        double setHalfSatCellAngularConcentration, double setMaxCellAngularConcentration,
-        double setHalfSatMeanActinFlow, double setMaxMeanActinFlow,
-        double setFlowScaling, double setPolarityPersistence,
-        double setActinPolarityRedistributionRate,
-        double setPolarityNoiseSigma,
+        // Movement parameters:
+        double setHalfSatCellAngularConcentration,
+        double setMaxCellAngularConcentration,
+        double setHalfSatMeanActinFlow,
+        double setMaxMeanActinFlow,
+        double setFlowScaling,
+        
+        // Polarisation system parameters:
+        double setPolarityDiffusionRate,
+        double setActinAdvectionRate,
+        double setContactAdvectionRate,
 
         // Matrix sensation parameters:
-        double setHalfSatMatrixAngularConcentration, double setMaxMatrixAngularConcentration,
+        double setHalfSatMatrixAngularConcentration,
+        double setMaxMatrixAngularConcentration,
 
         // Collision parameters:
-        int setCellType, double setHomotypicInhibitionRate, double setHeterotypicInhibitionRate,
-        double setCollisionRepolarisation, double setCollisionRepolarisationRate,
-        double setCellBodyRadius, double setMaxCellExtension, double setInhibitionStrength,
+        double setCellBodyRadius,
+        double setEccentricity,
+        double setSharpness,
+        double setInhibitionStrength,
 
         // Randomised initial state parameters:
         double startX, double startY, double startHeading
@@ -39,8 +46,6 @@ public:
     // Getters:
     // Getters for values that shouldn't change:
     double getID() const;
-    double getHomotypicInhibitionRate() const;
-    double getCellType() const;
 
     // Persistent variable getters: (these variables represent aspects of the cell's "memory")
     double getX() const;
@@ -48,7 +53,6 @@ public:
     std::tuple<double, double> getPosition() const;
     double getPolarityDirection() const;
     double getPolarityMagnitude() const;
-    // std::vector<double> getAttachmentHistory() const;
 
     // Instantaneous variable getters: (these variables are updated each timestep,
     // and represent the cell's percepts/actions)
@@ -64,18 +68,11 @@ public:
     // Setters:
     // Setters for simulation (moving cells around etc.):
     void setPosition(std::tuple<double, double> newPosition);
-    // void setLocalCellHeadingState(const boostMatrix::matrix<double>& stateToSet);
 
     // Setters for simulating cell perception (e.g. updating cell percepts):
-    void setLocalMatrixHeading(const boostMatrix::matrix<double>& matrixToSet);
-    void setLocalMatrixPresence(const boostMatrix::matrix<double>& matrixToSet);
-    // void setContactStatus(const boostMatrix::matrix<bool>& stateToSet, int cellType);
-
     void setDirectionalInfluence(double setDirectionalInfluence);
     void setDirectionalIntensity(double setDirectiontalIntensity);
-
     void setLocalECMDensity(double setLocalDensity);
-
     void setLocalCellList(std::vector<std::shared_ptr<CellAgent>> setLocalAgents);
 
     // Simulation code:
@@ -106,91 +103,72 @@ private:
     double scaledFlowMagnitude;
     double eccentricityConstant;
 
-    // Polarisation and movement parameters:
+    // Movement parameters:
     double halfSatCellAngularConcentration;
     double maxCellAngularConcentration;
     double halfSatMeanActinFlow;
     double maxMeanActinFlow;
     double flowScaling;
-    double actinPolarityRedistributionRate;
-    double polarityPersistence;
+
+    // Polarisation system parameters:
+    double polarityDiffusionRate;
+    double actinAdvectionRate;
+    double contactAdvectionRate;
 
     // Contact inhibition parameters:
     double cellBodyRadius;
-    double maxCellExtension;
+    double cellShapeEccentricity;
+    double contactDistributionSharpness;
     double inhibitionStrength;
 
     // Matrix sensation properties:
     double halfSatMatrixAngularConcentration;
     double maxMatrixAngularConcentration;
 
-    // Constant cell properties:
-    double collisionRepolarisation;
-    double collisionRepolarisationRate;
-
-    // Infrastructure for additive polarisation noise:
-    double polarityNoiseSigma;
-    std::mt19937 generatorPolarityNoiseX;
-    std::mt19937 generatorPolarityNoiseY;
-    std::normal_distribution<double> polarityNoiseDistribution;
-    std::normal_distribution<double> positionalNoiseDistribution;
-
     // Properties calculated each timestep:
     double movementDirection;
-    double directionalInfluence; // -pi <= theta < pi
-    double directionalIntensity; // 0 <= I < 1
-    double localECMDensity; // 0 <= D < 1
     double directionalShift; // -pi <= theta < pi
     double sampledAngle;
 
     // Percepts:
-    boostMatrix::matrix<double> localMatrixHeading;
-    boostMatrix::matrix<double> localMatrixPresence;
+    double directionalInfluence; // -pi <= theta < pi
+    double directionalIntensity; // 0 <= I < 1
+    double localECMDensity; // 0 <= D < 1
     std::vector<std::shared_ptr<CellAgent>> localAgents;
-
-    boostMatrix::matrix<bool> cellType0ContactState;
-    boostMatrix::matrix<bool> cellType1ContactState;
-    boostMatrix::matrix<double> localCellHeadingState;
 
     // Poisson sampling for step size:
     std::mt19937 generatorProtrusion;
     double poissonLambda;
 
-    // Levy sampling for step size:
-    std::mt19937 generatorLevy;
-    boost::math::normal_distribution<> normalDistribution;
+    // General distributions:
+    std::uniform_real_distribution<double> uniformDistribution;
+    std::uniform_real_distribution<double> angleUniformDistribution;
+    std::bernoulli_distribution bernoulliDistribution;
+    std::normal_distribution<double> standardNormalDistribution;
 
     // We need to use a special distribution (von Mises) to sample from a random
-    // direction over a circle - unfortunately not included in std
+    // direction over a circle - unfortunately not included in std library:
 
     // Member variables for von Mises sampling for directional step size:
     std::mt19937 generatorU1, generatorU2, generatorB;
-    std::uniform_real_distribution<double> uniformDistribution;
-    std::bernoulli_distribution bernoulliDistribution;
 
-    // Member variables for contact inhibition calculations:
-    std::mt19937 generatorAngleUniform;
-    std::mt19937 generatorCornerCorrection;
-    std::mt19937 generatorForInhibitionRate;
-    std::uniform_real_distribution<double> angleUniformDistribution;
-    double homotypicInhibitionRate;
-    double heterotypicInhibitionRate;
-    int cellType;
+    // Member functions for von Mises sampling:
+    double sampleVonMises(double kappa);
+
+    // Generators for collision shape sampling:
+    std::mt19937 generatorCollisionRadiusSampling;
+    std::mt19937 generatorCollisionAngleSampling;
+
+    // Generators for matrix shape sampling:
+    std::mt19937 generatorMatrixRadiusSampling;
+    std::mt19937 generatorMatrixAngleSampling;
 
     // Generator for selecting for environmental influence:
     std::mt19937 generatorInfluence;
 
     // Generator for finding random angle after loss of movement polarisation:
     std::mt19937 generatorRandomRepolarisation;
-
-    // Collision detection behaviour:
-    // std::pair<bool, double> checkForCollisions();
-
-    // Member functions for von Mises sampling:
-    double sampleVonMises(double kappa);
-
-    // Member functions for Levy sampling:
-    double sampleLevyDistribution(double mu, double c);
+    std::mt19937 randomDeltaSample;
 
     // Effectively a utility function for calculating the modulus of angles:
     double angleMod(double angle) const;
