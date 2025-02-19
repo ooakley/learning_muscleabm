@@ -7,7 +7,7 @@ import copy
 import numpy as np
 
 # Defines the parameter ranges, with [start, stop]:
-NUM_SAMPLES = 100
+NUM_SAMPLES = 1000
 SIMULATION_INDEX = 0
 
 # All parameter names:
@@ -54,11 +54,9 @@ CONSTANT_PARAMETERS = {
     "gridSize": 64,
     "thereIsMatrixInteraction": 1,
     "halfSatCellAngularConcentration": 0.5,
-    "maxCellAngularConcentration": 4,
     "halfSatMeanActinFlow": 0.5,
     "maxMeanActinFlow": 6,
     "halfSatMatrixAngularConcentration": 0.5,
-    "maxMatrixAngularConcentration": 4,
     "sharpness": 10,
 }
 
@@ -66,12 +64,14 @@ GRIDSEARCH_PARAMETERS = {
     "matrixAdditionRate": [0.0, 0.2],
     "matrixTurnoverRate": [0.0, 0.2],
     "flowScaling": [0, 0.2],
-    "cellBodyRadius": [60, 150],
-    "eccentricity": [0, 0.9],
-    "polarityDiffusionRate": [0, 0.05],
-    "actinAdvectionRate": [0.5, 1.5],
-    "contactAdvectionRate": [0.5, 1.5],
-    "inhibitionStrength": [0.0, 1.0]
+    "cellBodyRadius": [60, 200],
+    "eccentricity": [0, 0.98],
+    "polarityDiffusionRate": [0, 0.1],
+    "actinAdvectionRate": [0., 2.],
+    "contactAdvectionRate": [0., 2.],
+    "inhibitionStrength": [0.0, 1.0],
+    "maxCellAngularConcentration": [1.5, 5],
+    "maxMatrixAngularConcentration": [1.5, 5],
 }
 
 
