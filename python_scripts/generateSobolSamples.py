@@ -55,8 +55,8 @@ CONSTANT_PARAMETERS = {
     "thereIsMatrixInteraction": 1,
     "halfSatCellAngularConcentration": 0.5,
     "halfSatMeanActinFlow": 0.5,
-    "maxMeanActinFlow": 6,
     "halfSatMatrixAngularConcentration": 0.5,
+    "maxMeanActinFlow": 6,
     "sharpness": 10,
 }
 
@@ -93,8 +93,7 @@ def generate_LHS_matrix(rng):
     parameter_matrix = []
     for parameter_index in range(len(GRIDSEARCH_PARAMETERS)):
         # Generate columns of parameter matrix:
-        parameter_array = np.linspace(0, 1, NUM_SAMPLES)
-        rng.shuffle(parameter_array)
+        parameter_array = rng.uniform(size=(NUM_SAMPLES))
         parameter_matrix.append(parameter_array)
     # Stack along columns:
     parameter_matrix = np.stack(parameter_matrix, axis=1)
