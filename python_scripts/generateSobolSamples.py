@@ -93,6 +93,7 @@ def generate_LHS_matrix(rng):
     parameter_matrix = []
     for parameter_index in range(len(GRIDSEARCH_PARAMETERS)):
         # Generate columns of parameter matrix:
+        # parameter_array = np.linspace(0, 1, NUM_SAMPLES)
         parameter_array = rng.uniform(size=(NUM_SAMPLES))
         parameter_matrix.append(parameter_array)
     # Stack along columns:
