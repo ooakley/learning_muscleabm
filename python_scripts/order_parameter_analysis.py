@@ -114,7 +114,9 @@ def main():
 
     # Recording mean order parameter:
     mean_output = np.mean(order_parameters)
-    np.save(os.path.join(subdirectory_path, "mean_output.npy"), mean_output)
+    std_output = np.std(order_parameters)
+    output = np.array([mean_output, std_output])
+    np.save(os.path.join(subdirectory_path, "mean_output.npy"), output)
 
 
 if __name__ == "__main__":
