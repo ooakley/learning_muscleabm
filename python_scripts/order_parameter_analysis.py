@@ -99,7 +99,8 @@ def main():
 
     # Finding specified simulation output files:
     subdirectory_path = os.path.join(SIMULATION_OUTPUTS_FOLDER, str(args.folder_id))
-    order_parameters = []
+    order_parameter_list = []
+    order_parameter_auc_list = []
     for seed in range(SUPERITERATION_NUMBER):
         print(f"Reading subiteration {seed}...")
         # Reading matrix information:
@@ -109,14 +110,21 @@ def main():
         final_matrix = matrix[-1, 0:2, :, :]
         orderparameter_scale = generate_order_parameter_scale_curve(final_matrix)
         orderparameter_auc = np.trapz(orderparameter_scale)
-        order_parameters.append(orderparameter_auc)
+
+        # Accumulating in lists:
+        order_parameter_list.append(orderparameter_scale)
+        order_parameter_auc_list.append(orderparameter_auc)
         print(f"OP - area under scale curve: {orderparameter_auc}")
 
-    # Recording mean order parameter:
-    mean_output = np.mean(order_parameters)
-    std_output = np.std(order_parameters)
-    output = np.array([mean_output, std_output])
-    np.save(os.path.join(subdirectory_path, "mean_output.npy"), output)
+    # Recording OP AUC:
+    mean_output = np.mean(order_parameter_auc_list)
+    std_output = np.std(order_parameter_auc_list)
+    auc_output = np.array([mean_output, std_output])
+    np.save(os.path.join(subdirectory_path, "auc_output.npy"), auc_output)
+
+    # Recording direct scale curves:
+    op_curves = np.stack(order_parameter_list, axis=0)
+    np.save(os.path.join(subdirectory_path, "op_scale_output.npy"), op_curves)
 
 
 if __name__ == "__main__":

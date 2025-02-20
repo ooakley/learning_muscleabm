@@ -1,8 +1,8 @@
 {
-    "jobArrayID": 2,
+    "jobArrayID": 0,
     "superIterationCount": 10,
     "timestepsToRun": 500,
-    "numberOfCells": 200,
+    "numberOfCells": 150,
     "worldSize": 2048,
     "gridSize": 64,
     "matrixTurnoverRate": 0.05,
