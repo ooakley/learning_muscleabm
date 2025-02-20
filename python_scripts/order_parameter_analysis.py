@@ -4,10 +4,11 @@ import os
 import numpy as np
 
 MESH_NUMBER = 64
-TIMESTEPS = 576
+TIMESTEPS = 500
 WORLD_SIZE = 2048
 SIMULATION_OUTPUTS_FOLDER = "./fileOutputs/"
 SUPERITERATION_NUMBER = 10
+NEIGHBOURHOOD_SIZES = np.arange(3, 64, 4)
 
 
 def parse_arguments():
@@ -58,7 +59,7 @@ def roll_indices(index, half_index):
     return roll_index, index_start, index_end
 
 
-def get_order_parameter_distribution(matrix, neighbourhood_size=11):
+def get_order_parameter_distribution(matrix, neighbourhood_size=3):
     order_parameters = []
     half_index = int(np.floor(neighbourhood_size / 2))
     for i in range(MESH_NUMBER):
@@ -69,13 +70,25 @@ def get_order_parameter_distribution(matrix, neighbourhood_size=11):
             roll_j, j_start, j_end = roll_indices(j, half_index)
 
             # Rolling matrix:
-            rolled_matrix = np.roll(matrix, roll_i, axis=0)
-            rolled_matrix = np.roll(rolled_matrix, roll_j, axis=1)
+            rolled_matrix = np.roll(matrix, roll_i, axis=1)
+            rolled_matrix = np.roll(rolled_matrix, roll_j, axis=2)
 
             # Getting submatrix:
-            submatrix = rolled_matrix[i_start:i_end, j_start:j_end]
-            order_parameter = get_order_parameter(submatrix)
-            order_parameters.append(order_parameter)
+            orientation_submatrix = rolled_matrix[0, i_start:i_end, j_start:j_end]
+            density_submatrix = rolled_matrix[1, i_start:i_end, j_start:j_end]
+            order_parameter = get_order_parameter(orientation_submatrix)
+            weighted_order_parameter = np.mean(density_submatrix) * order_parameter
+            order_parameters.append(weighted_order_parameter)
+    return order_parameters
+
+
+def generate_order_parameter_scale_curve(matrix):
+    order_parameters = []
+    for neighbourhood_size in NEIGHBOURHOOD_SIZES:
+        mean_order_parameter = np.mean(
+            get_order_parameter_distribution(matrix, neighbourhood_size=neighbourhood_size)
+        )
+        order_parameters.append(mean_order_parameter)
     return order_parameters
 
 
@@ -93,10 +106,11 @@ def main():
         matrix_filename = f"matrix_seed{seed:03d}.txt"
         matrix_filepath = os.path.join(subdirectory_path, matrix_filename)
         matrix = read_matrix_into_numpy(matrix_filepath, MESH_NUMBER, TIMESTEPS)
-        final_matrix = matrix[-1, 0, :, :]
-        order_parameter = np.mean(get_order_parameter_distribution(final_matrix))
-        order_parameters.append(order_parameter)
-        print(f"Order parameter: {order_parameter}")
+        final_matrix = matrix[-1, 0:2, :, :]
+        orderparameter_scale = generate_order_parameter_scale_curve(final_matrix)
+        orderparameter_auc = np.trapz(orderparameter_scale)
+        order_parameters.append(orderparameter_auc)
+        print(f"OP - area under scale curve: {orderparameter_auc}")
 
     # Recording mean order parameter:
     mean_output = np.mean(order_parameters)
