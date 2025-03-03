@@ -61,12 +61,12 @@ CONSTANT_PARAMETERS = {
 }
 
 GRIDSEARCH_PARAMETERS = {
-    "matrixAdditionRate": [0.0, 0.2],
+    "matrixAdditionRate": [0.1, 0.2],
     "matrixTurnoverRate": [0.0, 0.2],
     "flowScaling": [0, 0.2],
     "cellBodyRadius": [60, 200],
     "eccentricity": [0, 0.98],
-    "polarityDiffusionRate": [0, 0.1],
+    "polarityDiffusionRate": [0, 0.05],
     "actinAdvectionRate": [0., 2.],
     "contactAdvectionRate": [0., 2.],
     "inhibitionStrength": [0.0, 1.0],
