@@ -42,10 +42,20 @@ double ECMField::getHeading(int i, int j) const {
 
 double ECMField::getMatrixDensity(std::tuple<double, double> position) const {
     auto [i, j] = getMatrixIndexFromLocation(position);
-    return ecmDensityMatrix(i, j);
+    double indexedDensity{ecmDensityMatrix(i, j)};
+    if (indexedDensity >= 1) {
+        std::cout << "indexedDensity: " << indexedDensity << std::endl;
+        assert(indexedDensity < 1);
+    };
+    return indexedDensity;
 }
 double ECMField::getMatrixDensity(int i, int j) const {
-    return ecmDensityMatrix(i, j);
+    double indexedDensity{ecmDensityMatrix(i, j)};
+    if (indexedDensity >= 1) {
+        std::cout << "indexedDensity: " << indexedDensity << std::endl;
+        assert(indexedDensity < 1);
+    };
+    return indexedDensity;
 }
 
 double ECMField::getMatrixAnisotropy(std::tuple<double, double> position) const {
@@ -301,10 +311,19 @@ void ECMField::removeCellPresence(std::tuple<double, double> position, int cellT
 void ECMField::addToMatrix(int i, int j, double cellHeading, double polarity, double kernelWeighting) {
     // If no matrix present, set to cellHeading:
     if (ecmDensityMatrix(i, j) == 0) {
+        // Set heading:
         double newECMHeading{cellHeading};
         if (newECMHeading < 0) {newECMHeading += M_PI;};
         ecmHeadingMatrix(i, j) = newECMHeading;
-        ecmDensityMatrix(i, j) = polarity*kernelWeighting*matrixAdditionRate;
+
+        // Set density:
+        double newDensity{polarity*kernelWeighting*matrixAdditionRate};
+        if (newDensity > 1) {
+            newDensity = 1 - 1e-5;
+        }
+        ecmDensityMatrix(i, j) = newDensity;
+
+        // Assign to member variables:
         ecmAnisotropyMatrix(i, j) = 0;
         ecmUpdateWeightMatrix(i, j) += polarity*kernelWeighting*matrixAdditionRate;
         return;
@@ -349,11 +368,12 @@ void ECMField::addToMatrix(int i, int j, double cellHeading, double polarity, do
     double newAnisotropy{currentAnisotropy + combinedWeighting*headingDifferenceCurrentMean*headingDifferenceNewMean};
 
     // Setting matrix values:
-    if (newECMDensity > 1) {
+    if (newECMDensity >= 1) {
         const double epsilon{std::numeric_limits<double>::epsilon()};
-        newECMDensity = 1 - epsilon;
+        newECMDensity = 1 - 1e-5;
     };
     ecmDensityMatrix(i, j) = newECMDensity;
+    assert(ecmDensityMatrix(i, j) < 1);
     ecmHeadingMatrix(i, j) = newECMHeading;
     ecmAnisotropyMatrix(i, j) = newAnisotropy;
     ecmUpdateWeightMatrix(i, j) += combinedWeighting;
@@ -374,6 +394,7 @@ void ECMField::ageIndividualECMLattice(int i, int j) {
     double localDensity{ecmDensityMatrix(i, j)};
     double reactionTerm{(matrixTurnoverRate*localDensity) / (0.5 + localDensity)};
     ecmDensityMatrix(i, j) = localDensity - reactionTerm;
+    assert(ecmDensityMatrix(i, j) < 1);
 }
 
 // Utility functions:

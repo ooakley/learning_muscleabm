@@ -24,9 +24,16 @@ struct CellParameters {
 
     // Collision parameters:
     cellBodyRadius,
-    eccentricity,
-    sharpness,
+    aspectRatio,
+    boundarySharpness,
     inhibitionStrength;
+
+    // Binary simulation logic parameters:
+    bool actinMagnitudeIsFixed,
+    actinDirectionIsFixed,
+    thereIsExtensionRepulsion,
+    collisionsAreDeterministic,
+    matrixAlignmentIsDeterministic;
 };
 
 class World {

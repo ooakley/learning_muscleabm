@@ -102,16 +102,32 @@ int main(int argc, char** argv) {
         )
         // Collision parameters:
         ("cellBodyRadius", po::value<double>(&cellParams.cellBodyRadius)->required(),
-            "Radius of the cell body for collision calculations.."
+            "Radius of the cell body for collision calculations."
         )
-        ("eccentricity", po::value<double>(&cellParams.eccentricity)->required(),
+        ("aspectRatio", po::value<double>(&cellParams.aspectRatio)->required(),
             "Rate at which actin flow in the direction of a collision is reduced by a collision."
         )
-        ("sharpness", po::value<double>(&cellParams.sharpness)->required(),
+        ("boundarySharpness", po::value<double>(&cellParams.boundarySharpness)->required(),
             "Rate at which actin flow in the direction of a collision is reduced by a collision."
         )
         ("inhibitionStrength", po::value<double>(&cellParams.inhibitionStrength)->required(),
             "Rate at which actin flow in the direction of a collision is reduced by a collision."
+        )
+        // Binary simulation logic parameters:
+        ("actinMagnitudeIsFixed", po::value<bool>(&cellParams.actinMagnitudeIsFixed)->required(),
+            "Whether actin magnitude is randomly sampled from a Poisson distribution each timestep."
+        )
+        ("actinDirectionIsFixed", po::value<bool>(&cellParams.actinDirectionIsFixed)->required(),
+            "Whether actin flow direction is randomly sampled from a von Mises distribution each timestep."
+        )
+        ("thereIsExtensionRepulsion", po::value<bool>(&cellParams.thereIsExtensionRepulsion)->required(),
+            "Whether there is an angular force derived from the intersection of shape directions."
+        )
+        ("collisionsAreDeterministic", po::value<bool>(&cellParams.collisionsAreDeterministic)->required(),
+            "Whether collisons are calculated on the basis of sampling around the perimeter of the cell."
+        )
+        ("matrixAlignmentIsDeterministic", po::value<bool>(&cellParams.matrixAlignmentIsDeterministic)->required(),
+            "Whether to take the average of matrix and polarity direction, instead of just sampling one of them."
         )
     ;
 

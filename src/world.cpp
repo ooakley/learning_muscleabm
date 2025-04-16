@@ -34,7 +34,7 @@ World::World
     , thereIsMatrixInteraction{setThereIsMatrixInteraction}
     , simulationTime{0}
     , cellParameters{setCellParameters}
-    , collisionCellList{CollisionCellList(6, 2048)}
+    , collisionCellList{CollisionCellList(16, 2048)}
 {
     // Initialising randomness:
     seedGenerator = std::mt19937(worldSeed);
@@ -70,11 +70,13 @@ void World::writePositionsToCSV(std::ofstream& csvFile) {
         csvFile << cellAgentVector[i]->getID() << ",";
         csvFile << cellAgentVector[i]->getX() << ",";
         csvFile << cellAgentVector[i]->getY() << ","; 
+        csvFile << cellAgentVector[i]->getShapeDirection() << ",";
         csvFile << cellAgentVector[i]->getPolarityDirection() << ",";
         csvFile << cellAgentVector[i]->getPolarityMagnitude() << ",";
         csvFile << cellAgentVector[i]->getDirectionalInfluence() << ",";
         csvFile << cellAgentVector[i]->getDirectionalIntensity() << ",";
         csvFile << cellAgentVector[i]->getActinFlowDirection() << ",";
+        csvFile << cellAgentVector[i]->getActinFlowMagnitude() << ",";
         csvFile << cellAgentVector[i]->getMovementDirection() << ",";
         csvFile << cellAgentVector[i]->getDirectionalShift() << ",";
         csvFile << cellAgentVector[i]->getSampledAngle() << "\n";
@@ -167,12 +169,19 @@ std::shared_ptr<CellAgent> World::initialiseCell(int setCellID) {
 
         // Collision parameters:
         cellParameters.cellBodyRadius,
-        cellParameters.eccentricity,
-        cellParameters.sharpness,
+        cellParameters.aspectRatio,
+        cellParameters.boundarySharpness,
         cellParameters.inhibitionStrength,
 
         // Randomised initial state parameters:
-        startX, startY, startHeading
+        startX, startY, startHeading,
+
+        // Binary simulation parameters:
+        cellParameters.actinMagnitudeIsFixed,
+        cellParameters.actinDirectionIsFixed,
+        cellParameters.thereIsExtensionRepulsion,
+        cellParameters.collisionsAreDeterministic,
+        cellParameters.matrixAlignmentIsDeterministic
     );
 }
 
@@ -185,6 +194,7 @@ void World::runCellStep(std::shared_ptr<CellAgent> actingCell) {
     std::vector<double> attachmentPoint{actingCell->sampleAttachmentPoint()};
     double cellPolarityDirection{actingCell->getPolarityDirection()};
     const auto [matrixAngle, localDensity] = getPerceptAtAttachment(attachmentPoint, cellPolarityDirection);
+    assert(localDensity < 1);
     // Setting percepts of local matrix:
     if (thereIsMatrixInteraction) {
         actingCell->setDirectionalInfluence(matrixAngle);
@@ -209,7 +219,7 @@ void World::runCellStep(std::shared_ptr<CellAgent> actingCell) {
     // double attachmentWeighting{1.0 / attachmentNumber};
     depositAtAttachment(
         attachmentPoint,
-        actingCell->getPolarityDirection(), actingCell->getPolarityMagnitude(),
+        actingCell->getPolarityDirection(), 1,
         1
     );
 
@@ -244,6 +254,7 @@ std::tuple<double, double> World::getPerceptAtAttachment(std::vector<double> att
     // Reading from ECM:
     const double ecmHeading{ecmField.getHeading(iSafe, jSafe)};
     const double ecmDensity{ecmField.getMatrixDensity(iSafe, jSafe)};
+    assert(ecmDensity < 1);
 
     // Calculate change in heading of cell to ECM:
     const double deltaHeading{calculateCellDeltaTowardsECM(ecmHeading, cellPolarity)};

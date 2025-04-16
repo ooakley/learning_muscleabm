@@ -41,9 +41,14 @@ def main():
         --halfSatMatrixAngularConcentration {parameter_dictionary['halfSatMatrixAngularConcentration']} \
         --maxMatrixAngularConcentration {parameter_dictionary['maxMatrixAngularConcentration']} \
         --cellBodyRadius {parameter_dictionary['cellBodyRadius']} \
-        --eccentricity {parameter_dictionary['eccentricity']} \
-        --sharpness {parameter_dictionary['sharpness']} \
+        --aspectRatio {parameter_dictionary['aspectRatio']} \
+        --boundarySharpness {parameter_dictionary['boundarySharpness']} \
         --inhibitionStrength {parameter_dictionary['inhibitionStrength']} \
+        --actinMagnitudeIsFixed {parameter_dictionary['actinMagnitudeIsFixed']} \
+        --actinDirectionIsFixed {parameter_dictionary['actinDirectionIsFixed']} \
+        --thereIsExtensionRepulsion {parameter_dictionary['thereIsExtensionRepulsion']} \
+        --collisionsAreDeterministic {parameter_dictionary['collisionsAreDeterministic']} \
+        --matrixAlignmentIsDeterministic {parameter_dictionary['matrixAlignmentIsDeterministic']} \
         "
 
     os.system(run_command)
