@@ -37,6 +37,9 @@
 # Build results:
 build/
 
+# Marimo related:
+*/__marimo__/
+
 # Output data:
 *.csv
 fileOutputs*

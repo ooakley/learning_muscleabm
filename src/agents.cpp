@@ -262,44 +262,45 @@ void CellAgent::takeRandomStep() {
     // }
 
     // Determine collision with other cells:
-    for (int i; i < 3; i++) {
-        runStochasticCollisionLogic();
-    }
+    // for (int i; i < 3; i++) {
+    //     runStochasticCollisionLogic();
+    // }
+    // runStochasticCollisionLogic();
 
-    // Determine collision with world boundaries:
-    bool xOutOfBounds{x < cellBodyRadius or x > 2048-cellBodyRadius};
-    bool yOutOfBounds{y < cellBodyRadius or y > 2048-cellBodyRadius};
-    if (xOutOfBounds or yOutOfBounds) {
-        // Get actin flow:
-        double xFlowComponent{std::cos(flowDirection)*flowMagnitude};
-        double yFlowComponent{std::sin(flowDirection)*flowMagnitude};
+    // // Determine collision with world boundaries:
+    // bool xOutOfBounds{x < cellBodyRadius or x > 2048-cellBodyRadius};
+    // bool yOutOfBounds{y < cellBodyRadius or y > 2048-cellBodyRadius};
+    // if (xOutOfBounds or yOutOfBounds) {
+    //     // Get actin flow:
+    //     double xFlowComponent{std::cos(flowDirection)*flowMagnitude};
+    //     double yFlowComponent{std::sin(flowDirection)*flowMagnitude};
 
-        // Collide with wall:
-        if (x < cellBodyRadius and xFlowComponent < 0) {
-            xFlowComponent = 0;
-            polarityX = 0;
-            polarityChangeCilX = 0;
-        }
-        if (x > 2048-cellBodyRadius and xFlowComponent > 0) {
-            xFlowComponent = 0;
-            polarityX = 0;
-            polarityChangeCilX = 0;
-        }
-        if (y < cellBodyRadius and yFlowComponent < 0) {
-            yFlowComponent = 0;
-            polarityY = 0;
-            polarityChangeCilY = 0;
-        }
-        if (y > 2048-cellBodyRadius and yFlowComponent > 0) {
-            yFlowComponent = 0;
-            polarityY = 0;
-            polarityChangeCilY = 0;
-        }
+    //     // Collide with wall:
+    //     if (x < cellBodyRadius and xFlowComponent < 0) {
+    //         xFlowComponent = 0;
+    //         polarityX = 0;
+    //         polarityChangeCilX = 0;
+    //     }
+    //     if (x > 2048-cellBodyRadius and xFlowComponent > 0) {
+    //         xFlowComponent = 0;
+    //         polarityX = 0;
+    //         polarityChangeCilX = 0;
+    //     }
+    //     if (y < cellBodyRadius and yFlowComponent < 0) {
+    //         yFlowComponent = 0;
+    //         polarityY = 0;
+    //         polarityChangeCilY = 0;
+    //     }
+    //     if (y > 2048-cellBodyRadius and yFlowComponent > 0) {
+    //         yFlowComponent = 0;
+    //         polarityY = 0;
+    //         polarityChangeCilY = 0;
+    //     }
 
-        // Set acting cell actin flow to new values:
-        flowDirection = std::atan2(yFlowComponent, xFlowComponent);
-        flowMagnitude = std::sqrt(std::pow(xFlowComponent, 2) + std::pow(yFlowComponent, 2));
-    }
+    //     // Set acting cell actin flow to new values:
+    //     flowDirection = std::atan2(yFlowComponent, xFlowComponent);
+    //     flowMagnitude = std::sqrt(std::pow(xFlowComponent, 2) + std::pow(yFlowComponent, 2));
+    // }
 
     // if (collisionsAreDeterministic) {
     //     
@@ -400,7 +401,7 @@ double CellAgent::determineMovementDirection() {
 
             // Average across both:
             double averagedConcentration{(cellAngularConcentration + matrixAngularConcentration) / 2};
-            angleDelta = sampleVonMises(averagedConcentration + 0.5);
+            angleDelta = sampleVonMises(averagedConcentration);
         }
 
         // Get averaged direction:
@@ -435,7 +436,7 @@ double CellAgent::determineMovementDirection() {
                 };
                 angleDelta = sampleVonMises(matrixAngularConcentration);
             }
-            calculatedMovementDirection = angleMod(polarityDirection + directionalInfluence + angleDelta/2);
+            calculatedMovementDirection = angleMod(polarityDirection + directionalInfluence + angleDelta);
         }
     }
     return calculatedMovementDirection;

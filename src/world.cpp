@@ -219,7 +219,7 @@ void World::runCellStep(std::shared_ptr<CellAgent> actingCell) {
     // double attachmentWeighting{1.0 / attachmentNumber};
     depositAtAttachment(
         attachmentPoint,
-        actingCell->getPolarityDirection(), 1,
+        actingCell->getActinFlowDirection(), 1,
         1
     );
 
