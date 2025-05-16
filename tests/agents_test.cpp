@@ -30,7 +30,10 @@ protected:
             0.5,
 
             // Randomised initial state parameters:
-            1., 1., 1.
+            1., 1., 1.,
+
+            // Binary simulation parameters (deterministic):
+            1, 1, 1, 1, 1
         );
 
         // Cell agent with the same random seed:
@@ -59,7 +62,10 @@ protected:
             0.5,
 
             // Randomised initial state parameters:
-            1., 1., 1.
+            1., 1., 1.,
+
+            // Binary simulation parameters (deterministic):
+            1, 1, 1, 1, 1
         );
 
         // Cell agent with a different random seed:
@@ -88,7 +94,10 @@ protected:
             0.5,
 
             // Randomised initial state parameters:
-            1., 1., 1.
+            1., 1., 1.,
+
+            // Binary simulation parameters (deterministic):
+            1, 1, 1, 1, 1
         );
     }
 

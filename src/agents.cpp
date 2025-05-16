@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <complex>
 #include <random>
+#include <numbers>
 #include <cmath>
 #include <cassert>
 #include <limits>
@@ -32,57 +33,48 @@ vectorOfTuples HEADING_CONTACT_MAPPING{
 // Constructor:
 CellAgent::CellAgent(
     // Defined behaviour parameters:
-    bool setMatrixInteraction, unsigned int setCellSeed, int setCellID,
+    unsigned int setCellSeed, int setCellID,
+    double setdt,
 
     // Movement parameters:
-    double setHalfSatCellAngularConcentration, double setMaxCellAngularConcentration,
-    double setHalfSatMeanActinFlow, double setMaxMeanActinFlow,
-    double setFlowScaling,
-
-    // Polarisation system parameters:
-    double setPolarityDiffusionRate,
+    double setCueDiffusionRate,
+    double setCueKa,
+    double setFluctuationAmplitude,
+    double setFluctuationTimescale,
     double setActinAdvectionRate,
-    double setContactAdvectionRate,
-
-    // Matrix sensation parameters:
-    double setHalfSatMatrixAngularConcentration,
-    double setMaxMatrixAngularConcentration,
+    double setMatrixAdvectionRate,
+    double setCollisionAdvectionRate,
+    double setMaximumSteadyStateActinFlow,
 
     // Collision parameters:
     double setCellBodyRadius,
-    double setEccentricity,
-    double setSharpness,
-    double setInhibitionStrength,
+    double setAspectRatio,
+    double setCollisionFlowReductionRate,
 
     // Randomised initial state parameters:
     double startX, double startY, double startHeading
     )
     // Model infrastructure:
-    : thereIsMatrixInteraction{setMatrixInteraction}
-    , cellSeed{setCellSeed}
+    : cellSeed{setCellSeed}
     , cellID{setCellID}
+    , dt{setdt}
 
     // Movement parameters:
-    , halfSatCellAngularConcentration{setHalfSatCellAngularConcentration}
-    , maxCellAngularConcentration{setMaxCellAngularConcentration}
-    , halfSatMeanActinFlow{setHalfSatMeanActinFlow}
-    , maxMeanActinFlow{setMaxMeanActinFlow}
-    , flowScaling{setFlowScaling}
-
-    // Polarisation system parameters:
-    , polarityDiffusionRate{setPolarityDiffusionRate}
+    , cueDiffusionRate{setCueDiffusionRate}
+    , cueKa{setCueKa}
+    , fluctuationAmplitude{setFluctuationAmplitude}
+    , fluctuationTimescale{setFluctuationTimescale}
     , actinAdvectionRate{setActinAdvectionRate}
-    , contactAdvectionRate{setContactAdvectionRate}
-
-    // Matrix sensation parameters:
-    , halfSatMatrixAngularConcentration{setHalfSatMatrixAngularConcentration}
-    , maxMatrixAngularConcentration{setMaxMatrixAngularConcentration}
+    , matrixAdvectionRate{setMatrixAdvectionRate}
+    , collisionAdvectionRate{setCollisionAdvectionRate}
+    , maximumSteadyStateActinFlow{setMaximumSteadyStateActinFlow}
 
     // Collision parameters:
     , cellBodyRadius{setCellBodyRadius}
-    , cellShapeEccentricity{setEccentricity}
-    , contactDistributionSharpness{setSharpness}
-    , inhibitionStrength{setInhibitionStrength}
+    , cellAspectRatio{setAspectRatio}
+    , collisionFlowReductionRate{setCollisionFlowReductionRate}
+    , majorAxisScaling{std::sqrt(setAspectRatio)}
+    , minorAxisScaling{std::sqrt(1/setAspectRatio)}
 
     // State parameters:
     , x{startX}
@@ -94,12 +86,15 @@ CellAgent::CellAgent(
     , flowDirection{startHeading}
     , flowMagnitude{1e-5}
     , scaledFlowMagnitude{1e-5}
+    , shapeDirection{startHeading}
     , movementDirection{0}
     , directionalInfluence{0}
     , directionalIntensity{0}
     , localECMDensity{0}
     , directionalShift{0}
     , sampledAngle{0}
+    , polarityChangeCilX{0}
+    , polarityChangeCilY{0}
 {
     // Initialising randomness:
     seedGenerator = std::mt19937(cellSeed);
@@ -130,6 +125,15 @@ CellAgent::CellAgent(
     // Generator for finding random angle after loss of polarisation:
     generatorRandomRepolarisation = std::mt19937(seedDistribution(seedGenerator));
     randomDeltaSample = std::mt19937(seedDistribution(seedGenerator));
+
+    // Ensuring shape direction is direction-agnostic:
+    shapeDirection = nematicAngleMod(shapeDirection);
+
+    // Sampling for initial state of low-discrepancy angle distribution:
+    lowDiscrepancySample = uniformDistribution(generatorCollisionAngleSampling);
+
+    // Ensuring initial value in position history:
+    addToPositionHistory(x, y);
 }
 
 // Public Definitions:
@@ -144,14 +148,14 @@ double CellAgent::getY() const {return y;}
 std::tuple<double, double> CellAgent::getPosition() const {return std::tuple<double, double>{x, y};}
 double CellAgent::getPolarityDirection() const {return polarityDirection;}
 double CellAgent::getPolarityMagnitude() const {return polarityMagnitude;}
+double CellAgent::getActinFlowMagnitude() const {return flowMagnitude;}
+double CellAgent::getActinFlowDirection() const {return flowDirection;}
+double CellAgent::getShapeDirection() const {return shapeDirection;}
 
 // Instantaneous variable getters: (these variables are updated each timestep,
 // and represent the cell's percepts)
 double CellAgent::getMovementDirection() const {return movementDirection;}
-double CellAgent::getActinFlowMagnitude() const {return flowMagnitude;}
-double CellAgent::getActinFlowDirection() const {return flowDirection;}
 double CellAgent::getScaledActinFlowMagnitude() const {return scaledFlowMagnitude;}
-
 double CellAgent::getDirectionalInfluence() const {return directionalInfluence;}
 double CellAgent::getDirectionalIntensity() const {return directionalIntensity;}
 double CellAgent::getDirectionalShift() const {return directionalShift;}
@@ -161,6 +165,16 @@ double CellAgent::getSampledAngle() const {return sampledAngle;}
 void CellAgent::setPosition(std::tuple<double, double> newPosition) {
     x = std::get<0>(newPosition);
     y = std::get<1>(newPosition);
+}
+
+void CellAgent::setCILPolarityChange(double changeX, double changeY) {
+    polarityChangeCilX += changeX;
+    polarityChangeCilY += changeY;
+}
+
+void CellAgent::setActinState(double setFlowDirection, double setFlowMagnitude) {
+    flowDirection = setFlowDirection;
+    flowMagnitude = setFlowMagnitude;
 }
 
 void CellAgent::setDirectionalInfluence(double setDirectionalInfluence) {
@@ -183,80 +197,318 @@ void CellAgent::setLocalCellList(std::vector<std::shared_ptr<CellAgent>> setLoca
 void CellAgent::takeRandomStep() {
     assert(directionalIntensity <= 1);
 
-    // Determine protrusion - polarity centered or ECM centered:
-    double thresholdValue{polarityMagnitude / (polarityMagnitude + localECMDensity)};
-    assert(thresholdValue <= 1 && thresholdValue >= 0);
-    double randomDeterminant{uniformDistribution(generatorInfluence)};
-    double angleDelta{0};
-    if (randomDeterminant < thresholdValue) {
-        // Calculate polarity direction selection parameters using MM kinetics
-        // - we're assuming directionality saturates at some degree of polarisation.
-        double cellAngularConcentration{
-            (maxCellAngularConcentration * polarityMagnitude) /
-            (halfSatCellAngularConcentration + polarityMagnitude)
-        };
-        angleDelta = sampleVonMises(cellAngularConcentration);
-        movementDirection = angleMod(polarityDirection + angleDelta);
-    } else {
-        // Calculate matrix direction selection parameters using MM kinetics
-        // - we're assuming directionality saturates at some value of matrix
-        // directional homogeneity.
-        double matrixAngularConcentration{
-            (maxMatrixAngularConcentration * directionalIntensity) /
-            (halfSatMatrixAngularConcentration + directionalIntensity)
-        };
-        angleDelta = sampleVonMises(matrixAngularConcentration) + directionalInfluence;
-        movementDirection = angleMod(polarityDirection + angleDelta);
+    // Collide:
+    runDeterministicCollisionLogic();
+
+    // Determine advection derived from actin flow:
+    double actinAdvectionX{flowMagnitude*std::cos(flowDirection)};
+    double actinAdvectionY{flowMagnitude*std::sin(flowDirection)};
+
+    // Determine advection derived from matrix:
+    double matrixAdvectionX{directionalIntensity*std::cos(flowDirection + directionalInfluence)};
+    double matrixAdvectionY{directionalIntensity*std::sin(flowDirection + directionalInfluence)};
+
+    // Sum sources of advection:
+    double totalAdvectionX{
+        actinAdvectionRate*actinAdvectionX +
+        matrixAdvectionRate*matrixAdvectionX +
+        collisionAdvectionRate*polarityChangeCilX
+    };
+    double totalAdvectionY{
+        actinAdvectionRate*actinAdvectionY +
+        matrixAdvectionRate*matrixAdvectionY +
+        collisionAdvectionRate*polarityChangeCilY
+    };
+
+    double totalAdvectionMagnitude{std::sqrt(
+        std::pow(totalAdvectionX, 2) +
+        std::pow(totalAdvectionY, 2)
+    )};
+    double totalAdvectionDirection{std::atan2(totalAdvectionY, totalAdvectionX)};
+
+    // Get solution to cue concetration profile at cell front and cell back:
+    double exponentialTerm{std::exp(-totalAdvectionMagnitude / cueDiffusionRate)};
+    double cueConcentrationFront{
+        totalAdvectionMagnitude / 
+        (cueDiffusionRate*(1 - exponentialTerm))
+    };
+    double cueConcentrationBack{
+        totalAdvectionMagnitude*exponentialTerm / 
+        (cueDiffusionRate*(1 - exponentialTerm))
+    };
+
+    // Run concentration through Hill equation and find front/back activity differential:
+    double cueActivityFront{cueConcentrationFront / (cueKa + cueConcentrationFront)};
+    double cueActivityBack{cueConcentrationBack / (cueKa + cueConcentrationBack)};
+    double effectiveActinPolarisation{cueActivityFront - cueActivityBack};
+
+    // Correct for small advections:
+    if (effectiveActinPolarisation < 0) {
+        effectiveActinPolarisation = 0;
     }
 
-    // Calculating actin flow in protrusion, via MM kinetics:
-    double meanActinFlow{
-        (maxMeanActinFlow * polarityMagnitude) /
-        (halfSatMeanActinFlow + polarityMagnitude)
+    // Prevent singularites in calculating updates to actin stochastic differential equation - 
+    // because we've converted to polar coordinates, there are several places where we divide
+    // by flow magnitude.
+    if (flowMagnitude < 1e-2) {
+        flowMagnitude = 1e-2;
+    }
+
+    // Calculate actin update:
+    double gamma{1/fluctuationTimescale};
+    double steadyState{maximumSteadyStateActinFlow*effectiveActinPolarisation};
+
+    // Sample update using drift (deterministic) and diffusion (random) terms:
+    double magnitudeUpdateDrift{
+        gamma*(steadyState - flowMagnitude) + (fluctuationAmplitude/(2*flowMagnitude))
     };
-    std::poisson_distribution<int> protrusionDistribution(std::max(meanActinFlow, 1.0));
-    const double actinFlow{static_cast<double>(protrusionDistribution(generatorProtrusion))};
+    double magnitudeUpdateDiffusion{
+        std::sqrt(fluctuationAmplitude)*standardNormalDistribution(generatorInfluence)
+    };
+    double angleUpdateDrift{
+        gamma*calculateMinimumAngularDistance(totalAdvectionDirection, flowDirection)
+    };
+    double angleUpdateDiffusion{
+        (standardNormalDistribution(generatorProtrusion) * std::sqrt(fluctuationAmplitude)) / flowMagnitude
+    };
 
-    // Update flow history:
-    double actinX{actinFlow * cos(movementDirection)};
-    double actinY{actinFlow * sin(movementDirection)};
+    // Apply update - in stochastic differential equations, randomly sampled terms are scaled by the
+    // square root of dt.
+    flowMagnitude += (magnitudeUpdateDrift * dt) + (magnitudeUpdateDiffusion*std::sqrt(dt));
+    flowDirection += (angleUpdateDrift * dt) + (angleUpdateDiffusion*std::sqrt(dt));
+    flowDirection = angleMod(flowDirection);
 
-    // Seeing which protrusions die off this timestep:
-    ageActinHistory();
+    // Update position:
+    double cellDisplacement{flowMagnitude};
+    double dx{std::cos(flowDirection) * cellDisplacement};
+    double dy{std::sin(flowDirection) * cellDisplacement};
+    x += dx;
+    y += dy;
 
-    // Adding new protrusion if there's space:
-    addToActinHistory(actinX, actinY);
+    // Roll position if out of bounds:
+    while (x < 0) {x += 2048;}
+    while (y < 0) {y += 2048;}
+    x = std::fmodf(x, 2048);
+    y = std::fmodf(y, 2048);
 
-    // Accumulators for CIL-dependent polarity reorientation:
-    double polarityChangeCilX{0.};
-    double polarityChangeCilY{0.};
+    // Add to cell history:
+    addToPositionHistory(x, y);
+    addToMovementHistory(std::cos(flowDirection), std::sin(flowDirection));
 
-    // Derived variables of interest:
-    double effectiveContactAdvectionRate{contactAdvectionRate*polarityDiffusionRate};
-    double effectiveActinAdvectionRate{actinAdvectionRate*polarityDiffusionRate};
+    // Zero out CIL effects:
+    polarityChangeCilX = polarityChangeCilX*0.0;
+    polarityChangeCilY = polarityChangeCilY*0.0;
 
-    // *** *** Sampling from area of collisions *** ***
+    // // Determine collision with world boundaries:
+    // bool xOutOfBounds{x < cellBodyRadius or x > 2048-cellBodyRadius};
+    // bool yOutOfBounds{y < cellBodyRadius or y > 2048-cellBodyRadius};
+    // if (xOutOfBounds or yOutOfBounds) {
+    //     // Get actin flow:
+    //     double xFlowComponent{std::cos(flowDirection)*flowMagnitude};
+    //     double yFlowComponent{std::sin(flowDirection)*flowMagnitude};
+
+    //     // Collide with wall:
+    //     if (x < cellBodyRadius and xFlowComponent < 0) {
+    //         xFlowComponent = 0;
+    //         polarityX = 0;
+    //         polarityChangeCilX = 0;
+    //     }
+    //     if (x > 2048-cellBodyRadius and xFlowComponent > 0) {
+    //         xFlowComponent = 0;
+    //         polarityX = 0;
+    //         polarityChangeCilX = 0;
+    //     }
+    //     if (y < cellBodyRadius and yFlowComponent < 0) {
+    //         yFlowComponent = 0;
+    //         polarityY = 0;
+    //         polarityChangeCilY = 0;
+    //     }
+    //     if (y > 2048-cellBodyRadius and yFlowComponent > 0) {
+    //         yFlowComponent = 0;
+    //         polarityY = 0;
+    //         polarityChangeCilY = 0;
+    //     }
+    //     // Set acting cell actin flow to new values:
+    //     flowDirection = std::atan2(yFlowComponent, xFlowComponent);
+    //     flowMagnitude = std::sqrt(std::pow(xFlowComponent, 2) + std::pow(yFlowComponent, 2));
+    // }
+}
+
+
+void CellAgent::runTrajectoryDependentCollisionLogic() {
     // Useful points:
     double actingCellX{getX()};
     double actingCellY{getY()};
 
     // Sampling from random radius in cell area:
-    double samplePointDirection{angleUniformDistribution(generatorCollisionAngleSampling)};
-    double samplePointRadius{1 + (standardNormalDistribution(generatorCollisionRadiusSampling)/3)};
-    double effectiveRadius{samplePointRadius*cellBodyRadius};
-    double samplePointX{effectiveRadius * std::cos(samplePointDirection)};
-    double samplePointY{effectiveRadius * std::sin(samplePointDirection)};
+    lowDiscrepancySample += (std::numbers::phi_v<double> - 1);
+    lowDiscrepancySample = std::fmod(lowDiscrepancySample, 1);
+    double divergence{(lowDiscrepancySample * M_PI) - M_PI_2};
+    double samplePointDirection{flowDirection + divergence};
+
+    // Getting point in frame:
+    double actingFrameX{std::cos(samplePointDirection) * cellBodyRadius};
+    double actingFrameY{std::sin(samplePointDirection) * cellBodyRadius};
+    
+    // Transforming points from acting frame to global frame:
+    double globalFrameX{actingCellX + actingFrameX};
+    double globalFrameY{actingCellY + actingFrameY};
+    double angleFromActingToSample{std::atan2(actingFrameY, actingFrameX)};
+
+    // Loop through local agents and determine collisions:
+    for (auto& localAgent: localAgents) {
+        const auto& [startX, startY, endX, endY] = localAgent->sampleTrajectoryStadium();
+
+        // Find point most relevant for shift across periodic boundary:
+        double distanceToStart{std::sqrt(
+            std::pow(startX - globalFrameX, 2) +
+            std::pow(startY - globalFrameY, 2)
+        )};
+        double distanceToEnd{std::sqrt(
+            std::pow(endX - globalFrameX, 2) +
+            std::pow(endY - globalFrameY, 2)
+        )};
+
+        // Determine whether any or all of the trajectory points will take the modulus:
+        double correctedStartX{0};
+        double correctedStartY{0};
+        double correctedEndX{0};
+        double correctedEndY{0};
+
+        // Take modulus of all:
+        if (distanceToStart > 2048/2 and distanceToEnd > 2048/2) {
+            correctedStartX = takePeriodicModulus(startX, globalFrameX);
+            correctedStartY = takePeriodicModulus(startY, globalFrameY);
+            correctedEndX = takePeriodicModulus(endX, globalFrameX);
+            correctedEndY = takePeriodicModulus(endY, globalFrameY);
+        }
+
+        // Take modulus of one:
+        else {
+            if (distanceToStart < distanceToEnd) {
+                // Take modulus relative to start:
+                correctedStartX = startX;
+                correctedStartY = startY;
+                correctedEndX = takePeriodicModulus(endX, startX);
+                correctedEndY = takePeriodicModulus(endY, startY);
+            } else {
+                // Take modulus relative to end:
+                correctedStartX =  takePeriodicModulus(startX, endX);
+                correctedStartY = takePeriodicModulus(startY, endY);
+                correctedEndX = endX;
+                correctedEndY = endY;
+            }
+        }
+
+        // Determine whether collision occurs:
+        bool collisionDetected{
+            isPositionInStadium(
+                globalFrameX, globalFrameY, correctedStartX, correctedStartY, correctedEndX, correctedEndY
+            )
+        };
+        if (collisionDetected) {
+            // Take modulo of position in case interaction is across the periodic boundary:
+            double localCellX{takePeriodicModulus(localAgent->getX(), globalFrameX)};
+            double localCellY{takePeriodicModulus(localAgent->getY(), globalFrameY)};
+
+            // Get angle to local cell:
+            double actingToLocalX{localCellX - actingCellX};
+            double actingToLocalY{localCellY - actingCellY};
+            double angleActingToLocal{std::atan2(actingToLocalY, actingToLocalX)};
+
+            // Exert reduction in actin flow for acting cell:
+            double angleOfRestitution{angleActingToLocal - M_PI};
+            double componentOfActingFlowOntoCollision{
+                std::cos(flowDirection - angleOfRestitution)
+            };
+            if (componentOfActingFlowOntoCollision < 0) {
+                // Calculate change in actin flow:
+                double reductionInFlow{
+                    collisionFlowReductionRate * flowMagnitude * std::abs(componentOfActingFlowOntoCollision)
+                };
+                double dxActinFlow{std::cos(angleOfRestitution) * reductionInFlow};
+                double dyActinFlow{std::sin(angleOfRestitution) * reductionInFlow};
+
+                // Update actin flow:
+                double xFlowComponent{std::cos(flowDirection)*flowMagnitude};
+                double yFlowComponent{std::sin(flowDirection)*flowMagnitude};
+                xFlowComponent += dxActinFlow;
+                yFlowComponent += dyActinFlow;
+
+                // Set acting cell actin flow to new values:
+                flowDirection = std::atan2(yFlowComponent, xFlowComponent);
+                flowMagnitude = std::sqrt(std::pow(xFlowComponent, 2) + std::pow(yFlowComponent, 2));
+            }
+
+            // Exert reduction in actin flow for acting cell:
+            double localFlowDirection{localAgent->getActinFlowDirection()};
+            double localFlowMagnitude{localAgent->getActinFlowMagnitude()};
+            double componentOfLocalFlowOntoCollision{
+                std::cos(localFlowDirection - angleActingToLocal)
+            };
+            if (componentOfLocalFlowOntoCollision <= 0) {
+                // Calculate change in actin flow:
+                double reductionInFlow{collisionFlowReductionRate * localFlowMagnitude * std::abs(componentOfLocalFlowOntoCollision)};
+                double dxActinFlow{std::cos(angleActingToLocal) * reductionInFlow};
+                double dyActinFlow{std::sin(angleActingToLocal) * reductionInFlow};
+
+                // Update actin flow:
+                double xFlowComponent{std::cos(localFlowDirection)*localFlowMagnitude};
+                double yFlowComponent{std::sin(localFlowDirection)*localFlowMagnitude};
+                xFlowComponent += dxActinFlow;
+                yFlowComponent += dyActinFlow;
+                double updatedLocalFlowDirection{std::atan2(yFlowComponent, xFlowComponent)};
+                double updatedLocalFlowMagnitude{std::sqrt(std::pow(xFlowComponent, 2) + std::pow(yFlowComponent, 2))};
+
+                // Set local cell actin flow to new values:
+                localAgent->setActinState(updatedLocalFlowDirection, updatedLocalFlowMagnitude);
+            }
+
+            // Calculate CIL effect for acting cell:
+            double actingRepulsionX{std::cos(angleOfRestitution)};
+            double actingRepulsionY{std::sin(angleOfRestitution)};
+            polarityChangeCilX += actingRepulsionX;
+            polarityChangeCilY += actingRepulsionY;
+
+            // Calculate CIL effect for local cell:
+            double localRepulsionX{std::cos(angleActingToLocal)};
+            double localRepulsionY{std::sin(angleActingToLocal)};
+            double localCILUpdateX{localRepulsionX};
+            double localCILUpdateY{localRepulsionY};
+            localAgent->setCILPolarityChange(localCILUpdateX, localCILUpdateY);
+        }
+    }
+}
+
+
+void CellAgent::runStochasticCollisionLogic() {
+    // Useful points:
+    double actingCellX{getX()};
+    double actingCellY{getY()};
+
+    double actinDirectionActingFrame{flowDirection - shapeDirection};
+
+    // Sampling from random radius in cell area:
+    lowDiscrepancySample += (std::numbers::phi_v<double> - 1);
+    lowDiscrepancySample = std::fmod(lowDiscrepancySample, 1);
+    double divergence{(lowDiscrepancySample * M_PI) - M_PI_2};
+    double samplePointDirection{actinDirectionActingFrame + divergence};
+
+    // Derive relevant ellipse variables:
+    // Getting R from polar form of ellipse equation:
+    double eccentricity{std::sqrt(1 - ((std::pow(minorAxisScaling, 2))/(std::pow(majorAxisScaling, 2))))};
+    double radialDenominator{std::sqrt(1 - std::pow(eccentricity*std::cos(samplePointDirection), 2))};
+    double radialCoordinate{minorAxisScaling / (radialDenominator)};
+    double unitEllipseX{radialCoordinate * std::cos(samplePointDirection)};
+    double unitEllipseY{radialCoordinate * std::sin(samplePointDirection)};
 
     // // Scaling origin points by eccentricity:
-    // double cappedActingEccentricity{1 - std::exp(-eccentricityRate*polarityMagnitude)};
-    double cappedActingEccentricity{eccentricityConstant};
-    double minorAxisScaling{std::sqrt(1 - std::pow(cappedActingEccentricity, 2))};
-    double majorAxisScaling{std::pow(1 - std::pow(cappedActingEccentricity, 2), -0.25)};
-    double actingFrameX{samplePointX*minorAxisScaling};
-    double actingFrameY{samplePointY*majorAxisScaling};
+    // Scaling axes to maintain constant cell area:
+    double actingFrameX{unitEllipseX * cellBodyRadius * majorAxisScaling};
+    double actingFrameY{unitEllipseY * cellBodyRadius * minorAxisScaling};
 
     // Transforming points from acting frame to global frame:
-    double rotatingBasisAngle{polarityDirection - M_PI_2};
+    double rotatingBasisAngle{shapeDirection};
     double transformedX{
         (actingFrameX*std::cos(rotatingBasisAngle)) -
         (actingFrameY*std::sin(rotatingBasisAngle))
@@ -265,17 +517,17 @@ void CellAgent::takeRandomStep() {
         (actingFrameX*std::sin(rotatingBasisAngle)) +
         (actingFrameY*std::cos(rotatingBasisAngle))
     };
+    double angleFromActingToSample{std::atan2(transformedY, transformedX)};
 
-    // Finding total distance from cell:
+    // Find sample point in global coordinates:
     double sampleGlobalX{actingCellX + transformedX};
     double sampleGlobalY{actingCellY + transformedY};
     double sampleDistanceFromActing{std::sqrt(
-        std::pow(transformedX, 2) +
-        std::pow(transformedY, 2)
+        std::pow(unitEllipseX, 2) +
+        std::pow(unitEllipseY, 2)
     )};
-    double angleFromActingToSample{std::atan2(transformedY, transformedX)};
 
-    // Closest agent to query:
+    // Find closest agent to query:
     std::vector<double> distancesToProtrusion{};
     for (auto& localAgent: localAgents) {
         // Take modulo of position in case interaction is across the periodic boundary:
@@ -303,7 +555,7 @@ void CellAgent::takeRandomStep() {
         double localFrameY{sampleGlobalY - localCellY};
 
         // Getting vector components in frame of reference of local cell:
-        double localBasisAngle{M_PI_2 - localAgent->getPolarityDirection()};
+        double localBasisAngle{-localAgent->getShapeDirection()};
         double localEllipseX{
             (localFrameX*std::cos(localBasisAngle)) -
             (localFrameY*std::sin(localBasisAngle))
@@ -313,29 +565,52 @@ void CellAgent::takeRandomStep() {
             (localFrameY*std::cos(localBasisAngle))
         };
 
-        // Getting local scaling:
-        // double cappedLocalEccentricity{
-        //     1 - std::exp(-eccentricityRate*localAgent->getPolarityMagnitude())
-        // };
-        double cappedLocalEccentricity{eccentricityConstant};
-        double localMinorAxisScaling{std::sqrt(1 - std::pow(cappedLocalEccentricity, 2))};
-        double localMajorAxisScaling{std::pow(1 - std::pow(cappedLocalEccentricity, 2), -0.25)};
-        double sigmaX{localMinorAxisScaling * (cellBodyRadius)};
-        double sigmaY{localMajorAxisScaling * (cellBodyRadius)};
+        // Scale components to unit circle:
+        double unitEllipseFrameX{localEllipseX/cellBodyRadius};
+        double unitEllipseFrameY{localEllipseY/cellBodyRadius};
+        double unitCircleX{std::copysign(
+            std::abs(unitEllipseFrameX/majorAxisScaling),
+            unitEllipseFrameX
+        )};
+        double unitCircleY{std::copysign(
+            std::abs(unitEllipseFrameY/minorAxisScaling),
+            unitEllipseFrameY
+        )};
+        double unitCircleDistance{std::sqrt(
+            std::pow(unitCircleX, 2) +
+            std::pow(unitCircleY, 2)
+        )};
 
-        // Scaling by ellipse axes:
-        double scaledLocalX{localEllipseX / sigmaX};
-        double scaledLocalY{localEllipseY / sigmaY};
-        double scaledDistance{std::sqrt(
-            std::pow(scaledLocalX, 2) +
-            std::pow(scaledLocalY, 2)
+        // If point lies inside another cell; indicate by negative distance:
+        if (unitCircleDistance < 1) {
+            distancesToProtrusion.emplace_back(unitCircleDistance - 1);
+            continue;
+        }
+
+        // If point lies outside another cell, we need to estimate euclidean distance to boundary:
+        double boundaryAngle{std::atan2(unitCircleY, unitCircleX)};
+        double boundaryCircleX{std::cos(boundaryAngle)};
+        double boundaryCircleY{std::sin(boundaryAngle)};
+        double pointOnEllipseX{std::copysign(
+            std::abs(boundaryCircleX),
+            boundaryCircleX
+        )};
+        double pointOnEllipseY{std::copysign(
+            std::abs(boundaryCircleY),
+            boundaryCircleY
+        )};
+        double distanceToBoundaryX{unitEllipseFrameX-pointOnEllipseX};
+        double distanceToBoundaryY{unitEllipseFrameY-pointOnEllipseY};
+        double sampleDistance{std::sqrt(
+            std::pow(distanceToBoundaryX, 2) +
+            std::pow(distanceToBoundaryY, 2)
         )};
 
         // Adding to total distances vector:
-        distancesToProtrusion.emplace_back(scaledDistance);
+        distancesToProtrusion.emplace_back(sampleDistance);
     }
 
-    // Finding minimum distance, ignoring collision if closest to actingCell:
+    // Finding minimum distance:
     auto minimumIterator{std::min_element(distancesToProtrusion.begin(), distancesToProtrusion.end())};
     double minimumDistance{0};
     if (minimumIterator == distancesToProtrusion.end()) {
@@ -345,8 +620,9 @@ void CellAgent::takeRandomStep() {
         minimumDistance = *minimumIterator;
     }
 
-    // If sampled point impinges on other cell area, calculate likelihood of collision
-    if (minimumDistance < samplePointRadius) {
+    // We ignore the collision if the sample point is closest to the currently acting cell:
+    // minimumDistance < sampleDistanceFromActing*2
+    if (minimumDistance < 2048) {
         // Getting cell index:
         int cellIndex{static_cast<int>(
             std::distance(
@@ -375,102 +651,258 @@ void CellAgent::takeRandomStep() {
             localCellY -= 2048;
         }
 
-        // Getting angle to nucleus:
+        // Get angle from local cell to sampled position:
+        double localFrameX{sampleGlobalX - localCellX};
+        double localFrameY{sampleGlobalY - localCellY};
+        double angleFromLocalToSample{std::atan2(localFrameY, localFrameX)};
+
+        // Get angle to nucleus:
         double xDifference{actingCellX - localCellX};
         double yDifference{actingCellY - localCellY};
         double angleLocalToActing{std::atan2(yDifference, xDifference)};
+        double nuclearDistance{std::sqrt(
+            std::pow(xDifference, 2) + 
+            std::pow(yDifference, 2)
+        )};
 
-        // Finding probability of collision:
-        double exponentTerm{std::pow(std::pow(minimumDistance, 2)/2, contactDistributionSharpness)};
-        double finalProbability{std::exp(-exponentTerm)};
+        // Find intersection of shape directions:
+        double actingShapeDirection{shapeDirection};
+        double localShapeDirection{localAgents[cellIndex]->getShapeDirection()};
 
-        // Determining collision:
+        // Get acting line in projective coordinates:
+        std::vector<double> actingStart{actingCellX, actingCellY, 1};
+        std::vector<double> actingEnd{
+            actingCellX + std::cos(actingShapeDirection),
+            actingCellY + std::sin(actingShapeDirection),
+            1
+        };
+        std::vector<double> actingLine{crossProduct(actingStart, actingEnd)};
+
+        // Get local line in projective coordinates:
+        std::vector<double> localStart{localCellX, localCellY, 1};
+        std::vector<double> localEnd{
+            localCellX + std::cos(localShapeDirection),
+            localCellY + std::sin(localShapeDirection),
+            1
+        };
+        std::vector<double> localLine{crossProduct(localStart, localEnd)};
+
+        // Get point of intersection:
+        std::vector<double> projectiveIntersection{crossProduct(actingLine, localLine)};
+
+        // Find probability of collision:
+        double finalProbability{0};
+        if (minimumDistance < 0) {
+            finalProbability = 1;
+        } else {
+            // double exponentTerm{std::pow(std::pow(minimumDistance, 2)/2, contactDistributionSharpness)};
+            finalProbability = 1;
+        }
+
+        // Determine if collision happens - the shape directions of the two cells cannot be parallel:
         double randomDeterminant{uniformDistribution(generatorInfluence)};
-        if (randomDeterminant < finalProbability) {
-            for (auto& actinFlow : actinHistory) {
-                // Find axis along which to reduce actin flow:
-                double actinFlowDirection{std::atan2(actinFlow[1], actinFlow[0])};
-                double componentOfFlowOntoSample{
-                    std::cos(actinFlowDirection - angleFromActingToSample)
-                };
-                if (componentOfFlowOntoSample <= 0) {
-                    continue;
-                }
+        if ((randomDeterminant < finalProbability) and (projectiveIntersection[2] != 0)) {
+            // Get point of intersection:
+            double intersectionX{projectiveIntersection[0]/projectiveIntersection[2]};
+            double intersectionY{projectiveIntersection[1]/projectiveIntersection[2]};
 
-                // Reduce actin flow in protrusion:
-                double actinFlowExtent{std::sqrt(
-                    std::pow(actinFlow[0], 2) +
-                    std::pow(actinFlow[1], 2)
-                )};
-                double reductionInFlow{inhibitionStrength * actinFlowExtent * componentOfFlowOntoSample};
-                double dxActinFlow{-std::cos(angleFromActingToSample) * reductionInFlow};
-                double dyActinFlow{-std::sin(angleFromActingToSample) * reductionInFlow};
-                actinFlow[0] += dxActinFlow;
-                actinFlow[1] += dyActinFlow;
+            // Get acting shape direction pointing towards intersection:
+            double collisionActingX{intersectionX - actingCellX};
+            double collisionActingY{intersectionY - actingCellY};
+            double collisionActingDirection{std::atan2(collisionActingY, collisionActingX)};
+            double collisionActingDistance{std::sqrt(
+                std::pow(collisionActingX, 2) +
+                std::pow(collisionActingY, 2)
+            )};
+
+            // Get local shape direction pointing towards intersection:
+            double collisionLocalX{intersectionX - localCellX};
+            double collisionLocalY{intersectionY - localCellY};
+            double collisionLocalDirection{std::atan2(collisionLocalY, collisionLocalX)};
+            double collisionLocalDistance{std::sqrt(
+                std::pow(collisionLocalX, 2) +
+                std::pow(collisionLocalY, 2)
+            )};
+
+            // Find axis along which to reduce actin flow for acting cell:
+            double actingEffectX{std::cos(collisionLocalDirection) - std::cos(collisionActingDirection)};
+            double actingEffectY{std::sin(collisionLocalDirection) - std::sin(collisionActingDirection)};
+            double actingExtensionEffectDirection{std::atan2(actingEffectY, actingEffectX)};
+            double actingBodyEffectDirection{angleLocalToActing};
+            double overallActingEffectDirection{std::atan2(
+                std::sin(actingExtensionEffectDirection) + std::sin(actingBodyEffectDirection),
+                std::cos(actingExtensionEffectDirection) + std::cos(actingBodyEffectDirection)
+            )};
+            double componentOfActingFlowOntoSample{
+                std::cos(flowDirection - overallActingEffectDirection)
+            };
+            if (componentOfActingFlowOntoSample < 0) {
+                // Calculate change in actin flow:
+                double reductionInFlow{collisionFlowReductionRate * flowMagnitude * std::abs(componentOfActingFlowOntoSample)};
+                double dxActinFlow{std::cos(overallActingEffectDirection) * reductionInFlow};
+                double dyActinFlow{std::sin(overallActingEffectDirection) * reductionInFlow};
+
+                // Update actin flow:
+                double xFlowComponent{std::cos(flowDirection)*flowMagnitude};
+                double yFlowComponent{std::sin(flowDirection)*flowMagnitude};
+                xFlowComponent += dxActinFlow;
+                yFlowComponent += dyActinFlow;
+
+                // Set acting cell actin flow to new values:
+                flowDirection = std::atan2(yFlowComponent, xFlowComponent);
+                flowMagnitude = std::sqrt(std::pow(xFlowComponent, 2) + std::pow(yFlowComponent, 2));
+
+                // Flat reduction in magnitude:
+                // flowMagnitude *= inhibitionStrength;
             }
 
-            // Getting directional effect of protrusion:
-            // double normCollisionX{-std::cos(angleFromActingToSample)};
-            // double normCollisionY{-std::sin(angleFromActingToSample)};
-            double componentOfTensionOntoPolarity{std::cos(polarityDirection - angleLocalToActing)};
-            if (componentOfTensionOntoPolarity <= 0) {
-                // Getting directional effect:
-                double normCollisionX{std::cos(angleLocalToActing)};
-                double normCollisionY{std::sin(angleLocalToActing)};
+            // Find axis along which to reduce actin flow for local cell:
+            double localFlowDirection{localAgents[cellIndex]->getActinFlowDirection()};
+            double localFlowMagnitude{localAgents[cellIndex]->getActinFlowMagnitude()};
+            double localExtensionEffectDirection{actingExtensionEffectDirection - M_PI};
+            double localBodyEffectDirection{actingBodyEffectDirection - M_PI};
+            double overallLocalEffectDirection{std::atan2(
+                std::sin(localExtensionEffectDirection) + std::sin(localBodyEffectDirection),
+                std::cos(localExtensionEffectDirection) + std::cos(localBodyEffectDirection)
+            )};
+            double componentOfLocalFlowOntoSample{
+                std::cos(localFlowDirection - overallLocalEffectDirection)
+            };
+            if (componentOfLocalFlowOntoSample <= 0) {
+                // Calculate change in actin flow:
+                double reductionInFlow{collisionFlowReductionRate * localFlowMagnitude * std::abs(componentOfLocalFlowOntoSample)};
+                double dxActinFlow{std::cos(overallLocalEffectDirection) * reductionInFlow};
+                double dyActinFlow{std::sin(overallLocalEffectDirection) * reductionInFlow};
 
-                // Simulate effect of CIL on RhoA redistribution:
-                polarityChangeCilX += normCollisionX * effectiveContactAdvectionRate * std::abs(componentOfTensionOntoPolarity);
-                polarityChangeCilY += normCollisionY * effectiveContactAdvectionRate * std::abs(componentOfTensionOntoPolarity);
+                // Update actin flow:
+                double xFlowComponent{std::cos(localFlowDirection)*localFlowMagnitude};
+                double yFlowComponent{std::sin(localFlowDirection)*localFlowMagnitude};
+                xFlowComponent += dxActinFlow;
+                yFlowComponent += dyActinFlow;
+                double updatedLocalFlowDirection{std::atan2(yFlowComponent, xFlowComponent)};
+                double updatedLocalFlowMagnitude{std::sqrt(std::pow(xFlowComponent, 2) + std::pow(yFlowComponent, 2))};
+                // updatedLocalFlowMagnitude *= inhibitionStrength;
+
+                // Set local cell actin flow to new values:
+                localAgents[cellIndex]->setActinState(updatedLocalFlowDirection, updatedLocalFlowMagnitude);
             }
+
+            // Calculating scaling of body repulsion:
+            double bodyScaling{std::min((2*cellBodyRadius)/nuclearDistance, 100.0)};
+
+            // Simulate effect of CIL on RhoA redistribution for acting cell:
+            double actingExtensionScaling{std::min((cellBodyRadius*majorAxisScaling)/collisionActingDistance, 100.0)};
+            double actingBodyRepulsionX{std::cos(angleLocalToActing)*bodyScaling};
+            double actingBodyRepulsionY{std::sin(angleLocalToActing)*bodyScaling};
+            double actingExtensionRepulsionX{
+                std::cos(actingExtensionEffectDirection)*actingExtensionScaling
+            };
+            double actingExtensionRepulsionY{
+                std::sin(actingExtensionEffectDirection)*actingExtensionScaling
+            };
+            polarityChangeCilX += (actingExtensionRepulsionX + actingBodyRepulsionX);
+            polarityChangeCilY += (actingExtensionRepulsionY + actingBodyRepulsionY);
+
+            // Simulate effect of CIL on RhoA redistribution for local cell:
+            double localExtensionScaling{std::min((cellBodyRadius*majorAxisScaling)/collisionLocalDistance, 100.0)};
+            double localBodyRepulsionX{std::cos(angleLocalToActing - M_PI)*bodyScaling};
+            double localBodyRepulsionY{std::sin(angleLocalToActing - M_PI)*bodyScaling};
+            double localExtensionRepulsionX{
+                std::cos(localExtensionEffectDirection)*localExtensionScaling
+            };
+            double localExtensionRepulsionY{
+                std::sin(localExtensionEffectDirection)*localExtensionScaling
+            };
+            double localCILx{(localExtensionRepulsionX + localBodyRepulsionX)};
+            double localCILy{(localExtensionRepulsionY + localBodyRepulsionY)};
+            localAgents[cellIndex]->setCILPolarityChange(localCILx, localCILy);
         }
     }
+};
 
-    // Update current flow-derived values:
-    flowDirection = findTotalActinFlowDirection();
-    flowMagnitude = findTotalActinFlowMagnitude();
-    scaledFlowMagnitude = std::tanh(flowMagnitude);
 
-    // Update polarity based on current actin flows:
-    double rawPolarityMagnitude{std::sqrt(std::pow(polarityX, 2) + std::pow(polarityY, 2))};
-    double rawMagnitudeSquared{std::pow(rawPolarityMagnitude, 2)};
-    std::vector<double> flowComponents{findTotalActinFlowComponents()};
+void CellAgent::runDeterministicCollisionLogic() {
+    // Define acting cell position vars for safety (don't want to accidentally change x/y):
+    double actingCellX{getX()};
+    double actingCellY{getY()};
 
-    double xDiffusiveComponent{polarityDiffusionRate*rawMagnitudeSquared*std::cos(polarityDirection)};
-    double yDiffusiveComponent{polarityDiffusionRate*rawMagnitudeSquared*std::sin(polarityDirection)};
-    double xAdvectionComponent{effectiveActinAdvectionRate*flowComponents[0] + polarityChangeCilX};
-    double yAdvectionComponent{effectiveActinAdvectionRate*flowComponents[1] + polarityChangeCilY};
+    // Loop through all local agents:
+    for (auto& localAgent: localAgents) {
+        // Take modulo of position in case interaction is across the periodic boundary:
+        double localCellX{localAgent->getX()};
+        double localCellY{localAgent->getY()};
 
-    double dPolarityX{xAdvectionComponent - xDiffusiveComponent};
-    double dPolarityY{yAdvectionComponent - yDiffusiveComponent};
+        // ---> Determining correct modulus for X:
+        if (actingCellX - localCellX > (2048 / 2)) {
+            localCellX += 2048;
+        }
+        else if (actingCellX - localCellX < -(2048 / 2)) {
+            localCellX -= 2048;
+        }
 
-    polarityX += dPolarityX;
-    polarityY += dPolarityY;
+        // ---> Determining correct modulus for Y:
+        if (actingCellY - localCellY > (2048 / 2)) {
+            localCellY += 2048;
+        }
+        else if (actingCellY - localCellY < -(2048 / 2)) {
+            localCellY -= 2048;
+        }
 
-    if (std::isnan(polarityX)) {
-        std::cout << "dPolarityX: " << dPolarityX << std::endl;
-        assert(!std::isnan(polarityX));
+        // Getting total displacement and heading to local cell:
+        double actingToLocalX{localCellX - actingCellX};
+        double actingToLocalY{localCellY - actingCellY};
+        double angleActingToLocal{std::atan2(actingToLocalY, actingToLocalX)};
+        double displacementActingToLocal{std::sqrt(
+            std::pow(actingToLocalX, 2) + 
+            std::pow(actingToLocalY, 2)
+        )};
+
+        bool withinRadius{displacementActingToLocal < (2 * cellBodyRadius)};
+        bool withinFront{std::abs(angleMod(angleActingToLocal-flowDirection)) < M_PI_2};
+
+        // Collide if within radius:
+        if (withinRadius and withinFront) {
+            // Exert reduction in actin flow:
+            double angleOfRestitution{angleActingToLocal - M_PI};
+            double componentOfActingFlowOntoCollision{
+                std::cos(flowDirection - angleOfRestitution)
+            };
+            if (componentOfActingFlowOntoCollision < 0) {
+                // Calculate change in actin flow:
+                double reductionInFlow{
+                    dt * collisionFlowReductionRate * flowMagnitude * std::abs(componentOfActingFlowOntoCollision)
+                };
+                double cappedReductionInFlow{std::min(reductionInFlow, flowMagnitude * std::abs(componentOfActingFlowOntoCollision))};
+                double dxActinFlow{std::cos(angleOfRestitution) * cappedReductionInFlow};
+                double dyActinFlow{std::sin(angleOfRestitution) * cappedReductionInFlow};
+
+                // Update actin flow:
+                double xFlowComponent{std::cos(flowDirection)*flowMagnitude};
+                double yFlowComponent{std::sin(flowDirection)*flowMagnitude};
+                xFlowComponent += dxActinFlow;
+                yFlowComponent += dyActinFlow;
+
+                // Set acting cell actin flow to new values:
+                flowDirection = std::atan2(yFlowComponent, xFlowComponent);
+                flowMagnitude = std::sqrt(std::pow(xFlowComponent, 2) + std::pow(yFlowComponent, 2));
+            }
+
+            // Calculate CIL effect:
+            // double bodyScaling{(2*cellBodyRadius) - displacementActingToLocal};
+            double actingBodyRepulsionX{std::cos(angleOfRestitution)};
+            double actingBodyRepulsionY{std::sin(angleOfRestitution)};
+            polarityChangeCilX += actingBodyRepulsionX;
+            polarityChangeCilY += actingBodyRepulsionY;
+
+            // Simulate effect of CIL on RhoA redistribution for local cell:
+            double localBodyRepulsionX{std::cos(angleActingToLocal)};
+            double localBodyRepulsionY{std::sin(angleActingToLocal)};
+            localAgent->setCILPolarityChange(localBodyRepulsionX, localBodyRepulsionY);
+        }
+
     }
-    if (std::isnan(polarityY)) {
-        std::cout << "dPolarityY: " << dPolarityY << std::endl;
-        assert(!std::isnan(polarityY));
-    }
-
-    // Updating derived values:
-    polarityDirection = std::atan2(polarityY, polarityX);
-    polarityMagnitude = std::tanh(std::sqrt(std::pow(polarityX, 2) + std::pow(polarityY, 2)));
-    if (polarityMagnitude == 0) {
-        polarityMagnitude += 1e-5;
-        polarityDirection = angleUniformDistribution(generatorRandomRepolarisation);
-    }
-
-    // Update position:
-    double cellDisplacement{findCellMovementMagnitude()};
-    double dx{std::cos(flowDirection) * cellDisplacement};
-    double dy{std::sin(flowDirection) * cellDisplacement};
-    addToMovementHistory(std::cos(flowDirection), std::sin(flowDirection));
-    x += dx;
-    y += dy;
 }
+
 
 std::vector<double> CellAgent::sampleAttachmentPoint() {
     // Getting current position:
@@ -478,41 +910,84 @@ std::vector<double> CellAgent::sampleAttachmentPoint() {
     double actingCellY{getY()};
 
     // Sampling from random radius in cell area:
-    double angleDelta = angleUniformDistribution(generatorMatrixAngleSampling);
-    // angleDelta
-    // M_PI_2 + (angleDelta / 2)
-    double samplePointDirection{angleDelta};
-    // uniformDistribution(generatorPolarityNoiseX)
-    double samplePointRadius{1 + (standardNormalDistribution(generatorMatrixRadiusSampling)/3)};
-    double effectiveRadius{samplePointRadius*cellBodyRadius};
-    double samplePointX{effectiveRadius * std::cos(samplePointDirection)};
-    double samplePointY{effectiveRadius * std::sin(samplePointDirection)};
+    // double divergence{(lowDiscrepancySample * M_PI) - M_PI_2};
+    // double samplePointDirection{flowDirection + divergence};
+    double samplePointDirection{angleUniformDistribution(generatorMatrixRadiusSampling)};
 
-    // // Scaling origin points by eccentricity:
-    // double cappedActingEccentricity{1 - std::exp(-eccentricityRate*polarityMagnitude)};
-    double cappedActingEccentricity{eccentricityConstant};
-    double minorAxisScaling{std::sqrt(1 - std::pow(cappedActingEccentricity, 2))};
-    double majorAxisScaling{std::pow(1 - std::pow(cappedActingEccentricity, 2), -0.25)};
-    double actingFrameX{samplePointX*minorAxisScaling};
-    double actingFrameY{samplePointY*majorAxisScaling};
-
+    // Getting point in frame:
+    double actingFrameX{std::cos(samplePointDirection) * cellBodyRadius};
+    double actingFrameY{std::sin(samplePointDirection) * cellBodyRadius};
+    
     // Transforming points from acting frame to global frame:
-    double rotatingBasisAngle{polarityDirection - M_PI_2};
-    double transformedX{
-        (actingFrameX*std::cos(rotatingBasisAngle)) -
-        (actingFrameY*std::sin(rotatingBasisAngle))
-    };
-    double transformedY{
-        (actingFrameX*std::sin(rotatingBasisAngle)) +
-        (actingFrameY*std::cos(rotatingBasisAngle))
-    };
+    double globalFrameX{actingCellX + actingFrameX};
+    double globalFrameY{actingCellY + actingFrameY};
 
-    // Finding total distance from cell:
-    double sampleGlobalX{actingCellX + transformedX};
-    double sampleGlobalY{actingCellY + transformedY};
-
-    return {sampleGlobalX, sampleGlobalY};
+    return {globalFrameX, globalFrameY};
 };
+
+
+std::tuple<double, double, double, double> CellAgent::sampleTrajectoryStadium() {
+    // Weight sampling to more recent points in trajectory:
+    int currentLength{static_cast<int>(xPositionHistory.size())};
+    std::vector<double> probabilityWeights(currentLength);
+    // std::iota(probabilityWeights.begin(), probabilityWeights.end(), 1);
+    std::fill(probabilityWeights.begin(), probabilityWeights.end(), 1);
+
+    // Sample trajectory indices:
+    std::random_device randomDevice;
+    std::mt19937 generator(randomDevice());
+    std::discrete_distribution<int> indexDistribution(
+        probabilityWeights.begin(), probabilityWeights.end()
+    );
+    int indexA{indexDistribution(generator)};
+    int indexB{indexDistribution(generator)};
+
+    // Return positions at these points:
+    return {
+        xPositionHistory[indexA], yPositionHistory[indexA],
+        xPositionHistory[indexB], yPositionHistory[indexB]
+    };
+}
+
+
+bool CellAgent::isPositionInStadium(
+    double samplePointX, double samplePointY,
+    double startX, double startY,
+    double endX, double endY
+) {
+    // Get intermediate calculations:
+    double xStartToSample{samplePointX - startX};
+    double yStartToSample{samplePointY - startY};
+    double xStartToEnd{endX - startX};
+    double yStartToEnd{endY - startY};
+
+    // Get scaled dot product:
+    double scaledDotProduct{xStartToSample*xStartToEnd + yStartToSample*yStartToEnd};
+    scaledDotProduct /= std::pow(xStartToEnd, 2) + std::pow(yStartToEnd, 2);
+
+    // Determine closest point on segment:
+    double closestPointX{0};
+    double closestPointY{0};
+    if (scaledDotProduct < 0) {
+        closestPointX = startX;
+        closestPointY = startY;
+    } else if (scaledDotProduct > 1) {
+        closestPointX = endX;
+        closestPointY = endY;
+    } else {
+        closestPointX = startX + scaledDotProduct*xStartToEnd;
+        closestPointY = startY + scaledDotProduct*yStartToEnd;
+    }
+
+    // Find distance to closest point:
+    double minimumDistance{std::sqrt(
+        std::pow(samplePointX - closestPointX, 2) +
+        std::pow(samplePointY - closestPointY, 2)
+    )};
+
+    return minimumDistance < cellBodyRadius;
+}
+
 
 // // Private functions for cell behaviour:
 double CellAgent::sampleVonMises(double kappa) {
@@ -568,6 +1043,25 @@ double CellAgent::angleMod(double angle) const {
 }
 
 
+double CellAgent::nematicAngleMod(double angle) const {
+    while (angle < 0) {angle += M_PI;};
+    while (angle >= M_PI) {angle -= M_PI;};
+    return angle;
+}
+
+double CellAgent::takePeriodicModulus(double queryPosition, double localPosition) {
+    // Find and apply relevant modulus:
+    double modulusPosition{queryPosition};
+    if (localPosition - queryPosition > (2048 / 2)) {
+        modulusPosition += 2048;
+    }
+    else if (localPosition - queryPosition < -(2048 / 2)) {
+        modulusPosition -= 2048;
+    }
+
+    return modulusPosition;
+};
+
 double CellAgent::calculateAngularDistance(double headingA, double headingB) const {
     // Calculating change in theta:
     double deltaHeading{headingA - headingB};
@@ -598,6 +1092,32 @@ double CellAgent::calculateMinimumAngularDistance(double headingA, double headin
         assert((std::abs(flippedHeading) <= M_PI/2));
         return flippedHeading;
     };
+}
+
+double CellAgent::calculateShapeDeltaTowardsActin(double shapeHeading, double actinHeading) const {
+    // Ensuring input values are in the correct range:
+    assert((shapeHeading >= 0) & (shapeHeading <= M_PI));
+    assert((actinHeading >= -M_PI) & (actinHeading <= M_PI));
+
+    // Calculating change in theta (Shape is direction agnostic so we have to reverse it):
+    double deltaHeading{actinHeading - shapeHeading};
+    while (deltaHeading <= -M_PI) {deltaHeading += M_PI;}
+
+    double flippedHeading;
+    if (deltaHeading < 0) {
+        flippedHeading = M_PI + deltaHeading;
+    } else {
+        flippedHeading = -(M_PI - deltaHeading);
+    }
+
+    // Selecting smallest change in theta and ensuring correct range:
+    if (std::abs(deltaHeading) < std::abs(flippedHeading)) {
+        assert((std::abs(deltaHeading) <= M_PI/2));
+        return deltaHeading;
+    } else {
+        assert((std::abs(flippedHeading) <= M_PI/2));
+        return flippedHeading;
+    }
 }
 
 double CellAgent::findTotalActinFlowDirection() const {
@@ -663,21 +1183,6 @@ void CellAgent::addToActinHistory(double actinFlowX, double actinFlowY) {
     actinHistory.emplace_back(actinFlow);
 };
 
-double CellAgent::findCellMovementMagnitude() {
-    // Averaging over history:
-    double xFlowSum{0}, yFlowSum{0};
-    for (const auto & actinFlow : actinHistory) {
-        xFlowSum += actinFlow[0];
-        yFlowSum += actinFlow[1];
-    }
-
-    // Scaling flow to movement:
-    xFlowSum *= flowScaling;
-    yFlowSum *= flowScaling;
-
-    // Taking extent:
-    return std::sqrt(std::pow(xFlowSum, 2) + std::pow(yFlowSum, 2));
-}
 
 void CellAgent::addToMovementHistory(double movementX, double movementY) {
     xMovementHistory.push_back(movementX);
@@ -685,6 +1190,15 @@ void CellAgent::addToMovementHistory(double movementX, double movementY) {
     if (xMovementHistory.size() > 25) {
         xMovementHistory.pop_front();
         yMovementHistory.pop_front();
+    }
+}
+
+void CellAgent::addToPositionHistory(double positionX, double positionY) {
+    xPositionHistory.push_back(positionX);
+    yPositionHistory.push_back(positionY);
+    if (yPositionHistory.size() > 100) {
+        xPositionHistory.pop_front();
+        yPositionHistory.pop_front();
     }
 }
 
@@ -708,20 +1222,20 @@ double CellAgent::findDirectionalConcentration() {
     return directionalConcentration / xMovementHistory.size();
 }
 
-double CellAgent::findShapeDirection() {
-    // Averaging over history:
-    double xMovementSum{0}, yMovementSum{0};
-    for (double xMovement : xMovementHistory) {
-        xMovementSum += xMovement;
-    }
-    for (double yMovement : yMovementHistory) {
-        yMovementSum += yMovement;
-    }
+// double CellAgent::findShapeDirection() {
+//     // Averaging over history:
+//     double xMovementSum{0}, yMovementSum{0};
+//     for (double xMovement : xMovementHistory) {
+//         xMovementSum += xMovement;
+//     }
+//     for (double yMovement : yMovementHistory) {
+//         yMovementSum += yMovement;
+//     }
 
-    // Finding total path length:
-    double shapeDirection{std::atan2(yMovementSum, xMovementSum)};
-    return shapeDirection;
-}
+//     // Finding total path length:
+//     double shapeDirection{std::atan2(yMovementSum, xMovementSum)};
+//     return shapeDirection;
+// }
 
 std::vector<double> CellAgent::crossProduct(std::vector<double> const a, std::vector<double> const b) {
     // Basic cross product calculation:

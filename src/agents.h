@@ -12,29 +12,23 @@ public:
     // Constructor and intialisation:
     CellAgent(
         // Defined behaviour parameters:
-        bool setMatrixInteraction, unsigned int setCellSeed, int setCellID,
+        unsigned int setCellSeed, int setCellID,
+        double setdt,
 
         // Movement parameters:
-        double setHalfSatCellAngularConcentration,
-        double setMaxCellAngularConcentration,
-        double setHalfSatMeanActinFlow,
-        double setMaxMeanActinFlow,
-        double setFlowScaling,
-        
-        // Polarisation system parameters:
-        double setPolarityDiffusionRate,
+        double setCueDiffusionRate,
+        double setCueKa,
+        double setFluctuationAmplitude,
+        double setFluctuationTimescale,
         double setActinAdvectionRate,
-        double setContactAdvectionRate,
-
-        // Matrix sensation parameters:
-        double setHalfSatMatrixAngularConcentration,
-        double setMaxMatrixAngularConcentration,
+        double setMatrixAdvectionRate,
+        double setCollisionAdvectionRate,
+        double setMaximumSteadyStateActinFlow,
 
         // Collision parameters:
         double setCellBodyRadius,
-        double setEccentricity,
-        double setSharpness,
-        double setInhibitionStrength,
+        double setAspectRatio,
+        double setCollisionFlowReductionRate,
 
         // Randomised initial state parameters:
         double startX, double startY, double startHeading
@@ -42,6 +36,7 @@ public:
 
     // Actual simulations that the cell runs:
     std::vector<double> sampleAttachmentPoint();
+    std::tuple<double, double, double, double> sampleTrajectoryStadium();
 
     // Getters:
     // Getters for values that shouldn't change:
@@ -53,12 +48,13 @@ public:
     std::tuple<double, double> getPosition() const;
     double getPolarityDirection() const;
     double getPolarityMagnitude() const;
+    double getActinFlowDirection() const;
+    double getActinFlowMagnitude() const;
+    double getShapeDirection() const;
 
     // Instantaneous variable getters: (these variables are updated each timestep,
     // and represent the cell's percepts/actions)
     double getMovementDirection() const;
-    double getActinFlowDirection() const;
-    double getActinFlowMagnitude() const;
     double getScaledActinFlowMagnitude() const;
     double getDirectionalInfluence() const;
     double getDirectionalIntensity() const;
@@ -68,6 +64,8 @@ public:
     // Setters:
     // Setters for simulation (moving cells around etc.):
     void setPosition(std::tuple<double, double> newPosition);
+    void setCILPolarityChange(double changeX, double changeY);
+    void setActinState(double setFlowDirection, double setFlowMagnitude);
 
     // Setters for simulating cell perception (e.g. updating cell percepts):
     void setDirectionalInfluence(double setDirectionalInfluence);
@@ -82,18 +80,21 @@ private:
     // Randomness and seeding:
     unsigned int cellSeed;
     int cellID;
+    double dt;
     std::mt19937 seedGenerator;
     std::uniform_int_distribution<unsigned int> seedDistribution;
 
     // Whether to simulate matrix interactions:
     bool thereIsMatrixInteraction;
 
-    // Dynamic cell state data:
+    // State variables:
     double x;
     double y;
     std::list<std::vector<double>> actinHistory;
     std::deque<double> xMovementHistory;
     std::deque<double> yMovementHistory;
+    std::deque<double> xPositionHistory;
+    std::deque<double> yPositionHistory;
     double polarityX;
     double polarityY;
     double polarityDirection;
@@ -101,36 +102,36 @@ private:
     double flowDirection;
     double flowMagnitude;
     double scaledFlowMagnitude;
-    double eccentricityConstant;
+    double shapeDirection;
 
     // Movement parameters:
-    double halfSatCellAngularConcentration;
-    double maxCellAngularConcentration;
-    double halfSatMeanActinFlow;
-    double maxMeanActinFlow;
-    double flowScaling;
-
-    // Polarisation system parameters:
-    double polarityDiffusionRate;
+    double cueDiffusionRate;
+    double cueKa;
+    double fluctuationAmplitude;
+    double fluctuationTimescale;
     double actinAdvectionRate;
-    double contactAdvectionRate;
+    double matrixAdvectionRate;
+    double collisionAdvectionRate;
+    double maximumSteadyStateActinFlow;
 
-    // Contact inhibition parameters:
+    // Collision parameters:
     double cellBodyRadius;
-    double cellShapeEccentricity;
-    double contactDistributionSharpness;
-    double inhibitionStrength;
+    double cellAspectRatio;
+    double majorAxisScaling;
+    double minorAxisScaling;
+    double collisionFlowReductionRate;
 
-    // Matrix sensation properties:
-    double halfSatMatrixAngularConcentration;
-    double maxMatrixAngularConcentration;
+    // Contact inhibition state variables:
+    double lowDiscrepancySample;
+    double polarityChangeCilX;
+    double polarityChangeCilY;
 
     // Properties calculated each timestep:
     double movementDirection;
     double directionalShift; // -pi <= theta < pi
     double sampledAngle;
 
-    // Percepts:
+    // Matrix percept state variables:
     double directionalInfluence; // -pi <= theta < pi
     double directionalIntensity; // 0 <= I < 1
     double localECMDensity; // 0 <= D < 1
@@ -149,10 +150,10 @@ private:
     // We need to use a special distribution (von Mises) to sample from a random
     // direction over a circle - unfortunately not included in std library:
 
-    // Member variables for von Mises sampling for directional step size:
+    // --> Member variables for von Mises sampling for directional step size:
     std::mt19937 generatorU1, generatorU2, generatorB;
 
-    // Member functions for von Mises sampling:
+    // --> Member functions for von Mises sampling:
     double sampleVonMises(double kappa);
 
     // Generators for collision shape sampling:
@@ -170,21 +171,36 @@ private:
     std::mt19937 generatorRandomRepolarisation;
     std::mt19937 randomDeltaSample;
 
+    // Simulation subfunctions:
+    double determineMovementDirection();
+    double determineActinFlow();
+    void runTrajectoryDependentCollisionLogic();
+    void runStochasticCollisionLogic();
+    void runDeterministicCollisionLogic();
+    bool isPositionInStadium(
+        double samplePointX, double samplePointY,
+        double startX, double startY,
+        double endX, double endY
+    );
+
     // Effectively a utility function for calculating the modulus of angles:
     double angleMod(double angle) const;
+    double nematicAngleMod(double angle) const;
     double calculateMinimumAngularDistance(double headingA, double headingB) const;
+    double calculateShapeDeltaTowardsActin(double shapeHeading, double actinHeading) const;
     double calculateAngularDistance(double headingA, double headingB) const;
     double findTotalActinFlowDirection() const;
     double findTotalActinFlowMagnitude() const;
     std::vector<double> findTotalActinFlowComponents() const;
 
     void addToActinHistory(double actinFlowX, double actinFlowY);
+    void addToPositionHistory(double positionX, double positionY);
     void ageActinHistory();
-    double findCellMovementMagnitude();
 
     void addToMovementHistory(double movementX, double movementY);
     double findDirectionalConcentration();
-    double findShapeDirection();
+    double takePeriodicModulus(double queryPosition, double localPosition);
+    // double findShapeDirection();
 
     std::vector<double> crossProduct(
         std::vector<double> const a, std::vector<double> const b

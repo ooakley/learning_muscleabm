@@ -68,49 +68,41 @@ int main(int argc, char** argv) {
             "Whether or not cells undergo interaction with the matrx."
         )
         // Cell movement parameters:
-        ("halfSatCellAngularConcentration", po::value<double>(&cellParams.halfSatCellAngularConcentration)->required(),
+        ("dt", po::value<double>(&cellParams.dt)->required(),
+            "Length of individual timesteps."
+        )
+        ("cueDiffusionRate", po::value<double>(&cellParams.cueDiffusionRate)->required(),
             "Degree of polarisation at which cell angular concentration reaches half its saturation value."
         )
-        ("maxCellAngularConcentration", po::value<double>(&cellParams.halfSatCellAngularConcentration)->required(),
-            "Maximum concentration of the angular distribution from which the cell draws its direction of motion."
+        ("cueKa", po::value<double>(&cellParams.cueKa)->required(),
+            "Degree of cue concentration at which actin flow induction reaches half maximum."
         )
-        ("halfSatMeanActinFlow", po::value<double>(&cellParams.halfSatMeanActinFlow)->required(),
-            "Degree of polarisation at which cell movement per timeframe reaches half its saturation value."
+        ("fluctuationAmplitude", po::value<double>(&cellParams.fluctuationAmplitude)->required(),
+            "Degree of polarisation at which cell angular concentration reaches half its saturation value."
         )
-        ("maxMeanActinFlow", po::value<double>(&cellParams.maxMeanActinFlow)->required(),
-            "Maximum mean actin flow per simulation step. Determines distribution from which cell step size is drawn."
-        )
-        ("flowScaling", po::value<double>(&cellParams.flowScaling)->required(),
-            "The number by which actin flow is multiplied to get actual distance travelled by the cell."
-        )
-        // Polarisation system parameters:
-        ("polarityDiffusionRate", po::value<double>(&cellParams.polarityDiffusionRate)->required(),
-            "The number by which actin flow is multiplied to get effective polarisation update."
+        ("fluctuationTimescale", po::value<double>(&cellParams.fluctuationTimescale)->required(),
+            "Degree of polarisation at which cell angular concentration reaches half its saturation value."
         )
         ("actinAdvectionRate", po::value<double>(&cellParams.actinAdvectionRate)->required(),
-            "The number by which actin flow is multiplied to get effective polarisation update."
+            "Degree of polarisation at which cell angular concentration reaches half its saturation value."
         )
-        ("contactAdvectionRate", po::value<double>(&cellParams.contactAdvectionRate)->required(),
-            "The number by which actin flow is multiplied to get effective polarisation update."
+        ("matrixAdvectionRate", po::value<double>(&cellParams.matrixAdvectionRate)->required(),
+            "Degree of polarisation at which cell angular concentration reaches half its saturation value."
         )
-        // Matrix sensation parameters:
-        ("halfSatMatrixAngularConcentration", po::value<double>(&cellParams.halfSatMatrixAngularConcentration)->required(),
-            "The matrix density at which angular concentration conferred by the matrix reaches half its maximum value."
+        ("collisionAdvectionRate", po::value<double>(&cellParams.collisionAdvectionRate)->required(),
+            "Degree of polarisation at which cell angular concentration reaches half its saturation value."
         )
-        ("maxMatrixAngularConcentration", po::value<double>(&cellParams.maxMatrixAngularConcentration)->required(),
-            "The maximum angular concentration conferred by orientational cues in the matrix."
+        ("maximumSteadyStateActinFlow", po::value<double>(&cellParams.maximumSteadyStateActinFlow)->required(),
+            "Degree of polarisation at which cell angular concentration reaches half its saturation value."
         )
         // Collision parameters:
         ("cellBodyRadius", po::value<double>(&cellParams.cellBodyRadius)->required(),
-            "Radius of the cell body for collision calculations.."
+            "Radius of the cell body for collision calculations."
         )
-        ("eccentricity", po::value<double>(&cellParams.eccentricity)->required(),
-            "Rate at which actin flow in the direction of a collision is reduced by a collision."
+        ("aspectRatio", po::value<double>(&cellParams.aspectRatio)->required(),
+            "Degree of polarisation at which cell angular concentration reaches half its saturation value."
         )
-        ("sharpness", po::value<double>(&cellParams.sharpness)->required(),
-            "Rate at which actin flow in the direction of a collision is reduced by a collision."
-        )
-        ("inhibitionStrength", po::value<double>(&cellParams.inhibitionStrength)->required(),
+        ("collisionFlowReductionRate", po::value<double>(&cellParams.collisionFlowReductionRate)->required(),
             "Rate at which actin flow in the direction of a collision is reduced by a collision."
         )
     ;
