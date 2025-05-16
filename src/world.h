@@ -7,33 +7,20 @@
 // Structure to store necessary parameters for the simulation:
 struct CellParameters {
     // Cell movement parameters:
-    double halfSatCellAngularConcentration,
-    maxCellAngularConcentration,
-    halfSatMeanActinFlow,
-    maxMeanActinFlow,
-    flowScaling,
-
-    // Polarisation system parameters:
-    polarityDiffusionRate,
+    double dt,
+    cueDiffusionRate,
+    cueKa,
+    fluctuationAmplitude,
+    fluctuationTimescale,
     actinAdvectionRate,
-    contactAdvectionRate,
-
-    // Matrix sensation parameters:
-    halfSatMatrixAngularConcentration,
-    maxMatrixAngularConcentration,
+    matrixAdvectionRate,
+    collisionAdvectionRate,
+    maximumSteadyStateActinFlow,
 
     // Collision parameters:
     cellBodyRadius,
     aspectRatio,
-    boundarySharpness,
-    inhibitionStrength;
-
-    // Binary simulation logic parameters:
-    bool actinMagnitudeIsFixed,
-    actinDirectionIsFixed,
-    thereIsExtensionRepulsion,
-    collisionsAreDeterministic,
-    matrixAlignmentIsDeterministic;
+    collisionFlowReductionRate;
 };
 
 class World {

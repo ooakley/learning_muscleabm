@@ -33,73 +33,48 @@ vectorOfTuples HEADING_CONTACT_MAPPING{
 // Constructor:
 CellAgent::CellAgent(
     // Defined behaviour parameters:
-    bool setMatrixInteraction, unsigned int setCellSeed, int setCellID,
+    unsigned int setCellSeed, int setCellID,
+    double setdt,
 
     // Movement parameters:
-    double setHalfSatCellAngularConcentration, double setMaxCellAngularConcentration,
-    double setHalfSatMeanActinFlow, double setMaxMeanActinFlow,
-    double setFlowScaling,
-
-    // Polarisation system parameters:
-    double setPolarityDiffusionRate,
+    double setCueDiffusionRate,
+    double setCueKa,
+    double setFluctuationAmplitude,
+    double setFluctuationTimescale,
     double setActinAdvectionRate,
-    double setContactAdvectionRate,
-
-    // Matrix sensation parameters:
-    double setHalfSatMatrixAngularConcentration,
-    double setMaxMatrixAngularConcentration,
+    double setMatrixAdvectionRate,
+    double setCollisionAdvectionRate,
+    double setMaximumSteadyStateActinFlow,
 
     // Collision parameters:
     double setCellBodyRadius,
     double setAspectRatio,
-    double setSharpness,
-    double setInhibitionStrength,
+    double setCollisionFlowReductionRate,
 
     // Randomised initial state parameters:
-    double startX, double startY, double startHeading,
-
-    // Binary simulation parameters:
-    bool setActinMagnitudeIsFixed,
-    bool setActinDirectionIsFixed,
-    bool setThereIsExtensionRepulsion,
-    bool setCollisionsAreDeterministic,
-    bool setMatrixAlignmentIsDeterministic
+    double startX, double startY, double startHeading
     )
     // Model infrastructure:
-    : thereIsMatrixInteraction{setMatrixInteraction}
-    , cellSeed{setCellSeed}
+    : cellSeed{setCellSeed}
     , cellID{setCellID}
+    , dt{setdt}
 
     // Movement parameters:
-    , halfSatCellAngularConcentration{setHalfSatCellAngularConcentration}
-    , maxCellAngularConcentration{setMaxCellAngularConcentration}
-    , halfSatMeanActinFlow{setHalfSatMeanActinFlow}
-    , maxMeanActinFlow{setMaxMeanActinFlow}
-    , flowScaling{setFlowScaling}
-
-    // Polarisation system parameters:
-    , polarityDiffusionRate{setPolarityDiffusionRate*0.01}
-    , actinAdvectionRate{setActinAdvectionRate*0.01}
-    , contactAdvectionRate{setContactAdvectionRate*0.01}
-
-    // Matrix sensation parameters:
-    , halfSatMatrixAngularConcentration{setHalfSatMatrixAngularConcentration}
-    , maxMatrixAngularConcentration{setMaxMatrixAngularConcentration}
+    , cueDiffusionRate{setCueDiffusionRate}
+    , cueKa{setCueKa}
+    , fluctuationAmplitude{setFluctuationAmplitude}
+    , fluctuationTimescale{setFluctuationTimescale}
+    , actinAdvectionRate{setActinAdvectionRate}
+    , matrixAdvectionRate{setMatrixAdvectionRate}
+    , collisionAdvectionRate{setCollisionAdvectionRate}
+    , maximumSteadyStateActinFlow{setMaximumSteadyStateActinFlow}
 
     // Collision parameters:
     , cellBodyRadius{setCellBodyRadius}
     , cellAspectRatio{setAspectRatio}
-    , contactDistributionSharpness{setSharpness}
-    , inhibitionStrength{setInhibitionStrength}
+    , collisionFlowReductionRate{setCollisionFlowReductionRate}
     , majorAxisScaling{std::sqrt(setAspectRatio)}
     , minorAxisScaling{std::sqrt(1/setAspectRatio)}
-
-    // Binary simulation parameters:
-    , actinMagnitudeIsFixed{setActinMagnitudeIsFixed}
-    , actinDirectionIsFixed{setActinDirectionIsFixed}
-    , thereIsExtensionRepulsion{setThereIsExtensionRepulsion}
-    , collisionsAreDeterministic{setCollisionsAreDeterministic}
-    , matrixAlignmentIsDeterministic{setMatrixAlignmentIsDeterministic}
 
     // State parameters:
     , x{startX}
@@ -222,50 +197,107 @@ void CellAgent::setLocalCellList(std::vector<std::shared_ptr<CellAgent>> setLoca
 void CellAgent::takeRandomStep() {
     assert(directionalIntensity <= 1);
 
-    // Determine protrusion - polarity centered or ECM centered:
-    movementDirection = determineMovementDirection();
+    // Collide:
+    runDeterministicCollisionLogic();
 
-    // Calculate actin flow in protrusion, via MM kinetics:
-    double actinFlow{determineActinFlow()};
+    // Determine advection derived from actin flow:
+    double actinAdvectionX{flowMagnitude*std::cos(flowDirection)};
+    double actinAdvectionY{flowMagnitude*std::sin(flowDirection)};
 
-    // Update flow history:
-    double actinChangeX{actinFlow * cos(movementDirection)};
-    double actinChangeY{actinFlow * sin(movementDirection)};
+    // Determine advection derived from matrix:
+    double matrixAdvectionX{directionalIntensity*std::cos(flowDirection + directionalInfluence)};
+    double matrixAdvectionY{directionalIntensity*std::sin(flowDirection + directionalInfluence)};
 
-    double newActinX{0.9*std::cos(flowDirection)*flowMagnitude + 0.1*actinChangeX};
-    double newActinY{0.9*std::sin(flowDirection)*flowMagnitude + 0.1*actinChangeY};
+    // Sum sources of advection:
+    double totalAdvectionX{
+        actinAdvectionRate*actinAdvectionX +
+        matrixAdvectionRate*matrixAdvectionX +
+        collisionAdvectionRate*polarityChangeCilX
+    };
+    double totalAdvectionY{
+        actinAdvectionRate*actinAdvectionY +
+        matrixAdvectionRate*matrixAdvectionY +
+        collisionAdvectionRate*polarityChangeCilY
+    };
 
-    // Update current flow-derived values:
-    // flowDirection = findTotalActinFlowDirection();
-    // flowMagnitude = findTotalActinFlowMagnitude();
-    // scaledFlowMagnitude = std::tanh(flowMagnitude);
-    flowDirection = std::atan2(newActinY, newActinX);
-    // flowDirection = 1;
-    flowMagnitude = std::sqrt(std::pow(newActinX, 2) + std::pow(newActinY, 2));
-    scaledFlowMagnitude = std::tanh(flowMagnitude);
+    double totalAdvectionMagnitude{std::sqrt(
+        std::pow(totalAdvectionX, 2) +
+        std::pow(totalAdvectionY, 2)
+    )};
+    double totalAdvectionDirection{std::atan2(totalAdvectionY, totalAdvectionX)};
 
-    // // Seeing which protrusions die off this timestep:
-    // ageActinHistory();
+    // Get solution to cue concetration profile at cell front and cell back:
+    double exponentialTerm{std::exp(-totalAdvectionMagnitude / cueDiffusionRate)};
+    double cueConcentrationFront{
+        totalAdvectionMagnitude / 
+        (cueDiffusionRate*(1 - exponentialTerm))
+    };
+    double cueConcentrationBack{
+        totalAdvectionMagnitude*exponentialTerm / 
+        (cueDiffusionRate*(1 - exponentialTerm))
+    };
 
-    // // Adding new protrusion if there's space:
-    // addToActinHistory(actinX, actinY);
+    // Run concentration through Hill equation and find front/back activity differential:
+    double cueActivityFront{cueConcentrationFront / (cueKa + cueConcentrationFront)};
+    double cueActivityBack{cueConcentrationBack / (cueKa + cueConcentrationBack)};
+    double effectiveActinPolarisation{cueActivityFront - cueActivityBack};
 
-    // Accumulators for CIL-dependent polarity reorientation:
-    // double polarityChangeCilX{0.};
-    // double polarityChangeCilY{0.};
+    // Correct for small advections:
+    if (effectiveActinPolarisation < 0) {
+        effectiveActinPolarisation = 0;
+    }
 
-    // Run collision logic:
-    // if (xPositionHistory.size() < 2) {
-    //     runDeterministicCollisionLogic();
-    // } else {
-    //     runTrajectoryDependentCollisionLogic();
-    // }
+    // Prevent singularites in calculating updates to actin stochastic differential equation - 
+    // because we've converted to polar coordinates, there are several places where we divide
+    // by flow magnitude.
+    if (flowMagnitude < 1e-2) {
+        flowMagnitude = 1e-2;
+    }
 
-    // Determine collision with other cells:
-    // for (int i; i < 3; i++) {
-    //     runStochasticCollisionLogic();
-    // }
-    // runStochasticCollisionLogic();
+    // Calculate actin update:
+    double gamma{1/fluctuationTimescale};
+    double steadyState{maximumSteadyStateActinFlow*effectiveActinPolarisation};
+
+    // Sample update using drift (deterministic) and diffusion (random) terms:
+    double magnitudeUpdateDrift{
+        gamma*(steadyState - flowMagnitude) + (fluctuationAmplitude/(2*flowMagnitude))
+    };
+    double magnitudeUpdateDiffusion{
+        std::sqrt(fluctuationAmplitude)*standardNormalDistribution(generatorInfluence)
+    };
+    double angleUpdateDrift{
+        gamma*calculateMinimumAngularDistance(totalAdvectionDirection, flowDirection)
+    };
+    double angleUpdateDiffusion{
+        (standardNormalDistribution(generatorProtrusion) * std::sqrt(fluctuationAmplitude)) / flowMagnitude
+    };
+
+    // Apply update - in stochastic differential equations, randomly sampled terms are scaled by the
+    // square root of dt.
+    flowMagnitude += (magnitudeUpdateDrift * dt) + (magnitudeUpdateDiffusion*std::sqrt(dt));
+    flowDirection += (angleUpdateDrift * dt) + (angleUpdateDiffusion*std::sqrt(dt));
+    flowDirection = angleMod(flowDirection);
+
+    // Update position:
+    double cellDisplacement{flowMagnitude};
+    double dx{std::cos(flowDirection) * cellDisplacement};
+    double dy{std::sin(flowDirection) * cellDisplacement};
+    x += dx;
+    y += dy;
+
+    // Roll position if out of bounds:
+    while (x < 0) {x += 2048;}
+    while (y < 0) {y += 2048;}
+    x = std::fmodf(x, 2048);
+    y = std::fmodf(y, 2048);
+
+    // Add to cell history:
+    addToPositionHistory(x, y);
+    addToMovementHistory(std::cos(flowDirection), std::sin(flowDirection));
+
+    // Zero out CIL effects:
+    polarityChangeCilX = polarityChangeCilX*0.0;
+    polarityChangeCilY = polarityChangeCilY*0.0;
 
     // // Determine collision with world boundaries:
     // bool xOutOfBounds{x < cellBodyRadius or x > 2048-cellBodyRadius};
@@ -296,173 +328,10 @@ void CellAgent::takeRandomStep() {
     //         polarityY = 0;
     //         polarityChangeCilY = 0;
     //     }
-
     //     // Set acting cell actin flow to new values:
     //     flowDirection = std::atan2(yFlowComponent, xFlowComponent);
     //     flowMagnitude = std::sqrt(std::pow(xFlowComponent, 2) + std::pow(yFlowComponent, 2));
     // }
-
-    // if (collisionsAreDeterministic) {
-    //     
-    // else {
-    // }
-
-    // Update polarity based on current actin flows:
-    double rawPolarityMagnitude{std::sqrt(std::pow(polarityX, 2) + std::pow(polarityY, 2))};
-    double rawMagnitudeSquared{std::pow(rawPolarityMagnitude, 2)};
-    double flowComponentX{std::cos(flowDirection)*flowMagnitude};
-    double flowComponentY{std::sin(flowDirection)*flowMagnitude};
-    double xDiffusiveComponent{polarityDiffusionRate*rawMagnitudeSquared*std::cos(polarityDirection)};
-    double yDiffusiveComponent{polarityDiffusionRate*rawMagnitudeSquared*std::sin(polarityDirection)};
-    double xAdvectionComponent{actinAdvectionRate*flowComponentX + polarityChangeCilX};
-    double yAdvectionComponent{actinAdvectionRate*flowComponentY + polarityChangeCilY};
-
-    double dPolarityX{xAdvectionComponent - xDiffusiveComponent};
-    double dPolarityY{yAdvectionComponent - yDiffusiveComponent};
-
-    polarityX += dPolarityX;
-    polarityY += dPolarityY;
-
-    if (std::isnan(polarityX)) {
-        std::cout << "rawPolarityMagnitude: " << rawPolarityMagnitude << std::endl;
-        std::cout << "flowMagnitude: " << flowMagnitude << std::endl;
-        std::cout << "xAdvectionComponent: " << xAdvectionComponent << std::endl;
-        std::cout << "xDiffusiveComponent: " << xDiffusiveComponent << std::endl;
-        std::cout << "dPolarityX: " << dPolarityX << std::endl;
-
-        flowMagnitude = 0;
-        polarityX = 0;
-        polarityY = 0;
-        // assert(!std::isnan(polarityX));
-    }
-    if (std::isnan(polarityY)) {
-        std::cout << "dPolarityY: " << dPolarityY << std::endl;
-        assert(!std::isnan(polarityY));
-    }
-
-    // Updating derived values:
-    polarityDirection = std::atan2(polarityY, polarityX);
-    polarityMagnitude = std::tanh(std::sqrt(std::pow(polarityX, 2) + std::pow(polarityY, 2)));
-    if (polarityMagnitude == 0) {
-        polarityMagnitude += 1e-5;
-        polarityDirection = angleUniformDistribution(generatorRandomRepolarisation);
-        polarityX = polarityMagnitude*std::cos(polarityDirection);
-        polarityY = polarityMagnitude*std::sin(polarityDirection);
-    }
-
-    // Update position:
-    double cellDisplacement{flowMagnitude*flowScaling};
-    double dx{std::cos(flowDirection) * cellDisplacement};
-    double dy{std::sin(flowDirection) * cellDisplacement};
-    addToMovementHistory(std::cos(flowDirection), std::sin(flowDirection));
-    x += dx;
-    y += dy;
-
-    // Roll position if out of bounds:
-    while (x < 0) {x += 2048;}
-    while (y < 0) {y += 2048;}
-    x = std::fmodf(x, 2048);
-    y = std::fmodf(y, 2048);
-    addToPositionHistory(x, y);
-
-    // Update shape direction:
-    double shapeDelta{calculateShapeDeltaTowardsActin(shapeDirection, flowDirection)};
-    // double shapeDirectionX{0.99*std::cos(shapeDirection) + 0.01*std::cos(shapeDirection + shapeDelta)};
-    // double shapeDirectionY{0.99*std::sin(shapeDirection) + 0.01*std::sin(shapeDirection + shapeDelta)};
-    double shapeDirectionX{0.95*std::cos(shapeDirection) + 0.05*flowMagnitude*std::cos(shapeDirection + shapeDelta)};
-    double shapeDirectionY{0.95*std::sin(shapeDirection) + 0.05*flowMagnitude*std::sin(shapeDirection + shapeDelta)};
-    shapeDirection = nematicAngleMod(std::atan2(shapeDirectionY, shapeDirectionX));
-    // assert(shapeDirection >= 0);
-    // assert(shapeDirection <= M_PI);
-
-    // Zero out accumulators for CIL effects:
-    polarityChangeCilX = polarityChangeCilX * 0.0;
-    polarityChangeCilY = polarityChangeCilY * 0.0;
-}
-
-
-double CellAgent::determineMovementDirection() {
-    // Instantiate eventual return value:
-    double calculatedMovementDirection{0};
-    // Calculate direction in simplest case of deterministic matrix alignment:
-    if (matrixAlignmentIsDeterministic) {
-        // Get random directional noise if present:
-        double angleDelta{0};   
-        if (!actinDirectionIsFixed) {
-            // Get relevant parameters for distribution:
-            double cellAngularConcentration{
-                (maxCellAngularConcentration * polarityMagnitude) /
-                (halfSatCellAngularConcentration + polarityMagnitude)
-            };
-            double matrixAngularConcentration{
-                (maxMatrixAngularConcentration * directionalIntensity) /
-                (halfSatMatrixAngularConcentration + directionalIntensity)
-            };
-
-            // Average across both:
-            double averagedConcentration{(cellAngularConcentration + matrixAngularConcentration) / 2};
-            angleDelta = sampleVonMises(averagedConcentration);
-        }
-
-        // Get averaged direction:
-        calculatedMovementDirection = angleMod(polarityDirection + (directionalInfluence/2) + angleDelta);
-    } else {
-        // Get random directional noise if present:
-        double angleDelta{0};
-
-        // Calculate relative sampling rates of matrix and cell directions:
-        double thresholdValue{polarityMagnitude / (polarityMagnitude + localECMDensity)};
-        assert(thresholdValue <= 1 && thresholdValue >= 0);
-        double randomDeterminant{uniformDistribution(generatorInfluence)};
-        if (randomDeterminant < thresholdValue) {
-            // Calculate polarity direction selection parameters using MM kinetics
-            // - we're assuming directionality saturates at some degree of polarisation.
-            if (!actinDirectionIsFixed) {
-                double cellAngularConcentration{
-                    (maxCellAngularConcentration * polarityMagnitude) /
-                    (halfSatCellAngularConcentration + polarityMagnitude)
-                };
-                angleDelta = sampleVonMises(cellAngularConcentration);
-            }
-            calculatedMovementDirection = angleMod(polarityDirection + angleDelta);
-        } else {
-            // Calculate matrix direction selection parameters using MM kinetics
-            // - we're assuming directionality saturates at some value of matrix
-            // directional homogeneity.
-            if (!actinDirectionIsFixed) {
-                double matrixAngularConcentration{
-                    (maxMatrixAngularConcentration * directionalIntensity) /
-                    (halfSatMatrixAngularConcentration + directionalIntensity)
-                };
-                angleDelta = sampleVonMises(matrixAngularConcentration);
-            }
-            calculatedMovementDirection = angleMod(polarityDirection + directionalInfluence + angleDelta);
-        }
-    }
-    return calculatedMovementDirection;
-}
-
-
-double CellAgent::determineActinFlow() {
-    // Instantiate eventual return value:
-    double calculatedActinFlow{0};
-    
-    // Calculated mean flow based on polarisation magnitude:
-    double meanActinFlow{
-        (maxMeanActinFlow * polarityMagnitude) /
-        (halfSatMeanActinFlow + polarityMagnitude)
-    };
-    double clippedMeanActinFlow{std::max(meanActinFlow, 1.0)};
-
-    // Return deterministic value if fixed:
-    if (actinMagnitudeIsFixed) {
-        return clippedMeanActinFlow;
-    }
-    // Return sampled value from poisson distribution otherwise:
-    else {
-        std::poisson_distribution<int> protrusionDistribution(clippedMeanActinFlow);
-        return static_cast<double>(protrusionDistribution(generatorProtrusion));
-    }
 }
 
 
@@ -555,7 +424,7 @@ void CellAgent::runTrajectoryDependentCollisionLogic() {
             if (componentOfActingFlowOntoCollision < 0) {
                 // Calculate change in actin flow:
                 double reductionInFlow{
-                    inhibitionStrength * flowMagnitude * std::abs(componentOfActingFlowOntoCollision)
+                    collisionFlowReductionRate * flowMagnitude * std::abs(componentOfActingFlowOntoCollision)
                 };
                 double dxActinFlow{std::cos(angleOfRestitution) * reductionInFlow};
                 double dyActinFlow{std::sin(angleOfRestitution) * reductionInFlow};
@@ -579,7 +448,7 @@ void CellAgent::runTrajectoryDependentCollisionLogic() {
             };
             if (componentOfLocalFlowOntoCollision <= 0) {
                 // Calculate change in actin flow:
-                double reductionInFlow{inhibitionStrength * localFlowMagnitude * std::abs(componentOfLocalFlowOntoCollision)};
+                double reductionInFlow{collisionFlowReductionRate * localFlowMagnitude * std::abs(componentOfLocalFlowOntoCollision)};
                 double dxActinFlow{std::cos(angleActingToLocal) * reductionInFlow};
                 double dyActinFlow{std::sin(angleActingToLocal) * reductionInFlow};
 
@@ -598,14 +467,14 @@ void CellAgent::runTrajectoryDependentCollisionLogic() {
             // Calculate CIL effect for acting cell:
             double actingRepulsionX{std::cos(angleOfRestitution)};
             double actingRepulsionY{std::sin(angleOfRestitution)};
-            polarityChangeCilX += actingRepulsionX * contactAdvectionRate;
-            polarityChangeCilY += actingRepulsionY * contactAdvectionRate;
+            polarityChangeCilX += actingRepulsionX;
+            polarityChangeCilY += actingRepulsionY;
 
             // Calculate CIL effect for local cell:
             double localRepulsionX{std::cos(angleActingToLocal)};
             double localRepulsionY{std::sin(angleActingToLocal)};
-            double localCILUpdateX{localRepulsionX * contactAdvectionRate};
-            double localCILUpdateY{localRepulsionY * contactAdvectionRate};
+            double localCILUpdateX{localRepulsionX};
+            double localCILUpdateY{localRepulsionY};
             localAgent->setCILPolarityChange(localCILUpdateX, localCILUpdateY);
         }
     }
@@ -827,7 +696,7 @@ void CellAgent::runStochasticCollisionLogic() {
             finalProbability = 1;
         } else {
             // double exponentTerm{std::pow(std::pow(minimumDistance, 2)/2, contactDistributionSharpness)};
-            finalProbability = std::exp(-minimumDistance*contactDistributionSharpness);
+            finalProbability = 1;
         }
 
         // Determine if collision happens - the shape directions of the two cells cannot be parallel:
@@ -869,7 +738,7 @@ void CellAgent::runStochasticCollisionLogic() {
             };
             if (componentOfActingFlowOntoSample < 0) {
                 // Calculate change in actin flow:
-                double reductionInFlow{inhibitionStrength * flowMagnitude * std::abs(componentOfActingFlowOntoSample)};
+                double reductionInFlow{collisionFlowReductionRate * flowMagnitude * std::abs(componentOfActingFlowOntoSample)};
                 double dxActinFlow{std::cos(overallActingEffectDirection) * reductionInFlow};
                 double dyActinFlow{std::sin(overallActingEffectDirection) * reductionInFlow};
 
@@ -901,7 +770,7 @@ void CellAgent::runStochasticCollisionLogic() {
             };
             if (componentOfLocalFlowOntoSample <= 0) {
                 // Calculate change in actin flow:
-                double reductionInFlow{inhibitionStrength * localFlowMagnitude * std::abs(componentOfLocalFlowOntoSample)};
+                double reductionInFlow{collisionFlowReductionRate * localFlowMagnitude * std::abs(componentOfLocalFlowOntoSample)};
                 double dxActinFlow{std::cos(overallLocalEffectDirection) * reductionInFlow};
                 double dyActinFlow{std::sin(overallLocalEffectDirection) * reductionInFlow};
 
@@ -931,8 +800,8 @@ void CellAgent::runStochasticCollisionLogic() {
             double actingExtensionRepulsionY{
                 std::sin(actingExtensionEffectDirection)*actingExtensionScaling
             };
-            polarityChangeCilX += (actingExtensionRepulsionX + actingBodyRepulsionX) * contactAdvectionRate;
-            polarityChangeCilY += (actingExtensionRepulsionY + actingBodyRepulsionY) * contactAdvectionRate;
+            polarityChangeCilX += (actingExtensionRepulsionX + actingBodyRepulsionX);
+            polarityChangeCilY += (actingExtensionRepulsionY + actingBodyRepulsionY);
 
             // Simulate effect of CIL on RhoA redistribution for local cell:
             double localExtensionScaling{std::min((cellBodyRadius*majorAxisScaling)/collisionLocalDistance, 100.0)};
@@ -944,8 +813,8 @@ void CellAgent::runStochasticCollisionLogic() {
             double localExtensionRepulsionY{
                 std::sin(localExtensionEffectDirection)*localExtensionScaling
             };
-            double localCILx{(localExtensionRepulsionX + localBodyRepulsionX) * contactAdvectionRate};
-            double localCILy{(localExtensionRepulsionY + localBodyRepulsionY) * contactAdvectionRate};
+            double localCILx{(localExtensionRepulsionX + localBodyRepulsionX)};
+            double localCILy{(localExtensionRepulsionY + localBodyRepulsionY)};
             localAgents[cellIndex]->setCILPolarityChange(localCILx, localCILy);
         }
     }
@@ -988,8 +857,11 @@ void CellAgent::runDeterministicCollisionLogic() {
             std::pow(actingToLocalY, 2)
         )};
 
+        bool withinRadius{displacementActingToLocal < (2 * cellBodyRadius)};
+        bool withinFront{std::abs(angleMod(angleActingToLocal-flowDirection)) < M_PI_2};
+
         // Collide if within radius:
-        if (displacementActingToLocal < (2 * cellBodyRadius)) {
+        if (withinRadius and withinFront) {
             // Exert reduction in actin flow:
             double angleOfRestitution{angleActingToLocal - M_PI};
             double componentOfActingFlowOntoCollision{
@@ -998,10 +870,11 @@ void CellAgent::runDeterministicCollisionLogic() {
             if (componentOfActingFlowOntoCollision < 0) {
                 // Calculate change in actin flow:
                 double reductionInFlow{
-                    inhibitionStrength * flowMagnitude * std::abs(componentOfActingFlowOntoCollision)
+                    dt * collisionFlowReductionRate * flowMagnitude * std::abs(componentOfActingFlowOntoCollision)
                 };
-                double dxActinFlow{std::cos(angleOfRestitution) * reductionInFlow};
-                double dyActinFlow{std::sin(angleOfRestitution) * reductionInFlow};
+                double cappedReductionInFlow{std::min(reductionInFlow, flowMagnitude * std::abs(componentOfActingFlowOntoCollision))};
+                double dxActinFlow{std::cos(angleOfRestitution) * cappedReductionInFlow};
+                double dyActinFlow{std::sin(angleOfRestitution) * cappedReductionInFlow};
 
                 // Update actin flow:
                 double xFlowComponent{std::cos(flowDirection)*flowMagnitude};
@@ -1018,8 +891,13 @@ void CellAgent::runDeterministicCollisionLogic() {
             // double bodyScaling{(2*cellBodyRadius) - displacementActingToLocal};
             double actingBodyRepulsionX{std::cos(angleOfRestitution)};
             double actingBodyRepulsionY{std::sin(angleOfRestitution)};
-            polarityChangeCilX += actingBodyRepulsionX * contactAdvectionRate;
-            polarityChangeCilY += actingBodyRepulsionY * contactAdvectionRate;
+            polarityChangeCilX += actingBodyRepulsionX;
+            polarityChangeCilY += actingBodyRepulsionY;
+
+            // Simulate effect of CIL on RhoA redistribution for local cell:
+            double localBodyRepulsionX{std::cos(angleActingToLocal)};
+            double localBodyRepulsionY{std::sin(angleActingToLocal)};
+            localAgent->setCILPolarityChange(localBodyRepulsionX, localBodyRepulsionY);
         }
 
     }
@@ -1032,8 +910,9 @@ std::vector<double> CellAgent::sampleAttachmentPoint() {
     double actingCellY{getY()};
 
     // Sampling from random radius in cell area:
-    double divergence{(lowDiscrepancySample * M_PI) - M_PI_2};
-    double samplePointDirection{flowDirection + divergence};
+    // double divergence{(lowDiscrepancySample * M_PI) - M_PI_2};
+    // double samplePointDirection{flowDirection + divergence};
+    double samplePointDirection{angleUniformDistribution(generatorMatrixRadiusSampling)};
 
     // Getting point in frame:
     double actingFrameX{std::cos(samplePointDirection) * cellBodyRadius};
@@ -1304,21 +1183,6 @@ void CellAgent::addToActinHistory(double actinFlowX, double actinFlowY) {
     actinHistory.emplace_back(actinFlow);
 };
 
-double CellAgent::findCellMovementMagnitude() {
-    // Average over history:
-    double xFlowSum{0}, yFlowSum{0};
-    for (const auto & actinFlow : actinHistory) {
-        xFlowSum += actinFlow[0];
-        yFlowSum += actinFlow[1];
-    }
-
-    // Scale flow to movement:
-    xFlowSum *= flowScaling;
-    yFlowSum *= flowScaling;
-
-    // Take extent:
-    return std::sqrt(std::pow(xFlowSum, 2) + std::pow(yFlowSum, 2));
-}
 
 void CellAgent::addToMovementHistory(double movementX, double movementY) {
     xMovementHistory.push_back(movementX);

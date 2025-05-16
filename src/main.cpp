@@ -68,66 +68,42 @@ int main(int argc, char** argv) {
             "Whether or not cells undergo interaction with the matrx."
         )
         // Cell movement parameters:
-        ("halfSatCellAngularConcentration", po::value<double>(&cellParams.halfSatCellAngularConcentration)->required(),
+        ("dt", po::value<double>(&cellParams.dt)->required(),
+            "Length of individual timesteps."
+        )
+        ("cueDiffusionRate", po::value<double>(&cellParams.cueDiffusionRate)->required(),
             "Degree of polarisation at which cell angular concentration reaches half its saturation value."
         )
-        ("maxCellAngularConcentration", po::value<double>(&cellParams.halfSatCellAngularConcentration)->required(),
-            "Maximum concentration of the angular distribution from which the cell draws its direction of motion."
+        ("cueKa", po::value<double>(&cellParams.cueKa)->required(),
+            "Degree of cue concentration at which actin flow induction reaches half maximum."
         )
-        ("halfSatMeanActinFlow", po::value<double>(&cellParams.halfSatMeanActinFlow)->required(),
-            "Degree of polarisation at which cell movement per timeframe reaches half its saturation value."
+        ("fluctuationAmplitude", po::value<double>(&cellParams.fluctuationAmplitude)->required(),
+            "Degree of polarisation at which cell angular concentration reaches half its saturation value."
         )
-        ("maxMeanActinFlow", po::value<double>(&cellParams.maxMeanActinFlow)->required(),
-            "Maximum mean actin flow per simulation step. Determines distribution from which cell step size is drawn."
-        )
-        ("flowScaling", po::value<double>(&cellParams.flowScaling)->required(),
-            "The number by which actin flow is multiplied to get actual distance travelled by the cell."
-        )
-        // Polarisation system parameters:
-        ("polarityDiffusionRate", po::value<double>(&cellParams.polarityDiffusionRate)->required(),
-            "The number by which actin flow is multiplied to get effective polarisation update."
+        ("fluctuationTimescale", po::value<double>(&cellParams.fluctuationTimescale)->required(),
+            "Degree of polarisation at which cell angular concentration reaches half its saturation value."
         )
         ("actinAdvectionRate", po::value<double>(&cellParams.actinAdvectionRate)->required(),
-            "The number by which actin flow is multiplied to get effective polarisation update."
+            "Degree of polarisation at which cell angular concentration reaches half its saturation value."
         )
-        ("contactAdvectionRate", po::value<double>(&cellParams.contactAdvectionRate)->required(),
-            "The number by which actin flow is multiplied to get effective polarisation update."
+        ("matrixAdvectionRate", po::value<double>(&cellParams.matrixAdvectionRate)->required(),
+            "Degree of polarisation at which cell angular concentration reaches half its saturation value."
         )
-        // Matrix sensation parameters:
-        ("halfSatMatrixAngularConcentration", po::value<double>(&cellParams.halfSatMatrixAngularConcentration)->required(),
-            "The matrix density at which angular concentration conferred by the matrix reaches half its maximum value."
+        ("collisionAdvectionRate", po::value<double>(&cellParams.collisionAdvectionRate)->required(),
+            "Degree of polarisation at which cell angular concentration reaches half its saturation value."
         )
-        ("maxMatrixAngularConcentration", po::value<double>(&cellParams.maxMatrixAngularConcentration)->required(),
-            "The maximum angular concentration conferred by orientational cues in the matrix."
+        ("maximumSteadyStateActinFlow", po::value<double>(&cellParams.maximumSteadyStateActinFlow)->required(),
+            "Degree of polarisation at which cell angular concentration reaches half its saturation value."
         )
         // Collision parameters:
         ("cellBodyRadius", po::value<double>(&cellParams.cellBodyRadius)->required(),
             "Radius of the cell body for collision calculations."
         )
         ("aspectRatio", po::value<double>(&cellParams.aspectRatio)->required(),
+            "Degree of polarisation at which cell angular concentration reaches half its saturation value."
+        )
+        ("collisionFlowReductionRate", po::value<double>(&cellParams.collisionFlowReductionRate)->required(),
             "Rate at which actin flow in the direction of a collision is reduced by a collision."
-        )
-        ("boundarySharpness", po::value<double>(&cellParams.boundarySharpness)->required(),
-            "Rate at which actin flow in the direction of a collision is reduced by a collision."
-        )
-        ("inhibitionStrength", po::value<double>(&cellParams.inhibitionStrength)->required(),
-            "Rate at which actin flow in the direction of a collision is reduced by a collision."
-        )
-        // Binary simulation logic parameters:
-        ("actinMagnitudeIsFixed", po::value<bool>(&cellParams.actinMagnitudeIsFixed)->required(),
-            "Whether actin magnitude is randomly sampled from a Poisson distribution each timestep."
-        )
-        ("actinDirectionIsFixed", po::value<bool>(&cellParams.actinDirectionIsFixed)->required(),
-            "Whether actin flow direction is randomly sampled from a von Mises distribution each timestep."
-        )
-        ("thereIsExtensionRepulsion", po::value<bool>(&cellParams.thereIsExtensionRepulsion)->required(),
-            "Whether there is an angular force derived from the intersection of shape directions."
-        )
-        ("collisionsAreDeterministic", po::value<bool>(&cellParams.collisionsAreDeterministic)->required(),
-            "Whether collisons are calculated on the basis of sampling around the perimeter of the cell."
-        )
-        ("matrixAlignmentIsDeterministic", po::value<bool>(&cellParams.matrixAlignmentIsDeterministic)->required(),
-            "Whether to take the average of matrix and polarity direction, instead of just sampling one of them."
         )
     ;
 

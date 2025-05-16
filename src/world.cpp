@@ -149,39 +149,26 @@ std::shared_ptr<CellAgent> World::initialiseCell(int setCellID) {
 
     return std::make_shared<CellAgent>(
         // Defined behaviour parameters:
-        false, setCellSeed, setCellID,
+        setCellSeed, setCellID,
+        cellParameters.dt,
 
         // Cell movement parameters:
-        cellParameters.halfSatCellAngularConcentration,
-        cellParameters.maxCellAngularConcentration,
-        cellParameters.halfSatMeanActinFlow,
-        cellParameters.maxMeanActinFlow,
-        cellParameters.flowScaling,
-
-        // Polarisation system parameters:
-        cellParameters.polarityDiffusionRate,
+        cellParameters.cueDiffusionRate,
+        cellParameters.cueKa,
+        cellParameters.fluctuationAmplitude,
+        cellParameters.fluctuationTimescale,
         cellParameters.actinAdvectionRate,
-        cellParameters.contactAdvectionRate,
+        cellParameters.matrixAdvectionRate,
+        cellParameters.collisionAdvectionRate,
+        cellParameters.maximumSteadyStateActinFlow,
 
         // Matrix sensation parameters:
-        cellParameters.halfSatMatrixAngularConcentration,
-        cellParameters.maxMatrixAngularConcentration,
-
-        // Collision parameters:
         cellParameters.cellBodyRadius,
         cellParameters.aspectRatio,
-        cellParameters.boundarySharpness,
-        cellParameters.inhibitionStrength,
+        cellParameters.collisionFlowReductionRate,
 
         // Randomised initial state parameters:
-        startX, startY, startHeading,
-
-        // Binary simulation parameters:
-        cellParameters.actinMagnitudeIsFixed,
-        cellParameters.actinDirectionIsFixed,
-        cellParameters.thereIsExtensionRepulsion,
-        cellParameters.collisionsAreDeterministic,
-        cellParameters.matrixAlignmentIsDeterministic
+        startX, startY, startHeading
     );
 }
 
@@ -192,12 +179,13 @@ void World::runCellStep(std::shared_ptr<CellAgent> actingCell) {
     // // Setting cell percepts:
     // Calculating matrix percept:
     std::vector<double> attachmentPoint{actingCell->sampleAttachmentPoint()};
-    double cellPolarityDirection{actingCell->getPolarityDirection()};
-    const auto [matrixAngle, localDensity] = getPerceptAtAttachment(attachmentPoint, cellPolarityDirection);
+    double cellDirection{actingCell->getActinFlowDirection()};
+    const auto [deltaHeading, localDensity] = getPerceptAtAttachment(attachmentPoint, cellDirection);
     assert(localDensity < 1);
+
     // Setting percepts of local matrix:
     if (thereIsMatrixInteraction) {
-        actingCell->setDirectionalInfluence(matrixAngle);
+        actingCell->setDirectionalInfluence(deltaHeading);
         actingCell->setDirectionalIntensity(localDensity);
         actingCell->setLocalECMDensity(localDensity);
     }
@@ -246,7 +234,7 @@ void World::depositAtAttachment(
 }
 
 // Calculating percepts for cells:
-std::tuple<double, double> World::getPerceptAtAttachment(std::vector<double> attachmentPoint, double cellPolarity) {
+std::tuple<double, double> World::getPerceptAtAttachment(std::vector<double> attachmentPoint, double cellMovement) {
     // Getting relevant ECM index:
     const auto [iECM, jECM] = getECMIndexFromLocation({attachmentPoint[0], attachmentPoint[1]});
     const auto [iSafe, jSafe] = rollIndex(iECM, jECM);
@@ -257,7 +245,7 @@ std::tuple<double, double> World::getPerceptAtAttachment(std::vector<double> att
     assert(ecmDensity < 1);
 
     // Calculate change in heading of cell to ECM:
-    const double deltaHeading{calculateCellDeltaTowardsECM(ecmHeading, cellPolarity)};
+    const double deltaHeading{calculateCellDeltaTowardsECM(ecmHeading, cellMovement)};
 
     return {deltaHeading, ecmDensity};
 }

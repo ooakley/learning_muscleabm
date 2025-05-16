@@ -30,25 +30,18 @@ def main():
         --matrixTurnoverRate {parameter_dictionary['matrixTurnoverRate']} \
         --matrixAdditionRate {parameter_dictionary['matrixAdditionRate']} \
         --thereIsMatrixInteraction {parameter_dictionary['thereIsMatrixInteraction']} \
-        --halfSatCellAngularConcentration {parameter_dictionary['halfSatCellAngularConcentration']} \
-        --maxCellAngularConcentration {parameter_dictionary['maxCellAngularConcentration']} \
-        --halfSatMeanActinFlow {parameter_dictionary['halfSatMeanActinFlow']} \
-        --maxMeanActinFlow {parameter_dictionary['maxMeanActinFlow']} \
-        --flowScaling {parameter_dictionary['flowScaling']} \
-        --polarityDiffusionRate {parameter_dictionary['polarityDiffusionRate']} \
+        --dt {parameter_dictionary['dt']} \
+        --cueDiffusionRate {parameter_dictionary['cueDiffusionRate']} \
+        --cueKa {parameter_dictionary['cueKa']} \
+        --fluctuationAmplitude {parameter_dictionary['fluctuationAmplitude']} \
+        --fluctuationTimescale {parameter_dictionary['fluctuationTimescale']} \
         --actinAdvectionRate {parameter_dictionary['actinAdvectionRate']} \
-        --contactAdvectionRate {parameter_dictionary['contactAdvectionRate']} \
-        --halfSatMatrixAngularConcentration {parameter_dictionary['halfSatMatrixAngularConcentration']} \
-        --maxMatrixAngularConcentration {parameter_dictionary['maxMatrixAngularConcentration']} \
+        --matrixAdvectionRate {parameter_dictionary['matrixAdvectionRate']} \
+        --collisionAdvectionRate {parameter_dictionary['collisionAdvectionRate']} \
+        --maximumSteadyStateActinFlow {parameter_dictionary['maximumSteadyStateActinFlow']} \
         --cellBodyRadius {parameter_dictionary['cellBodyRadius']} \
         --aspectRatio {parameter_dictionary['aspectRatio']} \
-        --boundarySharpness {parameter_dictionary['boundarySharpness']} \
-        --inhibitionStrength {parameter_dictionary['inhibitionStrength']} \
-        --actinMagnitudeIsFixed {parameter_dictionary['actinMagnitudeIsFixed']} \
-        --actinDirectionIsFixed {parameter_dictionary['actinDirectionIsFixed']} \
-        --thereIsExtensionRepulsion {parameter_dictionary['thereIsExtensionRepulsion']} \
-        --collisionsAreDeterministic {parameter_dictionary['collisionsAreDeterministic']} \
-        --matrixAlignmentIsDeterministic {parameter_dictionary['matrixAlignmentIsDeterministic']} \
+        --collisionFlowReductionRate {parameter_dictionary['collisionFlowReductionRate']} \
         "
 
     os.system(run_command)

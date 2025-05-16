@@ -15,6 +15,50 @@ def _():
 
 
 @app.cell
+def _(np):
+    def cue_activity(position, velocity):
+        # Calculate steady state:
+        numerator = velocity * np.exp(-velocity * position)
+        denominator = 1 - np.exp(-velocity)
+        steady_state_concentration = numerator / denominator
+
+        # Calculate activity of this concentration:
+        activity = steady_state_concentration / (10 + steady_state_concentration)
+
+        return activity
+    return (cue_activity,)
+
+
+@app.cell
+def _(cue_activity, np):
+    diffusion = 1
+    length = 1
+    saturation = 3
+
+    # Calculating polarisation for varying levels of actin flow:
+    polarisations = []
+    for velocity in np.linspace(0, 100, 100):
+        front_activity = cue_activity(0, velocity)
+        back_activity = cue_activity(1, velocity)
+        polarisations.append(front_activity - back_activity)
+    return (
+        back_activity,
+        diffusion,
+        front_activity,
+        length,
+        polarisations,
+        saturation,
+        velocity,
+    )
+
+
+@app.cell
+def _(plt, polarisations):
+    plt.plot(polarisations)
+    return
+
+
+@app.cell
 def _(plt):
     plt.rcParams['axes.autolimit_mode'] = 'round_numbers'
     plt.rcParams['figure.dpi'] = 600
@@ -45,25 +89,138 @@ def _(trajectory_list):
 
 @app.cell
 def _(sorted_dataframe):
-    sorted_dataframe
-    return
-
-
-@app.cell
-def _(sorted_dataframe):
     sorted_dataframe["actin_mag"]
     return
 
 
 @app.cell
 def _(np, sorted_dataframe):
+    # Going through particles:
+    particle_speed_array = np.asarray(sorted_dataframe["actin_mag"]).reshape(3000, 1000)
+    particle_speeds = np.mean(particle_speed_array, axis=0)
+
+    # Going through particles:
+    particle_polarity_array = np.asarray(sorted_dataframe["polarity_extent"]).reshape(3000, 1000)
+    particle_polarities = np.mean(particle_polarity_array, axis=0)
+    return (
+        particle_polarities,
+        particle_polarity_array,
+        particle_speed_array,
+        particle_speeds,
+    )
+
+
+@app.cell
+def _(particle_speeds, plt):
+    plt.hist(particle_speeds);
+    plt.show()
+    return
+
+
+@app.cell
+def _(particle_polarities, plt):
+    plt.hist(particle_polarities);
+    plt.show()
+    return
+
+
+@app.cell
+def _(particle_polarities, particle_speeds, plt):
+    plt.scatter(particle_polarities, particle_speeds, s=10)
+    return
+
+
+@app.cell
+def _(np, sorted_dataframe):
+    # Get granular data:
     speed = np.asarray(sorted_dataframe["actin_mag"])
     acceleration = np.diff(speed)
     polarisation = np.asarray(sorted_dataframe["polarity_extent"])
 
     angle = np.asarray(sorted_dataframe["orientation"])
     angle_change = np.abs(np.diff(angle))
-    return acceleration, angle, angle_change, polarisation, speed
+
+    # Get ventiles as bin edges:
+    ventiles_array = np.linspace(0, 1, 20 + 1)
+    return (
+        acceleration,
+        angle,
+        angle_change,
+        polarisation,
+        speed,
+        ventiles_array,
+    )
+
+
+@app.cell
+def _(np, plt, speed, ventiles_array):
+    # Get bin edges:
+    speed_bin_edges = np.quantile(speed, ventiles_array)
+
+    # Set up plot, and plot data:
+    fig_speed_histogram, ax_speed_histogram = plt.subplots(figsize=(4, 2), layout='constrained')
+    ax_speed_histogram.hist(speed, bins=speed_bin_edges, density=True, histtype='step', **{'linewidth': 2, 'edgecolor': 'r'});
+
+    # Clean up presentation:
+    ax_speed_histogram.spines[['right', 'top']].set_visible(False)
+    ax_speed_histogram.spines[['left', 'bottom']].set_linewidth(2)
+    ax_speed_histogram.tick_params(width=2, labelsize=8)
+    ax_speed_histogram.set_xlim(speed_bin_edges[0], speed_bin_edges[-1])
+
+    plt.show()
+    return ax_speed_histogram, fig_speed_histogram, speed_bin_edges
+
+
+@app.cell
+def _(acceleration, np, plt, ventiles_array):
+    # Get bin edges:
+    acceleration_bin_edges = np.quantile(acceleration, ventiles_array)
+
+    # Set up plot, and plot data:
+    fig_acceleration_histogram, ax_acceleration_histogram = plt.subplots(figsize=(4, 2), layout='constrained')
+    ax_acceleration_histogram.hist(
+        acceleration, bins=acceleration_bin_edges, density=True, histtype='step',
+        **{'linewidth': 2, 'edgecolor': 'r'}
+    );
+
+    # Clean up presentation:
+    ax_acceleration_histogram.spines[['right', 'top']].set_visible(False)
+    ax_acceleration_histogram.spines[['left', 'bottom']].set_linewidth(2)
+    ax_acceleration_histogram.tick_params(width=2, labelsize=8)
+    ax_acceleration_histogram.set_xlim(acceleration_bin_edges[0], acceleration_bin_edges[-1])
+
+    plt.show()
+    return (
+        acceleration_bin_edges,
+        ax_acceleration_histogram,
+        fig_acceleration_histogram,
+    )
+
+
+@app.cell
+def _(np, plt, polarisation, ventiles_array):
+    # Get bin edges:
+    polarisation_bin_edges = np.quantile(polarisation, ventiles_array)
+
+    # Set up plot, and plot data:
+    fig_polarisation_histogram, ax_polarisation_histogram = plt.subplots(figsize=(4, 2), layout='constrained')
+    ax_polarisation_histogram.hist(
+        polarisation, bins=polarisation_bin_edges, density=True, histtype='step',
+        **{'linewidth': 2, 'edgecolor': 'r'}
+    );
+
+    # Clean up presentation:
+    ax_polarisation_histogram.spines[['right', 'top']].set_visible(False)
+    ax_polarisation_histogram.spines[['left', 'bottom']].set_linewidth(2)
+    ax_polarisation_histogram.tick_params(width=2, labelsize=8)
+    ax_polarisation_histogram.set_xlim(polarisation_bin_edges[0], polarisation_bin_edges[-1])
+
+    plt.show()
+    return (
+        ax_polarisation_histogram,
+        fig_polarisation_histogram,
+        polarisation_bin_edges,
+    )
 
 
 @app.cell
@@ -75,7 +232,7 @@ def _(np):
 
 @app.cell
 def _(np):
-    def get_bin_data(x, y, bin_number = 40):
+    def get_bin_data(x, y, bin_number = 20):
         # Get binned data across x values:
         bin_count, bin_edges = np.histogram(x, bins=bin_number, density=False)
         y_sum, _ = np.histogram(x, bins=bin_number, weights=y, density=False)
@@ -90,7 +247,7 @@ def _(np):
 
 @app.cell
 def _(np):
-    def get_quantile_data(x, y, bin_number=40):
+    def get_quantile_data(x, y, bin_number=20):
         # Get quantiles as bin edges:
         quantiles = np.linspace(0, 1, bin_number + 1)
         bin_edges = np.quantile(x, quantiles)
@@ -220,7 +377,7 @@ def _(acceleration, get_quantile_data, plt, polarisation, polarisation_bins):
 
     for l, pol_acc in enumerate(acc_by_polarisation):
         ax4.hlines(pol_acc, polarisation_bins[l], polarisation_bins[l+1], color='k')
-        ax4.scatter((polarisation_bins[l] + polarisation_bins[l+1]) / 2, pol_acc, c='k', s=1)
+        ax4.scatter((polarisation_bins[l] + polarisation_bins[l+1]) / 2, pol_acc, c='k', s=10)
 
     # Set plot appearance variables:
     ax4.spines[['right', 'top']].set_visible(False)

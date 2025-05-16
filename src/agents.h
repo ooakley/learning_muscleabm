@@ -12,39 +12,26 @@ public:
     // Constructor and intialisation:
     CellAgent(
         // Defined behaviour parameters:
-        bool setMatrixInteraction, unsigned int setCellSeed, int setCellID,
+        unsigned int setCellSeed, int setCellID,
+        double setdt,
 
         // Movement parameters:
-        double setHalfSatCellAngularConcentration,
-        double setMaxCellAngularConcentration,
-        double setHalfSatMeanActinFlow,
-        double setMaxMeanActinFlow,
-        double setFlowScaling,
-        
-        // Polarisation system parameters:
-        double setPolarityDiffusionRate,
+        double setCueDiffusionRate,
+        double setCueKa,
+        double setFluctuationAmplitude,
+        double setFluctuationTimescale,
         double setActinAdvectionRate,
-        double setContactAdvectionRate,
-
-        // Matrix sensation parameters:
-        double setHalfSatMatrixAngularConcentration,
-        double setMaxMatrixAngularConcentration,
+        double setMatrixAdvectionRate,
+        double setCollisionAdvectionRate,
+        double setMaximumSteadyStateActinFlow,
 
         // Collision parameters:
         double setCellBodyRadius,
         double setAspectRatio,
-        double setSharpness,
-        double setInhibitionStrength,
+        double setCollisionFlowReductionRate,
 
         // Randomised initial state parameters:
-        double startX, double startY, double startHeading,
-
-        // Binary simulation parameters:
-        bool setActinMagnitudeIsFixed,
-        bool setActinDirectionIsFixed,
-        bool setThereIsExtensionRepulsion,
-        bool setCollisionsAreDeterministic,
-        bool setMatrixAlignmentIsDeterministic
+        double startX, double startY, double startHeading
     );
 
     // Actual simulations that the cell runs:
@@ -93,13 +80,14 @@ private:
     // Randomness and seeding:
     unsigned int cellSeed;
     int cellID;
+    double dt;
     std::mt19937 seedGenerator;
     std::uniform_int_distribution<unsigned int> seedDistribution;
 
     // Whether to simulate matrix interactions:
     bool thereIsMatrixInteraction;
 
-    // Dynamic cell state data:
+    // State variables:
     double x;
     double y;
     std::list<std::vector<double>> actinHistory;
@@ -115,48 +103,35 @@ private:
     double flowMagnitude;
     double scaledFlowMagnitude;
     double shapeDirection;
-    // double eccentricityConstant;
 
     // Movement parameters:
-    double halfSatCellAngularConcentration;
-    double maxCellAngularConcentration;
-    double halfSatMeanActinFlow;
-    double maxMeanActinFlow;
-    double flowScaling;
-
-    // Polarisation system parameters:
-    double polarityDiffusionRate;
+    double cueDiffusionRate;
+    double cueKa;
+    double fluctuationAmplitude;
+    double fluctuationTimescale;
     double actinAdvectionRate;
-    double contactAdvectionRate;
+    double matrixAdvectionRate;
+    double collisionAdvectionRate;
+    double maximumSteadyStateActinFlow;
 
-    // Contact inhibition parameters:
-    double lowDiscrepancySample;
+    // Collision parameters:
     double cellBodyRadius;
     double cellAspectRatio;
     double majorAxisScaling;
     double minorAxisScaling;
-    double contactDistributionSharpness;
-    double inhibitionStrength;
+    double collisionFlowReductionRate;
+
+    // Contact inhibition state variables:
+    double lowDiscrepancySample;
     double polarityChangeCilX;
     double polarityChangeCilY;
-
-    // Matrix sensation properties:
-    double halfSatMatrixAngularConcentration;
-    double maxMatrixAngularConcentration;
-
-    // Binary simulation parameters:
-    bool actinMagnitudeIsFixed;
-    bool actinDirectionIsFixed;
-    bool thereIsExtensionRepulsion;
-    bool collisionsAreDeterministic;
-    bool matrixAlignmentIsDeterministic;
 
     // Properties calculated each timestep:
     double movementDirection;
     double directionalShift; // -pi <= theta < pi
     double sampledAngle;
 
-    // Percepts:
+    // Matrix percept state variables:
     double directionalInfluence; // -pi <= theta < pi
     double directionalIntensity; // 0 <= I < 1
     double localECMDensity; // 0 <= D < 1
@@ -221,7 +196,6 @@ private:
     void addToActinHistory(double actinFlowX, double actinFlowY);
     void addToPositionHistory(double positionX, double positionY);
     void ageActinHistory();
-    double findCellMovementMagnitude();
 
     void addToMovementHistory(double movementX, double movementY);
     double findDirectionalConcentration();
