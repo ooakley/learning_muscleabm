@@ -5,7 +5,7 @@ import json
 from scipy.stats import qmc
 
 # Defines the parameter ranges, with [start, stop]:
-NUM_SAMPLES_EXPONENT = 11
+NUM_SAMPLES_EXPONENT = 12
 SIMULATION_INDEX = 0
 
 CONSTANT_PARAMETERS = {
@@ -72,7 +72,7 @@ class JSONOutputManager:
 
 def main():
     # Generating random number generator for shuffling of variables:
-    sobol_sampler = qmc.Sobol(d=11, scramble=True)
+    sobol_sampler = qmc.Sobol(d=len(GRIDSEARCH_PARAMETERS), scramble=True, rng=0)
     sample_matrix = sobol_sampler.random_base2(m=NUM_SAMPLES_EXPONENT)
 
     # Ensuring output folder exists:
