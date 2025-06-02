@@ -1,8 +1,8 @@
 {
     "jobArrayID": 0,
     "superIterationCount": 1,
-    "timestepsToRun": 4000,
-    "numberOfCells": 150,
+    "timestepsToRun": 2000,
+    "numberOfCells": 300,
     "worldSize": 2048,
     "gridSize": 64,
     "dt": 1,
@@ -11,13 +11,13 @@
     "matrixAdditionRate": 0.05,
     "cueDiffusionRate": 0.1,
     "cueKa": 0.5,
-    "fluctuationAmplitude": 0.025,
+    "fluctuationAmplitude": 0.15,
     "fluctuationTimescale": 2,
-    "actinAdvectionRate": 0.5,
-    "matrixAdvectionRate": 0.25,
-    "collisionAdvectionRate": 0.0,
-    "maximumSteadyStateActinFlow": 1.5,
+    "actinAdvectionRate": 0.2,
+    "matrixAdvectionRate": 0.0,
+    "collisionAdvectionRate": 0.15,
+    "maximumSteadyStateActinFlow": 4.0,
     "cellBodyRadius": 75,
     "aspectRatio": 1,
-    "collisionFlowReductionRate": 0.5
+    "collisionFlowReductionRate": 0.025
 }

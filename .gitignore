@@ -3,6 +3,7 @@
 .DS_Store
 *.npy
 *gitignore.json
+*.mp4
 
 # Compiled Object files
 *.slo
@@ -46,3 +47,4 @@ fileOutputs*
 gridsearch.txt
 .vscode/*
 .cache/*
+outputs/*

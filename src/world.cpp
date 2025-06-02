@@ -69,7 +69,7 @@ void World::writePositionsToCSV(std::ofstream& csvFile) {
         csvFile << simulationTime << ",";
         csvFile << cellAgentVector[i]->getID() << ",";
         csvFile << cellAgentVector[i]->getX() << ",";
-        csvFile << cellAgentVector[i]->getY() << ","; 
+        csvFile << cellAgentVector[i]->getY() << ",";
         csvFile << cellAgentVector[i]->getShapeDirection() << ",";
         csvFile << cellAgentVector[i]->getPolarityDirection() << ",";
         csvFile << cellAgentVector[i]->getPolarityMagnitude() << ",";
@@ -77,6 +77,9 @@ void World::writePositionsToCSV(std::ofstream& csvFile) {
         csvFile << cellAgentVector[i]->getDirectionalIntensity() << ",";
         csvFile << cellAgentVector[i]->getActinFlowDirection() << ",";
         csvFile << cellAgentVector[i]->getActinFlowMagnitude() << ",";
+        csvFile << cellAgentVector[i]->getCollisionNumber() << ",";
+        csvFile << cellAgentVector[i]->getTotalCILEffectX() << ",";
+        csvFile << cellAgentVector[i]->getTotalCILEffectY() << ",";
         csvFile << cellAgentVector[i]->getMovementDirection() << ",";
         csvFile << cellAgentVector[i]->getDirectionalShift() << ",";
         csvFile << cellAgentVector[i]->getSampledAngle() << "\n";
