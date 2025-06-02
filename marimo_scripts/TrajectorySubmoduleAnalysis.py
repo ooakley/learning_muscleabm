@@ -68,7 +68,7 @@ def _(plt):
 
 @app.cell
 def _(analysis_utils):
-    TIMESTEPS = 3000
+    TIMESTEPS = 1000
     MESH_NUMBER = 64
     final_index = TIMESTEPS - 1
     matrix_list, trajectory_list = analysis_utils.get_model_outputs(0, timesteps=TIMESTEPS, mesh_number=MESH_NUMBER, superiterations=1)  
@@ -89,18 +89,24 @@ def _(trajectory_list):
 
 @app.cell
 def _(sorted_dataframe):
-    sorted_dataframe["actin_mag"]
+    sorted_dataframe['particle'].max()
+    return
+
+
+@app.cell
+def _(sorted_dataframe):
+    sorted_dataframe['frame'].max()
     return
 
 
 @app.cell
 def _(np, sorted_dataframe):
     # Going through particles:
-    particle_speed_array = np.asarray(sorted_dataframe["actin_mag"]).reshape(3000, 1000)
+    particle_speed_array = np.asarray(sorted_dataframe["actin_mag"]).reshape(100, 1000)
     particle_speeds = np.mean(particle_speed_array, axis=0)
 
     # Going through particles:
-    particle_polarity_array = np.asarray(sorted_dataframe["polarity_extent"]).reshape(3000, 1000)
+    particle_polarity_array = np.asarray(sorted_dataframe["polarity_extent"]).reshape(100, 1000)
     particle_polarities = np.mean(particle_polarity_array, axis=0)
     return (
         particle_polarities,
@@ -137,8 +143,11 @@ def _(np, sorted_dataframe):
     acceleration = np.diff(speed)
     polarisation = np.asarray(sorted_dataframe["polarity_extent"])
 
-    angle = np.asarray(sorted_dataframe["orientation"])
-    angle_change = np.abs(np.diff(angle))
+    angle = np.asarray(sorted_dataframe["actin_flow"]).reshape(100, 1000)
+    angle_change = np.diff(angle, axis=1)
+    angle_change[angle_change > np.pi] -= 2*np.pi
+    angle_change[angle_change < -np.pi] += 2*np.pi
+    angle_change = np.abs(angle_change)
 
     # Get ventiles as bin edges:
     ventiles_array = np.linspace(0, 1, 20 + 1)
@@ -150,6 +159,38 @@ def _(np, sorted_dataframe):
         speed,
         ventiles_array,
     )
+
+
+@app.cell
+def _(angle_change):
+    angle_change
+    return
+
+
+@app.cell
+def _(sorted_dataframe):
+    sorted_dataframe
+    return
+
+
+@app.cell
+def _(angle_change, plt):
+    plt.hist(angle_change.flatten(), bins=200);
+    plt.show()
+    return
+
+
+@app.cell
+def _(angle_change, np):
+    np.mean(angle_change)
+    return
+
+
+@app.cell
+def _(angle_change, plt):
+    plt.hist(angle_change.flatten());
+    plt.show()
+    return
 
 
 @app.cell
@@ -276,7 +317,7 @@ def _(acceleration, get_quantile_data, plt, speed):
     # Set plot appearance variables:
     ax1.spines[['right', 'top']].set_visible(False)
 
-    xlims = (0, 2.5)
+    xlims = (0, 5)
     ax1.hlines(0, *xlims, linestyles='--', color='k')
     ax1.set_xlim(xlims)
 
@@ -349,7 +390,7 @@ def _(angle_change, get_quantile_data, plt, speed, speed_bins):
     # Set plot appearance variables:
     ax3.spines[['right', 'top']].set_visible(False)
 
-    xlims_fig3 = (0, 2.5)
+    xlims_fig3 = (0, 5)
     ax3.hlines(0, *xlims_fig3, linestyles='--', color='k')
     ax3.set_xlim(xlims_fig3)
     ax3.set_ylim(0, None)

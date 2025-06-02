@@ -60,6 +60,9 @@ public:
     double getDirectionalIntensity() const;
     double getDirectionalShift() const;
     double getSampledAngle() const;
+    int getCollisionNumber() const;
+    double getTotalCILEffectX() const;
+    double getTotalCILEffectY() const;
 
     // Setters:
     // Setters for simulation (moving cells around etc.):
@@ -103,6 +106,11 @@ private:
     double flowMagnitude;
     double scaledFlowMagnitude;
     double shapeDirection;
+
+    // History variables for analysis:
+    int collisionsThisTimepoint;
+    double finalCILEffectX;
+    double finalCILEffectY;
 
     // Movement parameters:
     double cueDiffusionRate;
@@ -176,7 +184,9 @@ private:
     double determineActinFlow();
     void runTrajectoryDependentCollisionLogic();
     void runStochasticCollisionLogic();
+    void runCircularStochasticCollisionLogic();
     void runDeterministicCollisionLogic();
+    void collideWithCell(CellAgent localCell);
     bool isPositionInStadium(
         double samplePointX, double samplePointY,
         double startX, double startY,
