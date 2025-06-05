@@ -24,8 +24,8 @@ def _():
 def _():
     # Constant display variables:
     MESH_NUMBER = 64
-    CELL_NUMBER = 300
-    TIMESTEPS = 2000
+    CELL_NUMBER = 61
+    TIMESTEPS = 1440
     TIMESTEP_WIDTH = 100
     WORLD_SIZE = 2048
     DATA_DIR_PATH = "./fileOutputs/"
@@ -300,7 +300,7 @@ def _(TIMESTEPS, ecm_matrix, plot_superiteration, plt, trajectory_dataframe):
     _fig, _ax = plt.subplots(figsize=(7, 7))
     plot_superiteration(
         trajectory_dataframe, ecm_matrix, TIMESTEPS-1, _ax, 75,
-        plot_matrix=False, plot_trajectories=True, plot_ellipses=True
+        plot_matrix=True, plot_trajectories=True, plot_ellipses=False
     )
     plt.show()
     return
@@ -381,21 +381,21 @@ def _(
     plt,
     trajectory_dataframe,
 ):
-    size = 750, 750
-    fps = 10
+    size = 500, 500
+    fps = 30
     out = cv2.VideoWriter(
         './basic_video.mp4', cv2.VideoWriter_fourcc(*'avc1'),
         fps, (size[1], size[0]), True
     )
 
-    for timeframe in list(range(TIMESTEPS)):
+    for timeframe in list(range(TIMESTEPS))[::2]:
         if (timeframe) % 200 == 0:
             print(timeframe)
 
-        _fig, _ax = plt.subplots(figsize=(7.5, 7.5), layout='constrained')
+        _fig, _ax = plt.subplots(figsize=(5, 5), layout='constrained')
         plot_superiteration(
             trajectory_dataframe, ecm_matrix, timeframe, _ax, 75,
-            plot_matrix=False, plot_trajectories=False
+            plot_matrix=False, plot_trajectories=False, plot_ellipses=True
         )
 
         # Export to array:
@@ -409,6 +409,12 @@ def _(
 
     out.release()
     return array_plot, bgr_data, fps, out, size, timeframe
+
+
+@app.cell
+def _(out):
+    out.release()
+    return
 
 
 @app.cell
