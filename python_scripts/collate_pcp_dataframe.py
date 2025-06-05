@@ -7,8 +7,12 @@ GRIDSEARCH_PARAMETERS = {
     "cueKa": [0.25, 1.25],
     "fluctuationAmplitude": [0.01, 0.2],
     "fluctuationTimescale": [1.5, 20],
-    "actinAdvectionRate": [0.1, 2],
+    "actinAdvectionRate": [0.01, 1],
     "maximumSteadyStateActinFlow": [0.5, 5],
+    # Collisions:
+    "collisionAdvectionRate": [0.01, 1],
+    "collisionFlowReductionRate": [0.01, 1],
+    "numberOfCells": [50, 350],
 }
 
 
