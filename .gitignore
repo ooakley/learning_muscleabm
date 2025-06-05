@@ -4,6 +4,7 @@
 *.npy
 *gitignore.json
 *.mp4
+gridsearch_data/
 
 # Compiled Object files
 *.slo
