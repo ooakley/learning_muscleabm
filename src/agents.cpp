@@ -209,8 +209,8 @@ void CellAgent::takeRandomStep() {
 
     // Collide with adjacent cells:
     collisionsThisTimepoint = 0;
-    // runDeterministicCollisionLogic();
-    runCircularStochasticCollisionLogic();
+    runDeterministicCollisionLogic();
+    // runCircularStochasticCollisionLogic();
     finalCILEffectX = polarityChangeCilX;
     finalCILEffectY = polarityChangeCilY;
 
@@ -302,8 +302,8 @@ void CellAgent::takeRandomStep() {
     // Roll position if out of bounds:
     while (x < 0) {x += 2048;}
     while (y < 0) {y += 2048;}
-    x = std::fmodf(x, 2048);
-    y = std::fmodf(y, 2048);
+    x = std::fmod(x, 2048);
+    y = std::fmod(y, 2048);
 
     // Add to cell history:
     addToPositionHistory(x, y);

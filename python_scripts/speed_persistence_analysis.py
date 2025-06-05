@@ -1,11 +1,10 @@
 """Perform only basic order parameter calculations."""
 import argparse
 import os
+import json
 import numpy as np
 import pandas as pd
 
-TIMESTEPS = 1000
-CELL_NUMBER = 100
 SIMULATION_OUTPUTS_FOLDER = "./fileOutputs/"
 SUPERITERATION_NUMBER = 10
 
@@ -15,6 +14,8 @@ OUTPUT_COLUMN_NAMES = [
     "orientation", "polarity_extent",
     "percept_direction", "percept_intensity",
     "actin_flow", "actin_mag",
+    "collision_number",
+    "cil_x", "cil_y",
     "movement_direction",
     "turning_angle", "sampled_angle"
 ]
@@ -34,6 +35,17 @@ def main():
 
     # Find specified simulation output files:
     subdirectory_path = os.path.join(SIMULATION_OUTPUTS_FOLDER, str(args.folder_id))
+
+    # Get arguments to simulation:
+    json_filepath = os.path.join(subdirectory_path, f"{args.folder_id}_arguments.json")
+    with open(json_filepath) as json_file:
+        simulation_arguments = json.load(json_file)
+
+    # Define variables needed for matrix reshaping later on:
+    timesteps = simulation_arguments["timestepsToRun"]
+    cell_number = simulation_arguments["numberOfCells"]
+
+    # Loop through subiterations:
     actin_magnitudes = []
     actin_directions = []
     order_parameters = []
@@ -52,8 +64,8 @@ def main():
         # Get speed and angle data:
         actin_magnitude = np.asarray(sorted_dataframe["actin_mag"])
         actin_direction = np.asarray(sorted_dataframe["actin_flow"])
-        actin_magnitude = np.reshape(actin_magnitude, (CELL_NUMBER, TIMESTEPS))
-        actin_direction = np.reshape(actin_direction, (CELL_NUMBER, TIMESTEPS))
+        actin_magnitude = np.reshape(actin_magnitude, (cell_number, timesteps))
+        actin_direction = np.reshape(actin_direction, (cell_number, timesteps))
 
         # Get x and y components across cell populations for each timestep:
         x_components = np.cos(actin_direction) * actin_magnitude
@@ -62,7 +74,7 @@ def main():
         # Sum components:
         summed_x = np.mean(x_components, axis=0)
         summed_y = np.mean(y_components, axis=0)
-        mean_magnitude = np.mean(actin_magnitude, axis=0)
+        mean_magnitude = np.mean(actin_magnitude, axis=0) 
 
         # Get order parameter:
         order_parameter_timeseries = np.sqrt(summed_x**2 + summed_y**2) / mean_magnitude
