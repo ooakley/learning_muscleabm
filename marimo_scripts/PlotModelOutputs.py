@@ -24,7 +24,7 @@ def _():
 def _():
     # Constant display variables:
     MESH_NUMBER = 64
-    CELL_NUMBER = 61
+    CELL_NUMBER = 155
     TIMESTEPS = 1440
     TIMESTEP_WIDTH = 100
     WORLD_SIZE = 2048
@@ -134,13 +134,15 @@ def _(
             linewidth=1
             for i, trajectory in unstacked_dataframe.iterrows():
                 identity = 1
-    
-                rollover_x = np.abs(np.diff(np.array(trajectory['x'])[::4])) > (WORLD_SIZE/2)
-                rollover_y = np.abs(np.diff(np.array(trajectory['y'])[::4])) > (WORLD_SIZE/2)
+        
+                rollover_x = \
+                    np.abs(np.diff(np.array(trajectory['x'])[::4])) > (WORLD_SIZE/2)
+                rollover_y = \
+                    np.abs(np.diff(np.array(trajectory['y'])[::4])) > (WORLD_SIZE/2)
                 rollover_mask = rollover_x | rollover_y
-            
+        
                 color = colors_list[i % len(colors_list)]
-    
+        
                 if np.count_nonzero(rollover_mask) == 0:
                     ax.plot(np.array(trajectory['x'])[::4], np.array(trajectory['y'])[::4],
                         alpha=alpha, linewidth=linewidth, c=color
@@ -150,11 +152,17 @@ def _(
                     prev_index = 0
                     for separation_index in plot_separation_indices:
                         separation_index = separation_index[0]
-                        x_array = np.array(trajectory['x'])[::4][prev_index:separation_index]
-                        y_array = np.array(trajectory['y'])[::4][prev_index:separation_index]
-                        ax.plot(x_array, y_array, alpha=alpha, linewidth=linewidth, c=color)
+                        x_array = np.array(trajectory['x'])[::4]\
+                            [prev_index:separation_index]
+                        y_array = np.array(trajectory['y'])[::4]\
+                            [prev_index:separation_index]
+                        ax.plot(
+                            x_array, y_array, alpha=alpha,
+                            linewidth=linewidth,
+                            c=color
+                        )
                         prev_index = separation_index+1
-    
+        
                     # Plotting final segment:
                     x_array = np.array(trajectory['x'])[::4][prev_index:]
                     y_array = np.array(trajectory['y'])[::4][prev_index:]
@@ -300,7 +308,7 @@ def _(TIMESTEPS, ecm_matrix, plot_superiteration, plt, trajectory_dataframe):
     _fig, _ax = plt.subplots(figsize=(7, 7))
     plot_superiteration(
         trajectory_dataframe, ecm_matrix, TIMESTEPS-1, _ax, 75,
-        plot_matrix=True, plot_trajectories=True, plot_ellipses=False
+        plot_matrix=False, plot_trajectories=True, plot_ellipses=True
     )
     plt.show()
     return

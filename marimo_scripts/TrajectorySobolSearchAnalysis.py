@@ -251,24 +251,23 @@ def _(DIMENSIONALITY, gpytorch, np):
 
 
 @app.cell
-def _(normalised_parameters, speed_array, torch):
-    train_parameters = torch.tensor(normalised_parameters[::2], dtype=torch.float32)
-    train_speed = torch.tensor(speed_array[::2], dtype=torch.float32)
-    return train_parameters, train_speed
+def _(ExactGPModel, gpytorch, parameters, speed_array, torch):
+    train_parameters = torch.tensor(parameters[::2], dtype=torch.float32)
+    train_speed = torch.tensor(speed_array[::2], dtype=torch.float32)\
 
-
-@app.cell
-def _(normalised_parameters, speed_array, torch):
-    test_parameters = torch.tensor(normalised_parameters[1::2], dtype=torch.float32)
+    test_parameters = torch.tensor(parameters[1::2], dtype=torch.float32)
     test_speed = torch.tensor(speed_array[1::2], dtype=torch.float32)
-    return test_parameters, test_speed
 
-
-@app.cell
-def _(ExactGPModel, gpytorch, train_parameters, train_speed):
     likelihood = gpytorch.likelihoods.GaussianLikelihood()
     model = ExactGPModel(train_parameters, train_speed, likelihood)
-    return likelihood, model
+    return (
+        likelihood,
+        model,
+        test_parameters,
+        test_speed,
+        train_parameters,
+        train_speed,
+    )
 
 
 @app.cell
@@ -345,6 +344,50 @@ def _(np, plt, predicted_speed, test_speed):
     _ax.set_ylim(_left_lim, _right_lim)
     _ax.set_ylabel("Predicted Outputs - Speed")
     # ax.scatter(train_x, train_y, s=5)
+    return
+
+
+@app.cell
+def _():
+    # Predicting speed and persistence from other grid searches:
+    return
+
+
+@app.cell
+def _(np, os, torch):
+    deterministic_directory_path = "./gridsearch_data/deterministic_collisions"
+
+    # Get input parameters:
+    det_parameter_array = np.load(
+        os.path.join(deterministic_directory_path, "collated_inputs.npy")
+    )[:, :-3]
+
+    det_parameter_array = torch.tensor(det_parameter_array, dtype=torch.float32)
+    return det_parameter_array, deterministic_directory_path
+
+
+@app.cell
+def _(det_parameter_array, likelihood, model, torch):
+    model.eval()
+    likelihood.eval()
+
+    with torch.no_grad():
+        det_predicted_speed = likelihood(model(det_parameter_array))
+    return (det_predicted_speed,)
+
+
+@app.cell
+def _(det_predicted_speed):
+    det_predicted_mean_speed = det_predicted_speed.mean
+    return (det_predicted_mean_speed,)
+
+
+@app.cell
+def _(det_predicted_mean_speed, deterministic_directory_path, np, os):
+    np.save(
+        os.path.join(deterministic_directory_path, "pred_speeds.npy"),
+        det_predicted_mean_speed
+    )
     return
 
 
