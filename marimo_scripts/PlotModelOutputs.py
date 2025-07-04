@@ -24,9 +24,9 @@ def _():
 def _():
     # Constant display variables:
     MESH_NUMBER = 64
-    CELL_NUMBER = 155
-    TIMESTEPS = 1440
-    TIMESTEP_WIDTH = 100
+    CELL_NUMBER = 200
+    TIMESTEPS = 5000
+    TIMESTEP_WIDTH = 1440
     WORLD_SIZE = 2048
     DATA_DIR_PATH = "./fileOutputs/"
     OUTPUT_COLUMN_NAMES = [
@@ -134,15 +134,15 @@ def _(
             linewidth=1
             for i, trajectory in unstacked_dataframe.iterrows():
                 identity = 1
-        
+
                 rollover_x = \
                     np.abs(np.diff(np.array(trajectory['x'])[::4])) > (WORLD_SIZE/2)
                 rollover_y = \
                     np.abs(np.diff(np.array(trajectory['y'])[::4])) > (WORLD_SIZE/2)
                 rollover_mask = rollover_x | rollover_y
-        
+
                 color = colors_list[i % len(colors_list)]
-        
+
                 if np.count_nonzero(rollover_mask) == 0:
                     ax.plot(np.array(trajectory['x'])[::4], np.array(trajectory['y'])[::4],
                         alpha=alpha, linewidth=linewidth, c=color
@@ -162,7 +162,7 @@ def _(
                             c=color
                         )
                         prev_index = separation_index+1
-        
+
                     # Plotting final segment:
                     x_array = np.array(trajectory['x'])[::4][prev_index:]
                     y_array = np.array(trajectory['y'])[::4][prev_index:]
@@ -223,12 +223,12 @@ def _(
         # heading_list = np.arctan2(y_heading, x_heading)
 
         # Run CIL plot:
-        ax.quiver(
-            x_pos, y_pos, x_cil_heading, y_cil_heading,
-            pivot='tail', scale=1/100, scale_units='x',
-            headwidth=3, headlength=3, headaxislength=3, width=0.004, alpha=0.5,
-            color='k'
-        )
+        # ax.quiver(
+        #     x_pos, y_pos, x_cil_heading, y_cil_heading,
+        #     pivot='tail', scale=1/100, scale_units='x',
+        #     headwidth=3, headlength=3, headaxislength=3, width=0.004, alpha=0.5,
+        #     color='k'
+        # )
 
         aspect_ratio = 1
 
@@ -277,13 +277,13 @@ def _(
                         (x, y+2048), major_axis, minor_axis, angle=angle,
                         alpha=0.1, color='k'
                     )
-                    ax.add_patch(ellipse)  
+                    ax.add_patch(ellipse)
                 if 2048 - y < cell_size:
                     ellipse = matplotlib.patches.Ellipse(
                         (x, y-2048), major_axis, minor_axis, angle=angle,
                         alpha=0.1, color='k'
                     )
-                    ax.add_patch(ellipse)  
+                    ax.add_patch(ellipse)
 
         # ax.scatter(x_pos, y_pos, color='k', alpha=0.4, s=cell_size)
         ax.set_xlim(0, WORLD_SIZE)
@@ -301,6 +301,12 @@ def _(get_trajectory_data, read_matrix_into_numpy):
     ecm_matrix = read_matrix_into_numpy(0, 0)
     trajectory_dataframe = get_trajectory_data(0, 0)
     return ecm_matrix, trajectory_dataframe
+
+
+@app.cell
+def _():
+    1e-6
+    return
 
 
 @app.cell
@@ -396,7 +402,7 @@ def _(
         fps, (size[1], size[0]), True
     )
 
-    for timeframe in list(range(TIMESTEPS))[::2]:
+    for timeframe in list(range(TIMESTEPS))[::10]:
         if (timeframe) % 200 == 0:
             print(timeframe)
 
@@ -410,7 +416,7 @@ def _(
         _fig.canvas.draw()
         array_plot = np.array(_fig.canvas.renderer.buffer_rgba())
         plt.close(_fig)
- 
+
         # Save array plot to opencv file:
         bgr_data = cv2.cvtColor(array_plot, cv2.COLOR_RGB2BGR)
         out.write(bgr_data)
