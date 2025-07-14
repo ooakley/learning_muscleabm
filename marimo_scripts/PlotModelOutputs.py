@@ -24,8 +24,8 @@ def _():
 def _():
     # Constant display variables:
     MESH_NUMBER = 64
-    CELL_NUMBER = 200
-    TIMESTEPS = 5000
+    CELL_NUMBER = 115
+    TIMESTEPS = 2880
     TIMESTEP_WIDTH = 1440
     WORLD_SIZE = 2048
     DATA_DIR_PATH = "./fileOutputs/"
@@ -304,17 +304,11 @@ def _(get_trajectory_data, read_matrix_into_numpy):
 
 
 @app.cell
-def _():
-    1e-6
-    return
-
-
-@app.cell
 def _(TIMESTEPS, ecm_matrix, plot_superiteration, plt, trajectory_dataframe):
     _fig, _ax = plt.subplots(figsize=(7, 7))
     plot_superiteration(
-        trajectory_dataframe, ecm_matrix, TIMESTEPS-1, _ax, 75,
-        plot_matrix=False, plot_trajectories=True, plot_ellipses=True
+        trajectory_dataframe, ecm_matrix, TIMESTEPS-1, _ax, 84,
+        plot_matrix=False, plot_trajectories=True, plot_ellipses=False
     )
     plt.show()
     return
@@ -409,7 +403,7 @@ def _(
         _fig, _ax = plt.subplots(figsize=(5, 5), layout='constrained')
         plot_superiteration(
             trajectory_dataframe, ecm_matrix, timeframe, _ax, 75,
-            plot_matrix=False, plot_trajectories=False, plot_ellipses=True
+            plot_matrix=False, plot_trajectories=True, plot_ellipses=False
         )
 
         # Export to array:

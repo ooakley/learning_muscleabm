@@ -103,7 +103,7 @@ def _(GRIDSEARCH_PARAMETERS, np, os):
 
 @app.cell
 def _(np):
-    def parameter_estimate(output_array, parameters, mean_value, epsilon=0.025):
+    def parameter_estimate(output_array, parameters, mean_value, epsilon=0.05):
         # Get epsilon fraction as integer:
         sample_size = int(len(output_array) * epsilon)
 
@@ -116,15 +116,55 @@ def _(np):
 
 
 @app.cell
-def _(parameter_estimate, parameters, speed_array):
-    posterior_distribution = parameter_estimate(speed_array, parameters, 2.5)
+def _(normalised_parameters, parameter_estimate, speed_array):
+    posterior_distribution = parameter_estimate(speed_array, normalised_parameters, 2.5)
     return (posterior_distribution,)
+
+
+@app.cell
+def _(np, posterior_distribution):
+    covariance_matrix = np.cov(posterior_distribution, rowvar=False)
+    return (covariance_matrix,)
+
+
+@app.cell
+def _(posterior_distribution):
+    posterior_distribution.shape
+    return
+
+
+@app.cell
+def _(posterior_distribution):
+    from copulas.multivariate import GaussianMultivariate
+    from copulas.univariate import BetaUnivariate, GaussianKDE
+
+    dist = GaussianMultivariate(distribution=BetaUnivariate)
+    dist.fit(posterior_distribution)
+    return BetaUnivariate, GaussianKDE, GaussianMultivariate, dist
+
+
+@app.cell
+def _(dist, np):
+    sampled = dist.sample(1500)
+    sampled = np.array(sampled)
+    return (sampled,)
 
 
 @app.cell
 def _(plt, posterior_distribution):
     _fig, _ax = plt.subplots(figsize=(5, 5))
-    _ax.scatter(posterior_distribution[:, 0], posterior_distribution[:, 5])
+    _ax.set_xlim(0, 1)
+    _ax.set_ylim(0, 1)
+    _ax.scatter(posterior_distribution[:, 4], posterior_distribution[:, 5], s=10)
+    return
+
+
+@app.cell
+def _(plt, sampled):
+    _fig, _ax = plt.subplots(figsize=(5, 5))
+    _ax.set_xlim(0, 1)
+    _ax.set_ylim(0, 1)
+    _ax.scatter(sampled[:, 4], sampled[:, 5], s=10)
     return
 
 

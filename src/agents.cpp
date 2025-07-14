@@ -209,8 +209,8 @@ void CellAgent::takeRandomStep() {
 
     // Collide with adjacent cells:
     collisionsThisTimepoint = 0;
-    // runDeterministicCollisionLogic();
-    runCircularStochasticCollisionLogic();
+    runDeterministicCollisionLogic();
+    // runCircularStochasticCollisionLogic();
     finalCILEffectX = polarityChangeCilX;
     finalCILEffectY = polarityChangeCilY;
 

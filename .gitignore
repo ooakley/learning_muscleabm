@@ -5,6 +5,7 @@
 *gitignore.json
 *.mp4
 gridsearch_data/
+wetlab_data/
 sr_outputs/
 
 # Compiled Object files

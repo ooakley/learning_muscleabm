@@ -502,7 +502,6 @@ def _(GRIDSEARCH_PARAMETERS, abcuniform_op_array, cv2, np, pd, plt, resampled):
 
         # Plot filtered scatter matrix
         _fig, _ax = plt.subplots(figsize=(20, 20))
-
         df = pd.DataFrame(
             resampled[selection_indices, :], columns=list(GRIDSEARCH_PARAMETERS.keys())
         )
