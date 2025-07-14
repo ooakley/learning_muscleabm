@@ -1,11 +1,10 @@
 """
 Script to run symbolic regression on outputs of model.
 """
-import pysr
 import os
+import pysr
 
 import numpy as np
-
 
 def main():
     """Logic to handle loading and analysis of data."""
@@ -39,7 +38,7 @@ def main():
     )
 
     # Instantiate model:
-    timeout_minutes = 60
+    timeout_minutes = 6*60
     sr_model = pysr.PySRRegressor(
         maxsize=35,
         population_size=75,

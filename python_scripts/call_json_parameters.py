@@ -19,6 +19,8 @@ def main():
     with open(args.path_to_config, 'r') as file:
         parameter_dictionary = json.load(file)
 
+    # TODO: just build the bash comand using the keys from the parameter dict
+
     run_command = \
         f"./build/src/main \
         --jobArrayID {parameter_dictionary['jobArrayID']} \

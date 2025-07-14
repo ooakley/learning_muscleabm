@@ -6,6 +6,7 @@
 *.mp4
 gridsearch_data/
 sr_outputs/
+wetlab_data/
 
 # Compiled Object files
 *.slo
