@@ -1,8 +1,8 @@
 """
 Script to run symbolic regression on outputs of model.
 """
-import pysr
 import os
+import pysr
 
 import numpy as np
 

@@ -7,6 +7,7 @@
 gridsearch_data/
 wetlab_data/
 sr_outputs/
+wetlab_data/
 
 # Compiled Object files
 *.slo

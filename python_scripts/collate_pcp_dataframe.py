@@ -3,18 +3,22 @@ import numpy as np
 
 
 GRIDSEARCH_PARAMETERS = {
-    "cueDiffusionRate": [0.005, 0.5],
-    "cueKa": [0.25, 1.25],
-    "fluctuationAmplitude": [0.01, 0.2],
-    "fluctuationTimescale": [1.5, 20],
-    "actinAdvectionRate": [0.1, 2],
-    "maximumSteadyStateActinFlow": [0.5, 5],
+    "cueDiffusionRate": [0.0025, 2.5],
+    "cueKa": [0.1, 5],
+    "fluctuationAmplitude": [5e-5, 5e-3],
+    "fluctuationTimescale": [1, 150],
+    "maximumSteadyStateActinFlow": [0.0, 1.25],
+    "numberOfCells": [75, 150],
+    "actinAdvectionRate": [0, 1],
+    "cellBodyRadius": [75, 125],
+    # Collisions:
+    "collisionFlowReductionRate": [0.0, 0.25],
+    "collisionAdvectionRate": [0.0, 0.25],
 }
-
 
 def main():
     input_matrix = []
-    for i in range(4096):
+    for i in range(int(16384 / 2)):
         with open(f'./fileOutputs/{i}/{i}_arguments.json') as json_data:
             # Reading data:
             parameter_dict = json.load(json_data)
