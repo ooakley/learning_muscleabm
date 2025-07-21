@@ -8,6 +8,9 @@ gridsearch_data/
 wetlab_data/
 sr_outputs/
 wetlab_data/
+*/__pycache__/
+*/__marimo__/
+*/layouts/
 
 # Compiled Object files
 *.slo
@@ -44,6 +47,7 @@ build/
 
 # Marimo related:
 */__marimo__/
+__marimo__
 
 # Output data:
 *.csv

@@ -34,7 +34,7 @@ World::World
     , thereIsMatrixInteraction{setThereIsMatrixInteraction}
     , simulationTime{0}
     , cellParameters{setCellParameters}
-    , collisionCellList{CollisionCellList(16, 2048)}
+    , collisionCellList{CollisionCellList(10, 2048)}
 {
     // Initialising randomness:
     seedGenerator = std::mt19937(worldSeed);
@@ -82,6 +82,8 @@ void World::writePositionsToCSV(std::ofstream& csvFile) {
         csvFile << cellAgentVector[i]->getTotalCILEffectY() << ",";
         csvFile << cellAgentVector[i]->getMovementDirection() << ",";
         csvFile << cellAgentVector[i]->getDirectionalShift() << ",";
+        csvFile << cellAgentVector[i]->getStadiumX() << ",";
+        csvFile << cellAgentVector[i]->getStadiumY() << ",";
         csvFile << cellAgentVector[i]->getSampledAngle() << "\n";
     }
 }

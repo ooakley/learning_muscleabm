@@ -24,7 +24,7 @@ def _():
 def _():
     # Constant display variables:
     MESH_NUMBER = 64
-    CELL_NUMBER = 115
+    CELL_NUMBER = 250
     TIMESTEPS = 2880
     TIMESTEP_WIDTH = 1440
     WORLD_SIZE = 2048
@@ -38,7 +38,9 @@ def _():
         "collision_number",
         "cil_x", "cil_y",
         "movement_direction",
-        "turning_angle", "sampled_angle"
+        "turning_angle",
+        "stadium_x", "stadium_y",
+        "sampled_angle"
     ]
     return (
         CELL_NUMBER,
@@ -202,6 +204,10 @@ def _(
         x_pos = rollover_skipped_df['x'][timepoint_mask]
         y_pos = rollover_skipped_df['y'][timepoint_mask]
 
+        # Plot cell stadia:
+        stadia_x = np.array(rollover_skipped_df['stadium_x'][timepoint_mask])
+        stadia_y = np.array(rollover_skipped_df['stadium_y'][timepoint_mask])
+
         # Plot cell actin directions:
         x_heading = np.cos(rollover_skipped_df['actin_flow'][timepoint_mask]) \
             * rollover_skipped_df["actin_mag"][timepoint_mask] * arrow_scaling
@@ -212,20 +218,20 @@ def _(
         # Run direction plot:
         ax.quiver(
             x_pos, y_pos, x_heading, y_heading, np.array(heading_list).flatten(),
-            pivot='tail', scale=1/100, scale_units='x',
+            pivot='tail', scale=1/500, scale_units='x',
             headwidth=3, headlength=3, headaxislength=3, width=0.004, alpha=1,
             cmap=cc.cm.CET_C6
         )
 
-        # Plot cell CIL directions:
-        x_cil_heading = rollover_skipped_df['cil_x'][timepoint_mask] * arrow_scaling
-        y_cil_heading = -rollover_skipped_df['cil_y'][timepoint_mask] * arrow_scaling
-        # heading_list = np.arctan2(y_heading, x_heading)
+        # # Plot cell CIL directions:
+        # x_cil_heading = rollover_skipped_df['cil_x'][timepoint_mask] * arrow_scaling
+        # y_cil_heading = -rollover_skipped_df['cil_y'][timepoint_mask] * arrow_scaling
+        # # heading_list = np.arctan2(y_heading, x_heading)
 
-        # Run CIL plot:
+        # # Run CIL plot:
         # ax.quiver(
         #     x_pos, y_pos, x_cil_heading, y_cil_heading,
-        #     pivot='tail', scale=1/100, scale_units='x',
+        #     pivot='tail', scale=1/250, scale_units='x',
         #     headwidth=3, headlength=3, headaxislength=3, width=0.004, alpha=0.5,
         #     color='k'
         # )
@@ -256,6 +262,25 @@ def _(
                     alpha=0.25, color=collision_color
                 )
                 ax.add_patch(ellipse)
+
+                # Plot stadia:
+                ellipse = matplotlib.patches.Ellipse(
+                    (stadia_x[index], stadia_y[index]),
+                    major_axis, minor_axis, angle=angle,
+                    alpha=0.25, color='b'
+                )
+                ax.add_patch(ellipse)
+
+                stadia_mask = \
+                    np.abs(xy[0] - stadia_x[index]) > 1024 or \
+                    np.abs(xy[1] - stadia_y[index]) > 1024
+        
+                if not stadia_mask:
+                    ax.plot(
+                        [xy[0], stadia_x[index]], [xy[1], stadia_y[index]],
+                        alpha=0.4, linewidth=10,
+                        c='r'
+                    )
 
                 # Plot extra ellipses if close to edge:
                 x = xy[0]
@@ -307,7 +332,7 @@ def _(get_trajectory_data, read_matrix_into_numpy):
 def _(TIMESTEPS, ecm_matrix, plot_superiteration, plt, trajectory_dataframe):
     _fig, _ax = plt.subplots(figsize=(7, 7))
     plot_superiteration(
-        trajectory_dataframe, ecm_matrix, TIMESTEPS-1, _ax, 84,
+        trajectory_dataframe, ecm_matrix, TIMESTEPS-1, _ax, 35,
         plot_matrix=False, plot_trajectories=True, plot_ellipses=False
     )
     plt.show()
@@ -389,21 +414,21 @@ def _(
     plt,
     trajectory_dataframe,
 ):
-    size = 500, 500
+    size = 750, 750
     fps = 30
     out = cv2.VideoWriter(
         './basic_video.mp4', cv2.VideoWriter_fourcc(*'avc1'),
         fps, (size[1], size[0]), True
     )
 
-    for timeframe in list(range(TIMESTEPS))[::10]:
+    for timeframe in list(range(TIMESTEPS))[::25]:
         if (timeframe) % 200 == 0:
             print(timeframe)
 
-        _fig, _ax = plt.subplots(figsize=(5, 5), layout='constrained')
+        _fig, _ax = plt.subplots(figsize=(7.5, 7.5), layout='constrained')
         plot_superiteration(
-            trajectory_dataframe, ecm_matrix, timeframe, _ax, 75,
-            plot_matrix=False, plot_trajectories=True, plot_ellipses=False
+            trajectory_dataframe, ecm_matrix, timeframe, _ax, 37,
+            plot_matrix=False, plot_trajectories=True, plot_ellipses=True
         )
 
         # Export to array:
@@ -417,12 +442,6 @@ def _(
 
     out.release()
     return array_plot, bgr_data, fps, out, size, timeframe
-
-
-@app.cell
-def _(out):
-    out.release()
-    return
 
 
 @app.cell

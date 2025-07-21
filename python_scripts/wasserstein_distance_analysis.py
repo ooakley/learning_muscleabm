@@ -37,8 +37,6 @@ def parse_arguments():
 def get_trajectory_list_from_site(site_dataframe):
     # Looping through all particles, first finding all valid particle IDs:
     particles = list(set(list(site_dataframe["tree_id"])))
-    site_particle_count = len(particles)
-
     trajectory_list = []
 
     for particle in particles:
@@ -46,7 +44,7 @@ def get_trajectory_list_from_site(site_dataframe):
         particle_mask = site_dataframe["tree_id"] == particle
         x_pos = np.array(site_dataframe[particle_mask]["x"])
         y_pos = np.array(site_dataframe[particle_mask]["y"])
-        frame_array = np.array(site_dataframe[particle_mask]["frame"])    
+        frame_array = np.array(site_dataframe[particle_mask]["frame"])
         trajectory_list.append((frame_array, x_pos, y_pos))
 
     return trajectory_list
@@ -54,7 +52,7 @@ def get_trajectory_list_from_site(site_dataframe):
 
 def analyse_site(trajectory_list):
     # Find (approximate) valid position list from trajectories:
-    positions_dictionary = {} # keys: frame, values: list of positions
+    positions_dictionary = {}  # keys: frame, values: list of positions
     for frame_list, x_positions, y_positions in trajectory_list:
         if len(frame_list) < 250:
             continue
@@ -95,7 +93,7 @@ def analyse_site(trajectory_list):
         # Take average over trajectory:
         trajectory_distances.append(np.mean(mean_neighbour_distances))
 
-        # Get trajectory characteristics: 
+        # Get trajectory characteristics:
         x = x_positions * 2
         y = y_positions * 2
         dx = x[-1] - x[0]
@@ -108,7 +106,7 @@ def analyse_site(trajectory_list):
             x_displacements**2 + y_displacements**2
         ))
 
-        speed.append(path_length / (length*2.5))
+        speed.append(path_length / (length * 2.5))
         meander_ratio.append(total_displacement / path_length)
 
     return speed, meander_ratio, trajectory_distances
@@ -141,7 +139,7 @@ def generate_dataframe(trajectory_dictionary):
         data_dictionary = {
             "Speed": speeds,
             "Meander Ratio": meander_ratios,
-            "NN Distance":  nn_distances,
+            "NN Distance": nn_distances,
             "Column": [int(column)] * len(speeds)
         }
         column_dataframe = pd.DataFrame(data=data_dictionary)
@@ -183,6 +181,7 @@ def get_wd_estimate(experiment_distribution, simulation_distribution, reg=1):
             )
         )
 
+    print(np.mean(distances))
     return np.mean(distances)
 
 
@@ -200,7 +199,8 @@ def main():
         trajectory_folderpath = os.path.join(DATA_DIRECTORY, "trajectories")
         trajectory_dictionary = {column: [] for column in COLUMNS}
 
-        # Each different cell type is contained in different columns of 3 wells, with four sites each:
+        # Each different cell type is contained in different columns of 3 wells,
+        # with four sites each:
         for row in ROWS:
             for column in COLUMNS:
                 for site in range(4):
@@ -259,7 +259,7 @@ def main():
             # Get nearest neighbour distances
             timestep_distances = []
             for timestep in range(1440, 2880):
-                query_position  = [
+                query_position = [
                     position_array[cell_index, timestep, 0],
                     position_array[cell_index, timestep, 1]
                 ]
@@ -306,13 +306,18 @@ def main():
                 ["Speed", "Meander Ratio", "NN Distance"]
             ]
         )
+        print(experiment_distribution.shape)
         mean_wd_distances.append(
             get_wd_estimate(experiment_distribution, collated_simulation_dataset)
         )
     superiteration_distances = np.array(mean_wd_distances)
 
     # Save to .npy files as distance arrays:
-    np.save(os.path.join(subdirectory_path, "distributional_distances.npy"), superiteration_distances)
+    np.save(
+        os.path.join(
+            subdirectory_path, "distributional_distances.npy"
+        ), superiteration_distances
+    )
 
 
 if __name__ == "__main__":

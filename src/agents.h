@@ -63,6 +63,8 @@ public:
     int getCollisionNumber() const;
     double getTotalCILEffectX() const;
     double getTotalCILEffectY() const;
+    double getStadiumX() const;
+    double getStadiumY() const;
 
     // Setters:
     // Setters for simulation (moving cells around etc.):
@@ -106,6 +108,9 @@ private:
     double flowMagnitude;
     double scaledFlowMagnitude;
     double shapeDirection;
+
+    double stadiumX;
+    double stadiumY;
 
     // History variables for analysis:
     int collisionsThisTimepoint;
@@ -186,8 +191,9 @@ private:
     void runStochasticCollisionLogic();
     void runCircularStochasticCollisionLogic();
     void runDeterministicCollisionLogic();
-    void collideWithCell(CellAgent localCell);
-    bool isPositionInStadium(
+    std::tuple<int, double, double> samplePositionHistory();
+    // void collideWithCell(CellAgent localCell);
+    std::tuple<bool, double, double> isPositionInStadium(
         double samplePointX, double samplePointY,
         double startX, double startY,
         double endX, double endY
