@@ -7,7 +7,7 @@
     "thereIsMatrixInteraction": 1,
     "matrixTurnoverRate": 0.05,
     "matrixAdditionRate": 0.05,
-    "matrixAdvectionRate": 0.0,
+    "matrixAdvectionRate": 1,
     "aspectRatio": 1,
     "cueDiffusionRate": 1.3957361221961675,
     "cueKa": 0.8425754232319073,
@@ -16,8 +16,10 @@
     "maximumSteadyStateActinFlow": 1.585583615116775,
     "numberOfCells": 250,
     "actinAdvectionRate": 1.0859013861045241,
-    "cellBodyRadius": 35,
-    "collisionFlowReductionRate": 0.025,
-    "collisionAdvectionRate": 0.025,
+    "cellBodyRadius": 45,
+    "collisionFlowReductionRate": 0.75,
+    "collisionAdvectionRate": 0.000,
+    "stretchFactor": 4,
+    "slipFactor": 1e-3,
     "jobArrayID": 0
 }

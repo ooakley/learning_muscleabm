@@ -20,7 +20,11 @@ struct CellParameters {
     // Collision parameters:
     cellBodyRadius,
     aspectRatio,
-    collisionFlowReductionRate;
+    collisionFlowReductionRate,
+
+    // Shape parameters:
+    stretchFactor,
+    slipFactor;
 };
 
 class World {

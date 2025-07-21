@@ -226,9 +226,6 @@ def _(
         # # Plot cell CIL directions:
         # x_cil_heading = rollover_skipped_df['cil_x'][timepoint_mask] * arrow_scaling
         # y_cil_heading = -rollover_skipped_df['cil_y'][timepoint_mask] * arrow_scaling
-        # # heading_list = np.arctan2(y_heading, x_heading)
-
-        # # Run CIL plot:
         # ax.quiver(
         #     x_pos, y_pos, x_cil_heading, y_cil_heading,
         #     pivot='tail', scale=1/250, scale_units='x',
@@ -274,7 +271,7 @@ def _(
                 stadia_mask = \
                     np.abs(xy[0] - stadia_x[index]) > 1024 or \
                     np.abs(xy[1] - stadia_y[index]) > 1024
-        
+
                 if not stadia_mask:
                     ax.plot(
                         [xy[0], stadia_x[index]], [xy[1], stadia_y[index]],
@@ -332,7 +329,7 @@ def _(get_trajectory_data, read_matrix_into_numpy):
 def _(TIMESTEPS, ecm_matrix, plot_superiteration, plt, trajectory_dataframe):
     _fig, _ax = plt.subplots(figsize=(7, 7))
     plot_superiteration(
-        trajectory_dataframe, ecm_matrix, TIMESTEPS-1, _ax, 35,
+        trajectory_dataframe, ecm_matrix, TIMESTEPS-1, _ax, 45,
         plot_matrix=False, plot_trajectories=True, plot_ellipses=False
     )
     plt.show()
@@ -341,7 +338,7 @@ def _(TIMESTEPS, ecm_matrix, plot_superiteration, plt, trajectory_dataframe):
 
 @app.cell
 def _(CELL_NUMBER, TIMESTEPS, np, trajectory_dataframe):
-    # Test out order parameter calculations:
+     # Test out order parameter calculations:
 
     # Sort by cell and then by frame:
     sorted_dataframe = trajectory_dataframe.sort_values(by=["particle", "frame"])
@@ -421,7 +418,7 @@ def _(
         fps, (size[1], size[0]), True
     )
 
-    for timeframe in list(range(TIMESTEPS))[::25]:
+    for timeframe in list(range(TIMESTEPS))[::10]:
         if (timeframe) % 200 == 0:
             print(timeframe)
 

@@ -21,32 +21,38 @@ def main():
 
     # TODO: just build the bash comand using the keys from the parameter dict
 
-    run_command = \
-        f"./build/src/main \
-        --jobArrayID {parameter_dictionary['jobArrayID']} \
-        --superIterationCount {parameter_dictionary['superIterationCount']} \
-        --timestepsToRun {parameter_dictionary['timestepsToRun']} \
-        --numberOfCells {parameter_dictionary['numberOfCells']} \
-        --worldSize {parameter_dictionary['worldSize']} \
-        --gridSize {parameter_dictionary['gridSize']} \
-        --matrixTurnoverRate {parameter_dictionary['matrixTurnoverRate']} \
-        --matrixAdditionRate {parameter_dictionary['matrixAdditionRate']} \
-        --thereIsMatrixInteraction {parameter_dictionary['thereIsMatrixInteraction']} \
-        --dt {parameter_dictionary['dt']} \
-        --cueDiffusionRate {parameter_dictionary['cueDiffusionRate']} \
-        --cueKa {parameter_dictionary['cueKa']} \
-        --fluctuationAmplitude {parameter_dictionary['fluctuationAmplitude']} \
-        --fluctuationTimescale {parameter_dictionary['fluctuationTimescale']} \
-        --actinAdvectionRate {parameter_dictionary['actinAdvectionRate']} \
-        --matrixAdvectionRate {parameter_dictionary['matrixAdvectionRate']} \
-        --collisionAdvectionRate {parameter_dictionary['collisionAdvectionRate']} \
-        --maximumSteadyStateActinFlow {parameter_dictionary['maximumSteadyStateActinFlow']} \
-        --cellBodyRadius {parameter_dictionary['cellBodyRadius']} \
-        --aspectRatio {parameter_dictionary['aspectRatio']} \
-        --collisionFlowReductionRate {parameter_dictionary['collisionFlowReductionRate']} \
-        "
+    full_command = "./build/src/main "
+    for key, value in parameter_dictionary.items():
+        argument_string = f"--{key} {value} "
+        full_command += argument_string
 
-    os.system(run_command)
+    # run_command = \
+    #     f"./build/src/main \
+    #     --jobArrayID {parameter_dictionary['jobArrayID']} \
+    #     --superIterationCount {parameter_dictionary['superIterationCount']} \
+    #     --timestepsToRun {parameter_dictionary['timestepsToRun']} \
+    #     --numberOfCells {parameter_dictionary['numberOfCells']} \
+    #     --worldSize {parameter_dictionary['worldSize']} \
+    #     --gridSize {parameter_dictionary['gridSize']} \
+    #     --matrixTurnoverRate {parameter_dictionary['matrixTurnoverRate']} \
+    #     --matrixAdditionRate {parameter_dictionary['matrixAdditionRate']} \
+    #     --thereIsMatrixInteraction {parameter_dictionary['thereIsMatrixInteraction']} \
+    #     --dt {parameter_dictionary['dt']} \
+    #     --cueDiffusionRate {parameter_dictionary['cueDiffusionRate']} \
+    #     --cueKa {parameter_dictionary['cueKa']} \
+    #     --fluctuationAmplitude {parameter_dictionary['fluctuationAmplitude']} \
+    #     --fluctuationTimescale {parameter_dictionary['fluctuationTimescale']} \
+    #     --actinAdvectionRate {parameter_dictionary['actinAdvectionRate']} \
+    #     --matrixAdvectionRate {parameter_dictionary['matrixAdvectionRate']} \
+    #     --collisionAdvectionRate {parameter_dictionary['collisionAdvectionRate']} \
+    #     --maximumSteadyStateActinFlow {parameter_dictionary['maximumSteadyStateActinFlow']} \
+    #     --cellBodyRadius {parameter_dictionary['cellBodyRadius']} \
+    #     --aspectRatio {parameter_dictionary['aspectRatio']} \
+    #     --collisionFlowReductionRate {parameter_dictionary['collisionFlowReductionRate']} \
+    #     "
+
+    print(full_command)
+    os.system(full_command)
     return None
 
 

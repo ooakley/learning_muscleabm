@@ -105,6 +105,13 @@ int main(int argc, char** argv) {
         ("collisionFlowReductionRate", po::value<double>(&cellParams.collisionFlowReductionRate)->required(),
             "Rate at which actin flow in the direction of a collision is reduced by a collision."
         )
+        // Shape parameters:
+        ("stretchFactor", po::value<double>(&cellParams.stretchFactor)->required(),
+            "Multiply body radius to get length scale for distance decay of stadium retraction."
+        )
+        ("slipFactor", po::value<double>(&cellParams.slipFactor)->required(),
+            "Maximal chance for resampling of stadium point - i.e. slipping - per timestep."
+        )
     ;
 
     // Parse the variables from the command line:

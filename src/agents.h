@@ -30,6 +30,10 @@ public:
         double setAspectRatio,
         double setCollisionFlowReductionRate,
 
+        // Shape parameters:
+        double setStretchFactor,
+        double setSlipFactor,
+
         // Randomised initial state parameters:
         double startX, double startY, double startHeading
     );
@@ -126,6 +130,10 @@ private:
     double matrixAdvectionRate;
     double collisionAdvectionRate;
     double maximumSteadyStateActinFlow;
+
+    // Shape parameters:
+    double stretchFactor;
+    double slipFactor;
 
     // Collision parameters:
     double cellBodyRadius;

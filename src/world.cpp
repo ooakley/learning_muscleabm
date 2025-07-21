@@ -172,6 +172,10 @@ std::shared_ptr<CellAgent> World::initialiseCell(int setCellID) {
         cellParameters.aspectRatio,
         cellParameters.collisionFlowReductionRate,
 
+        // Shape parameters:
+        cellParameters.stretchFactor,
+        cellParameters.slipFactor,
+    
         // Randomised initial state parameters:
         startX, startY, startHeading
     );
