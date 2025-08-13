@@ -24,7 +24,7 @@ def _():
 def _():
     # Constant display variables:
     MESH_NUMBER = 64
-    CELL_NUMBER = 250
+    CELL_NUMBER = 175
     TIMESTEPS = 2880
     TIMESTEP_WIDTH = 1440
     WORLD_SIZE = 2048
@@ -329,10 +329,73 @@ def _(get_trajectory_data, read_matrix_into_numpy):
 def _(TIMESTEPS, ecm_matrix, plot_superiteration, plt, trajectory_dataframe):
     _fig, _ax = plt.subplots(figsize=(7, 7))
     plot_superiteration(
-        trajectory_dataframe, ecm_matrix, TIMESTEPS-1, _ax, 45,
+        trajectory_dataframe, ecm_matrix, TIMESTEPS-1, _ax, 75,
         plot_matrix=False, plot_trajectories=True, plot_ellipses=False
     )
     plt.show()
+    return
+
+
+@app.cell
+def _(CELL_NUMBER, TIMESTEPS, np, plt, trajectory_dataframe):
+    import skimage
+
+    _ax = plt.figure(layout='constrained').add_subplot(projection='3d')
+    _ax.view_init(elev=30, azim=45, roll=15)
+
+    positions = trajectory_dataframe.sort_values(['particle', 'frame']).loc[:, ('x', 'y')]
+    position_array = np.array(positions).reshape(CELL_NUMBER, TIMESTEPS, 2)
+
+    # Estimate from trajectory dataframe as test:
+    # line_array = np.zeros((2048, 2048, 1440))
+
+    for _cell_index in range(position_array.shape[0]):
+        relevant_trajectory = position_array[_cell_index, 1440:, :]
+        coords = []
+        for t in range(1440 - 1):
+            # Get indices of line:
+            xy_t = relevant_trajectory[t, :].astype(int)
+            xy_t1 = relevant_trajectory[t+1, :].astype(int)
+
+            # Account for periodic boundaries:
+            distance = np.sqrt(np.sum((xy_t - xy_t1)**2, axis=0))
+            if distance > 1024:
+                continue
+
+            st_t = [*xy_t, t]
+            st_t1 = [*xy_t, t+1]
+            coords.append(st_t)
+
+            # Plot line indices on matrix:
+            # _ii, _jj, _kk = skimage.draw.line_nd(st_t, st_t1)
+            # # line_array[_ii, _jj, _kk] = 1
+        trajectory_array = np.stack(coords, axis=0)
+        _ax.plot(
+            trajectory_array[:, 0],
+            trajectory_array[:, 1],
+            trajectory_array[:, 2],
+            lw=0.5
+        )
+
+    plt.show()
+    return (
+        coords,
+        distance,
+        position_array,
+        positions,
+        relevant_trajectory,
+        skimage,
+        st_t,
+        st_t1,
+        t,
+        trajectory_array,
+        xy_t,
+        xy_t1,
+    )
+
+
+@app.cell
+def _():
     return
 
 
@@ -418,13 +481,13 @@ def _(
         fps, (size[1], size[0]), True
     )
 
-    for timeframe in list(range(TIMESTEPS))[::10]:
+    for timeframe in list(range(TIMESTEPS))[:1000:1]:
         if (timeframe) % 200 == 0:
             print(timeframe)
 
         _fig, _ax = plt.subplots(figsize=(7.5, 7.5), layout='constrained')
         plot_superiteration(
-            trajectory_dataframe, ecm_matrix, timeframe, _ax, 37,
+            trajectory_dataframe, ecm_matrix, timeframe, _ax, 36,
             plot_matrix=False, plot_trajectories=True, plot_ellipses=True
         )
 
