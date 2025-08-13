@@ -336,15 +336,24 @@ def _():
 
 
 @app.cell
-def _(TIME_WEIGHTING, itertools, np, pd, scipy):
-    def analyse_simulation_site(trajectory_dataframe, superiteration):
+def _(
+    TIME_WEIGHTING,
+    TRAJECTORY_INTERACTION_DISTANCE,
+    itertools,
+    np,
+    pd,
+    scipy,
+):
+    def analyse_simulation_site(
+        trajectory_dataframe, superiteration, cell_number
+    ):
         # Sort by cell and then by frame:
         sorted_dataframe = trajectory_dataframe.sort_values(
             by=["particle", "frame"]
         )
         positions_dataframe = sorted_dataframe.loc[:, ('x', 'y')]
         position_array = \
-            np.array(positions_dataframe).reshape(175, 2880, 2)
+            np.array(positions_dataframe).reshape(cell_number, 2880, 2)
 
         # Generate KD-Tree for each frame:
         kd_tree_list = {}
@@ -396,7 +405,7 @@ def _(TIME_WEIGHTING, itertools, np, pd, scipy):
             # Get trajectory interaction distances:
             weighted_timepoints = np.arange(1440) * TIME_WEIGHTING
             weighted_timepoints = np.expand_dims(weighted_timepoints, axis=1)
-            environment_timepoints = np.repeat(weighted_timepoints, 174, 0)
+            environment_timepoints = np.repeat(weighted_timepoints, cell_number - 1, 0)
 
             # --- Get query trajectory tree:
             trajectory_positions = np.concatenate(
@@ -409,7 +418,7 @@ def _(TIME_WEIGHTING, itertools, np, pd, scipy):
             environment_positions = np.concatenate(
                 [
                     position_array[:cell_index, 1440:, :],
-                    position_array[cell_index+1:, 1440:, :]
+                    position_array[cell_index + 1:, 1440:, :]
                 ],
                 axis=0
             )
@@ -421,7 +430,7 @@ def _(TIME_WEIGHTING, itertools, np, pd, scipy):
             environment_tree = scipy.spatial.KDTree(environment_positions)
 
             # --- Query current trajectory against all other trajectories:
-            point_pairs = trajectory_tree.query_ball_tree(environment_tree, 75)
+            point_pairs = trajectory_tree.query_ball_tree(environment_tree, TRAJECTORY_INTERACTION_DISTANCE)
 
             # --- Get valid points, skip if none present:
             empty_mask = [points != [] for points in point_pairs]
@@ -502,6 +511,7 @@ def _(os, pd):
         "stadium_x", "stadium_y",
         "sampled_angle"
     ]
+    TRAJECTORY_INTERACTION_DISTANCE = 75
 
     def get_trajectory_data(job_id, subiteration):
         # Determine filepaths:
@@ -516,10 +526,11 @@ def _(os, pd):
         )
         return trajectory_dataframe
 
-    trajectory_dataframe = get_trajectory_data(0, 0)
+    trajectory_dataframe = get_trajectory_data(0, 3)
     return (
         DATA_DIR_PATH,
         OUTPUT_COLUMN_NAMES,
+        TRAJECTORY_INTERACTION_DISTANCE,
         get_trajectory_data,
         trajectory_dataframe,
     )
@@ -527,7 +538,7 @@ def _(os, pd):
 
 @app.cell
 def _(analyse_simulation_site, trajectory_dataframe):
-    analysed_dataframe = analyse_simulation_site(trajectory_dataframe, 0)
+    analysed_dataframe = analyse_simulation_site(trajectory_dataframe, 0, 123)
     return (analysed_dataframe,)
 
 
@@ -540,7 +551,7 @@ def _(analysed_dataframe):
 @app.cell
 def _(analysed_dataframe, sns):
     sns.jointplot(
-        data=analysed_dataframe, x="speed", y="meander_ratio",
+        data=analysed_dataframe, x="speed", y="mean_nn_distance",
         hue="superiteration"
     )
     return

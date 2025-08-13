@@ -1,4 +1,5 @@
 """Perform only basic order parameter calculations."""
+import time
 import argparse
 import itertools
 import json
@@ -9,7 +10,8 @@ import scipy.spatial
 import numpy as np
 import pandas as pd
 
-from ot.bregman import empirical_sinkhorn_divergence
+from ot import emd2_1d
+# from ot.bregman import empirical_sinkhorn_divergence
 
 SIMULATION_OUTPUTS_FOLDER = "./fileOutputs/"
 DATA_DIRECTORY = "./wetlab_data/OEO20241206"
@@ -25,10 +27,13 @@ OUTPUT_COLUMN_NAMES = [
     "collision_number",
     "cil_x", "cil_y",
     "movement_direction",
-    "turning_angle", "sampled_angle"
+    "turning_angle",
+    "stadium_x", "stadium_y",
+    "sampled_angle"
 ]
 
 TIME_WEIGHTING = 2880 / 1440
+TRAJECTORY_INTERACTION_DISTANCE = 75
 
 
 def parse_arguments():
@@ -132,7 +137,9 @@ def analyse_site(trajectory_list, column):
         environment_tree = scipy.spatial.KDTree(environment_positions)
 
         # Query current trajectory against all other trajectories:
-        point_pairs = trajectory_tree.query_ball_tree(environment_tree, 75)
+        point_pairs = trajectory_tree.query_ball_tree(
+            environment_tree, TRAJECTORY_INTERACTION_DISTANCE
+        )
 
         # Get valid points, skip if none present:
         empty_mask = [points != [] for points in point_pairs]
@@ -282,7 +289,7 @@ def analyse_simulation_site(trajectory_dataframe, superiteration, cell_number):
                 position_array[cell_index, timestep, 1]
             ]
             distances, _ = kd_tree_list[timestep].query(query_position, k=2)
-            timestep_distances.append(distances[1:])
+            timestep_distances.append(distances[1])
 
         # Get trajectory interaction distances:
         weighted_timepoints = np.arange(1440) * TIME_WEIGHTING
@@ -312,7 +319,9 @@ def analyse_simulation_site(trajectory_dataframe, superiteration, cell_number):
         environment_tree = scipy.spatial.KDTree(environment_positions)
 
         # --- Query current trajectory against all other trajectories:
-        point_pairs = trajectory_tree.query_ball_tree(environment_tree, 75)
+        point_pairs = trajectory_tree.query_ball_tree(
+            environment_tree, TRAJECTORY_INTERACTION_DISTANCE
+        )
 
         # --- Get valid points, skip if none present:
         empty_mask = [points != [] for points in point_pairs]
@@ -422,14 +431,16 @@ def get_wd_estimate(experiment_distribution, simulation_distribution, reg=1):
         distances = []
         for resample_index in range(25):
             sample_indices = rng.choice(len(transformed_simulation), sample_size)
-            sampled_sim = transformed_simulation[sample_indices, ss_index]
+            sampled_simulation_data = transformed_simulation[sample_indices, ss_index]
+            experiment_data = transformed_experiment[:, ss_index]
+
+            # Ensure that the data is interpreted as one dimensional:
+            sampled_simulation_data = np.expand_dims(sampled_simulation_data, axis=1)
+            experiment_data = np.expand_dims(experiment_data, axis=1)
 
             # Estimate distance with Sinkhorn:
-            distances.append(
-                empirical_sinkhorn_divergence(
-                    transformed_experiment[:, ss_index], sampled_sim, reg
-                )
-            )
+            loss = emd2_1d(experiment_data, sampled_simulation_data)
+            distances.append(loss)
         ss_distances.append(np.mean(distances))
 
     return np.array(ss_distances)
@@ -476,7 +487,7 @@ def main():
         simulation_arguments = json.load(json_file)
 
     # Define variables needed for matrix reshaping later on:
-    timesteps = simulation_arguments["timestepsToRun"]
+    # timesteps = simulation_arguments["timestepsToRun"]
     cell_number = simulation_arguments["numberOfCells"]
     superiteration_number = simulation_arguments["superIterationCount"]
 
@@ -484,15 +495,14 @@ def main():
     simulation_dataframes = []
     for seed in range(superiteration_number):
         # Read dataframe into memory:
-        print(f"Reading subiteration {seed}...")
+        print(f"Reading and analysing subiteration {seed}...")
         filename = f"positions_seed{seed:03d}.csv"
-        filepath = os.path.join(subdirectory_path, filename, cell_number, timesteps)
+        filepath = os.path.join(subdirectory_path, filename)
         trajectory_dataframe = pd.read_csv(
             filepath, index_col=None, header=None, names=OUTPUT_COLUMN_NAMES
         )
-        simulation_dataframes.append(
-            analyse_simulation_site(trajectory_dataframe, seed, cell_number)
-        )
+        simulation_dataframe = analyse_simulation_site(trajectory_dataframe, seed, cell_number)
+        simulation_dataframes.append(simulation_dataframe)
     full_simulation_dataframe = pd.concat(simulation_dataframes)
 
     # Get individual column datasets:
@@ -505,12 +515,12 @@ def main():
         "max_nn_distance",
         "ti_distance"
     ]
-    simulation_distribution = full_simulation_dataframe.loc[:, list_of_comparators]
+    simulation_distribution = np.array(full_simulation_dataframe.loc[:, list_of_comparators])
 
     distances_array = []  # (CELL TYPE) X (SS DISTANCE)
     for column in COLUMNS:
         print(f"--- Comparing to column {column}...")
-        selection_mask = experiment_dataframe["Column"] == int(column)
+        selection_mask = experiment_dataframe["column"] == int(column)
         experiment_distribution = np.array(
             experiment_dataframe.loc[
                 selection_mask,
@@ -528,4 +538,6 @@ def main():
 
 
 if __name__ == "__main__":
+    start_time = time.time()
     main()
+    print(f"--- {time.time() - start_time} seconds taken ---")

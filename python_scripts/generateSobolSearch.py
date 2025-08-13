@@ -5,7 +5,7 @@ import json
 from scipy.stats import qmc
 
 # Defines the parameter ranges, with [start, stop]:
-NUM_SAMPLES_EXPONENT = 13
+NUM_SAMPLES_EXPONENT = 3
 SIMULATION_INDEX = 0
 
 CONSTANT_PARAMETERS = {
@@ -19,6 +19,8 @@ CONSTANT_PARAMETERS = {
     "matrixAdditionRate": 0.05,
     "matrixAdvectionRate": 0.0,
     "aspectRatio": 1,
+    "stretchFactor": 7.015735718887299,
+    "slipFactor": 0.01
     # # Collision parameters:
     # "collisionFlowReductionRate": 0,
     # "collisionAdvectionRate": 0,
