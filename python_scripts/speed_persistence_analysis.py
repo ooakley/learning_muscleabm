@@ -16,9 +16,10 @@ OUTPUT_COLUMN_NAMES = [
     "collision_number",
     "cil_x", "cil_y",
     "movement_direction",
-    "turning_angle", "sampled_angle"
+    "turning_angle",
+    "stadium_x", "stadium_y",
+    "sampled_angle"
 ]
-
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Process a folder with a given integer name.')

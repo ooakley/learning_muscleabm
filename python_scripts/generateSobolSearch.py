@@ -29,13 +29,16 @@ GRIDSEARCH_PARAMETERS = {
     "cueKa": [0.0001, 5],
     "fluctuationAmplitude": [5e-5, 5e-3],
     "fluctuationTimescale": [1, 250],
-    "maximumSteadyStateActinFlow": [0.0, 4.5],
+    "maximumSteadyStateActinFlow": [0.0, 3],
     "numberOfCells": [75, 150],
-    "actinAdvectionRate": [0, 5],
-    "cellBodyRadius": [50, 125],
+    "actinAdvectionRate": [0.0, 1.5],
+    "cellBodyRadius": [15, 75],
     # Collisions:
-    "collisionFlowReductionRate": [0.0, 1],
-    "collisionAdvectionRate": [0.0, 4.5],
+    "collisionFlowReductionRate": [0.0, 0.25],
+    "collisionAdvectionRate": [0.0, 1.5],
+    # Shape:
+    "stretchFactor": [0.0, 7.5],
+    "slipFactor": [1e-5, 1e-2]
 }
 
 

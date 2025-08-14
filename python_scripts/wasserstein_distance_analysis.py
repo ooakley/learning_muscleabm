@@ -23,7 +23,9 @@ OUTPUT_COLUMN_NAMES = [
     "collision_number",
     "cil_x", "cil_y",
     "movement_direction",
-    "turning_angle", "sampled_angle"
+    "turning_angle",
+    "stadium_x", "stadium_y",
+    "sampled_angle"
 ]
 
 

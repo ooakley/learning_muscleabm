@@ -19,7 +19,7 @@ simulate () {
 
     # Analysing simulation:
     # python3 ./python_scripts/order_parameter_analysis.py --folder_id $arrayid
-    # python3 ./python_scripts/speed_persistence_analysis.py --folder_id $arrayid
+    python3 ./python_scripts/speed_persistence_analysis.py --folder_id $arrayid
     python3 ./python_scripts/wasserstein_distance_analysis.py --folder_id $arrayid
 
     # Deleting intermediate simulation outputs to save space on the cluster:
