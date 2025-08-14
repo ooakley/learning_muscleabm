@@ -8,6 +8,7 @@ app = marimo.App(width="columns")
 def _():
     import os
     import ot
+    import json
 
     import scipy.stats
     import scipy.spatial
@@ -15,6 +16,7 @@ def _():
     import numpy as np
     import pandas as pd
     import seaborn as sns
+    import colorcet as cc
 
     import matplotlib.pyplot as plt 
 
@@ -27,6 +29,8 @@ def _():
         COLUMNS,
         DATA_DIRECTORY,
         ROWS,
+        cc,
+        json,
         np,
         os,
         ot,
@@ -59,12 +63,6 @@ def _(COLUMNS, ROWS, os, pd, trajectory_folderpath):
         site_dataframe,
         trajectory_dictionary,
     )
-
-
-@app.cell
-def _(trajectory_dictionary):
-    trajectory_dictionary["1"]
-    return
 
 
 @app.cell
@@ -329,7 +327,7 @@ def _(experiment_dataframe, plt, sns):
 def _(np, os, pd):
     # Constant display variables:
     MESH_NUMBER = 64
-    CELL_NUMBER = 150
+    CELL_NUMBER = 175
     TIMESTEPS = 2880
     TIMESTEP_WIDTH = 100
     WORLD_SIZE = 2048
@@ -397,28 +395,17 @@ def _(get_trajectory_data):
 
 
 @app.cell
-def _(trajectory_dataframe):
+def _(CELL_NUMBER, TIMESTEPS, np, trajectory_dataframe):
     positions = trajectory_dataframe.sort_values(['particle', 'frame']).loc[:, ('x', 'y')]
-    return (positions,)
-
-
-@app.cell
-def _(positions):
-    positions.tail()
-    return
-
-
-@app.cell
-def _(CELL_NUMBER, TIMESTEPS, np, positions):
     position_array = np.array(positions).reshape(CELL_NUMBER, TIMESTEPS, 2)
-    return (position_array,)
+    return position_array, positions
 
 
 @app.cell
 def _(np, scipy):
     def get_model_mma(position_array):
         mean_minimum_approach = []
-    
+
         for id in range(position_array.shape[0]):
             # Results list:
             approaches = []
@@ -524,9 +511,9 @@ def _(np, position_array, scipy):
 
 
 @app.cell
-def _(get_model_mma, position_array):
-    mmas = get_model_mma(position_array[:, 1440:2880, :])
-    return (mmas,)
+def _():
+    # mmas = get_model_mma(position_array[:, 1440:2880, :])
+    return
 
 
 @app.cell
@@ -723,6 +710,228 @@ def _(np, plt, reg_distances):
 
 @app.cell
 def _():
+    # Analyse topological structure of trajectories:
+    return
+
+
+@app.cell
+def _(np, position_array):
+    import skimage
+
+    # Estimate from trajectory dataframe as test:
+    line_array = np.zeros((2048, 2048))
+    for _cell_index in range(position_array.shape[0]):
+        relevant_trajectory = position_array[_cell_index, 1440:, :]
+        for t in range(1440 - 1):
+            # Get indices of line:
+            xy_t = relevant_trajectory[t, :].astype(int)
+            xy_t1 = relevant_trajectory[t+1, :].astype(int)
+
+            # Account for periodic boundaries:
+            distance = np.sqrt(np.sum((xy_t - xy_t1)**2, axis=0))
+            if distance > 1024:
+                continue
+
+            # Plot line indices on matrix:
+            _rr, _cc = skimage.draw.line(*xy_t, *xy_t1)
+            line_array[_rr, _cc] = t + 1
+    return distance, line_array, relevant_trajectory, skimage, t, xy_t, xy_t1
+
+
+@app.cell
+def _(cc, line_array, plt, skimage):
+    _fig, _ax = plt.subplots(figsize=(7.5, 7.5), layout='constrained')
+
+    _ax.imshow(
+        skimage.morphology.dilation(line_array, skimage.morphology.disk(radius=4)),
+        cmap=cc.cm.CET_CBL2,
+        # interpolation='nearest'
+    )
+    _ax.set_xticks([])
+    _ax.set_yticks([])
+
+    plt.show()
+    return
+
+
+@app.cell
+def _(cc, line_array, np, plt, skimage):
+    import cv2
+
+    size = 750, 750
+    fps = 30
+    out = cv2.VideoWriter(
+        './cbl_video.mp4', cv2.VideoWriter_fourcc(*'avc1'),
+        fps, (size[1], size[0]), True
+    )
+
+    for timeframe in list(range(1440))[::10]:
+        if (timeframe) % 200 == 0:
+            print(timeframe)
+
+        timeframe_mask = line_array < timeframe
+        timeframe_array = np.zeros_like(line_array)
+        timeframe_array[timeframe_mask] = line_array[timeframe_mask]
+
+        vmin = np.max([0, timeframe-500])
+
+        _fig, _ax = plt.subplots(figsize=(7.5, 7.5), layout='constrained')
+        _ax.imshow(
+            skimage.morphology.dilation(
+                timeframe_array,
+                skimage.morphology.disk(radius=3)
+            ),
+            cmap=cc.cm.CET_CBL2,
+            vmin=vmin,
+            # interpolation='nearest'
+        )
+        _ax.set_xticks([])
+        _ax.set_yticks([])
+
+        # Export to array:
+        _fig.canvas.draw()
+        array_plot = np.array(_fig.canvas.renderer.buffer_rgba())
+        plt.close(_fig)
+
+        # Save array plot to opencv file:
+        bgr_data = cv2.cvtColor(array_plot, cv2.COLOR_RGB2BGR)
+        out.write(bgr_data)
+
+    out.release()
+    return (
+        array_plot,
+        bgr_data,
+        cv2,
+        fps,
+        out,
+        size,
+        timeframe,
+        timeframe_array,
+        timeframe_mask,
+        vmin,
+    )
+
+
+@app.cell
+def _(line_array, np, scipy):
+    transformed = scipy.ndimage.distance_transform_edt(np.logical_not(line_array))
+    return (transformed,)
+
+
+@app.cell
+def _(plt, transformed):
+    plt.imshow(transformed, interpolation='nearest')
+    return
+
+
+@app.cell
+def _(np, position_array, scipy, skimage):
+    def get_segment_voronoi():
+        # Estimate from trajectory dataframe as test:
+        full_distance_tensor = []
+        for cell_index in range(position_array.shape[0]):
+            relevant_trajectory = position_array[cell_index, 1440:, :]
+            line_array = np.zeros((2048, 2048))
+
+            # Plot trajectory onto array:
+            for t in range(1440 - 1):
+                # Get indices of line:
+                xy_t = np.floor(relevant_trajectory[t, :]).astype(int)
+                xy_t1 = np.floor(relevant_trajectory[t+1, :]).astype(int)
+
+                # Account for periodic boundaries:
+                distance = np.sqrt(np.sum((xy_t - xy_t1)**2, axis=0))
+                if distance > 1024:
+                    break
+
+                # Plot line indices on matrix:
+                rr, cc = skimage.draw.line(*xy_t, *xy_t1)
+                line_array[rr, cc] = 1
+
+            # Get watershed to line:
+            line_watershed = scipy.ndimage.distance_transform_edt(
+                np.logical_not(line_array)
+            )
+            full_distance_tensor.append(line_watershed)
+
+        return np.stack(full_distance_tensor, axis=0)
+
+
+    full_distance_tensor = get_segment_voronoi()
+    return full_distance_tensor, get_segment_voronoi
+
+
+@app.cell
+def _(full_distance_tensor, np):
+    raster_tesselation = np.zeros((2048, 2048))
+    minimum_distance_matrix = np.min(full_distance_tensor, axis=0)
+    cell_areas = []
+    for cell_id in range(full_distance_tensor.shape[0]):
+        voronoi_mask = full_distance_tensor[cell_id] == minimum_distance_matrix
+        voronoi_mask = np.logical_and(
+            voronoi_mask,
+            full_distance_tensor[cell_id] < 500
+        )
+        cell_areas.append(np.count_nonzero(voronoi_mask) / (2048*2048))
+        raster_tesselation[voronoi_mask] = np.count_nonzero(voronoi_mask)
+    return (
+        cell_areas,
+        cell_id,
+        minimum_distance_matrix,
+        raster_tesselation,
+        voronoi_mask,
+    )
+
+
+@app.cell
+def _(plt, raster_tesselation):
+    _fig, _ax = plt.subplots(figsize=(5, 5))
+    _ax.imshow(raster_tesselation, cmap="viridis", interpolation='nearest')
+    # _ax.imshow(line_array, alpha=line_array, cmap='binary')
+    return
+
+
+@app.cell
+def _(line_array, plt):
+    _fig, _ax = plt.subplots(figsize=(5, 5))
+    _ax.imshow(line_array, cmap='gray')
+    return
+
+
+@app.cell
+def _(cell_areas, np, plt):
+    plt.hist(np.array(cell_areas) / (2048 * 2048))
+    plt.show()
+    return
+
+
+@app.cell
+def _(cell_areas, np, plt, sim_nn_distance):
+    plt.scatter(np.array(cell_areas), sim_nn_distance)
+    return
+
+
+@app.cell
+def _(cell_areas, np, plt, sim_speed):
+    plt.scatter(np.array(cell_areas), sim_speed)
+    return
+
+
+@app.cell
+def _(cell_areas, np, plt, sim_mr):
+    plt.scatter(np.array(cell_areas), sim_mr)
+    return
+
+
+@app.cell
+def _(plt, sim_mr, sim_nn_distance):
+    plt.scatter(sim_nn_distance, sim_mr)
+    return
+
+
+@app.cell
+def _(cell_areas, np, plt, sim_speed):
+    plt.scatter(np.array(cell_areas), sim_speed)
     return
 
 

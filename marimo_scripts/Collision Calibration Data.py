@@ -8,17 +8,35 @@ app = marimo.App(width="columns")
 def _():
     import gpytorch
     import torch
+    import json
 
     import numpy as np
     import matplotlib.pyplot as plt
 
     from scipy import stats
     from torch.utils.data import TensorDataset, DataLoader
-    return DataLoader, TensorDataset, gpytorch, np, plt, stats, torch
+    return DataLoader, TensorDataset, gpytorch, json, np, plt, stats, torch
 
 
 @app.cell
 def _():
+    CONSTANT_PARAMETERS = {
+        "jobArrayID": 0,
+        "superIterationCount": 1,
+        "timestepsToRun": 2880,
+        "worldSize": 2048,
+        "gridSize": 64,
+        "dt": 1,
+        "thereIsMatrixInteraction": 1,
+        "matrixTurnoverRate": 0.05,
+        "matrixAdditionRate": 0.05,
+        "matrixAdvectionRate": 0.0,
+        "aspectRatio": 1,
+        # # Collision parameters:
+        # "collisionFlowReductionRate": 0,
+        # "collisionAdvectionRate": 0,
+    }
+
     GRIDSEARCH_PARAMETERS = {
         "cueDiffusionRate": [0.0001, 2.5],
         "cueKa": [0.0001, 5],
@@ -31,17 +49,45 @@ def _():
         # Collisions:
         "collisionFlowReductionRate": [0.0, 0.25],
         "collisionAdvectionRate": [0.0, 1.5],
+        # Shape:
+        "stretchFactor": [0.0, 7.5],
+        "slipFactor": [1e-5, 1e-2]
     }
-    return (GRIDSEARCH_PARAMETERS,)
+    return CONSTANT_PARAMETERS, GRIDSEARCH_PARAMETERS
+
+
+@app.cell
+def _(np):
+    det_collision_parameters = np.load(
+        "./gridsearch_data/out_wd_search_det_collisions/collated_inputs.npy"
+    )
+    det_collision_distances = np.load(
+        "./gridsearch_data/out_wd_search_det_collisions/collated_distances.npy"
+    )
+
+    _nan_mask = np.logical_or(
+        np.isnan(det_collision_distances[:, 0]),
+        np.any(det_collision_distances==0, axis=1)
+    )
+
+    det_collision_parameters = det_collision_parameters[~_nan_mask, :]
+    det_collision_distances = det_collision_distances[~_nan_mask, :]
+    return det_collision_distances, det_collision_parameters
+
+
+@app.cell
+def _(det_collision_distances, np):
+    print(np.min(det_collision_distances, axis=0))
+    return
 
 
 @app.cell
 def _(GRIDSEARCH_PARAMETERS, np):
     parameters = np.load(
-        "./gridsearch_data/out_wd_search_det_collisions/collated_inputs.npy"
+        "./gridsearch_data/td_distance/collated_inputs.npy"
     )
     distances = np.load(
-        "./gridsearch_data/out_wd_search_det_collisions/collated_distances.npy"
+        "./gridsearch_data/td_distance/collated_distances.npy"
     )
 
     print(np.count_nonzero(np.isnan(distances[:, 0])))
@@ -95,9 +141,11 @@ def _(distances, np):
 
 
 @app.cell
-def _(GRIDSEARCH_PARAMETERS, parameters):
-    print(list(zip(list(GRIDSEARCH_PARAMETERS.keys()), parameters[641, :])))
-    return
+def _(CONSTANT_PARAMETERS, GRIDSEARCH_PARAMETERS, json, parameters):
+    optim_params = dict(zip(list(GRIDSEARCH_PARAMETERS.keys()), parameters[6017, :]))
+    CONSTANT_PARAMETERS.update(optim_params)
+    print(json.dumps(CONSTANT_PARAMETERS, sort_keys=False, indent=4))
+    return (optim_params,)
 
 
 @app.cell
@@ -115,15 +163,15 @@ def _(distances, plt):
 
 @app.cell
 def _(GRIDSEARCH_PARAMETERS, distances, normalised_parameters, np, parameters):
-    CELL_INDEX = 5
+    CELL_INDEX = 4
 
     # Posterior for WT1:
-    mask = distances[:, CELL_INDEX] < np.quantile(distances[:, CELL_INDEX], 0.025)
+    mask = distances[:, CELL_INDEX] < np.quantile(distances[:, CELL_INDEX], 0.05)
     # mask = distances[:, 5] <= 0.0
 
     print(np.count_nonzero(mask))
     wt_posterior = normalised_parameters[mask, :]
-    wt_posterior = parameters[mask, :]
+    # wt_posterior = parameters[mask, :]
 
     argmins = np.argmin(distances, axis=0)
     mde = parameters[argmins[CELL_INDEX], :]
@@ -132,10 +180,19 @@ def _(GRIDSEARCH_PARAMETERS, distances, normalised_parameters, np, parameters):
     return CELL_INDEX, argmins, mask, mde, wt_posterior
 
 
-app._unparsable_cell(
-    r"""
-    }_fig, _axs = plt.subplots(
-        10, 10, figsize=(20, 20),
+@app.cell
+def _(
+    CELL_INDEX,
+    GRIDSEARCH_PARAMETERS,
+    distances,
+    mask,
+    mde,
+    np,
+    plt,
+    wt_posterior,
+):
+    _fig, _axs = plt.subplots(
+        12, 12, figsize=(20, 20),
         sharex='col',
         layout='constrained'
     )
@@ -147,14 +204,14 @@ app._unparsable_cell(
         for minmax, spacer in zip(ranges, range_spacing)
     ]
 
-    for _diagonal in range(10):
+    for _diagonal in range(12):
         _axs[_diagonal, _diagonal].hist(
             wt_posterior[:, _diagonal]
         )
         _axs[_diagonal, _diagonal].set_xlim(0, 1)
         _axs[_diagonal, _diagonal].set_ylim(None)
 
-    for i, j in zip(np.triu_indices(10, 1)[0], np.triu_indices(10, 1)[1]):
+    for i, j in zip(np.triu_indices(12, 1)[0], np.triu_indices(12, 1)[1]):
         # Upper diagonal:
         #  , c=distances[mask, 1]
         _axs[i, j].scatter(
@@ -180,9 +237,7 @@ app._unparsable_cell(
         _axs[j, i].set_ylabel(labels[j])
 
     plt.show()
-    """,
-    name="_"
-)
+    return axis_limits, i, j, labels, range_spacing, ranges
 
 
 @app.cell
