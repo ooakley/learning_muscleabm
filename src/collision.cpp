@@ -35,11 +35,11 @@ void CollisionCellList::removeFromCollisionMatrix(double x, double y, AgentPoint
 }
 
 std::vector<AgentPointer> CollisionCellList::getLocalAgents(double x, double y) {
-    // Instantianting result accumulator:
+    // Instantiante result accumulator:
     std::vector<AgentPointer> localAgents{};
     std::vector<int> indices{getIndexFromLocation(x, y)};
 
-    // Looping through neighbourhood:
+    // Loop through neighbourhood:
     for (int k = -1; k < 2; ++k) {
         for (int l = -1; l < 2; ++l) {
             int safeRow{rollOverIndex(indices[0] + k)};
@@ -61,7 +61,7 @@ int CollisionCellList::rollOverIndex(int index) const {
 }
 
 std::vector<int> CollisionCellList::getIndexFromLocation(double positionX, double positionY) {
-    // Getting indices:
+    // Get indices:
     int xIndex{int(std::floor(positionX / lengthCollisionElement))};
     int yIndex{int(std::floor(positionY / lengthCollisionElement))};
 
