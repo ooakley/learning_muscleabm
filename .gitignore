@@ -11,6 +11,7 @@ wetlab_data/
 */__pycache__/
 */__marimo__/
 */layouts/
+fileOut*
 
 # Compiled Object files
 *.slo
@@ -56,3 +57,5 @@ gridsearch.txt
 .vscode/*
 .cache/*
 outputs/*
+out*
+slurm*

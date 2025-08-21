@@ -1,6 +1,7 @@
 import numpy as np
 
-SAMPLE_COUNT = 10000
+SAMPLE_COUNT = 4096
+
 
 def main():
     print('Collating data...')

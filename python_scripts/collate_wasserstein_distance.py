@@ -1,13 +1,12 @@
 import argparse
-import json
 import os
 
 import numpy as np
-import numpy.lib as npl
 
 # SAMPLE_COUNT = 1000
 SAMPLE_COUNT = int(16384 / 2)
 SUPERITERATION_NUMBER = 1
+
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Process an outputs folder with a given name.')
@@ -25,16 +24,20 @@ def collate_data(args, out_filename, in_file):
     for folder_id in range(0, SAMPLE_COUNT):
         if (folder_id + 1) % 1000 == 0:
             print(folder_id + 1)
-        try: 
+        try:
             id_filepath = f'./{args.folder_name}/{folder_id}/{in_file}.npy'
             superiteration_averages = np.load(id_filepath)
-            if superiteration_averages.shape != (6,):
-                out_data.append(np.array([np.nan] * 6))
+            if superiteration_averages.shape != (6, 6):  # (CELL TYPE) X (SS DISTANCE)
+                blank_data = np.array([np.nan] * 36)
+                blank_data = np.reshape(blank_data, (6, 6))
+                out_data.append(blank_data)
             else:
                 out_data.append(superiteration_averages)
         except FileNotFoundError:
             print(f"No data file found at {folder_id}, appending NaN...")
-            out_data.append(np.array([np.nan] * 6))
+            blank_data = np.array([np.nan] * 36)
+            blank_data = np.reshape(blank_data, (6, 6))
+            out_data.append(blank_data)
 
     out_data = np.stack(out_data, axis=0)
     out_filepath = os.path.join(f"out_{args.output_name}", out_filename)
