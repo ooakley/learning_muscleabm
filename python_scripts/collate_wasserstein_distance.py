@@ -9,6 +9,7 @@ import numpy.lib as npl
 SAMPLE_COUNT = int(16384 / 2)
 SUPERITERATION_NUMBER = 1
 
+
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Process an outputs folder with a given name.')
     parser.add_argument('--folder_name', type=str, help='Folder name.')

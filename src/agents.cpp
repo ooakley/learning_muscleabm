@@ -220,9 +220,9 @@ void CellAgent::takeRandomStep() {
 
     // Collide with adjacent cells:
     collisionsThisTimepoint = 0;
-    // runDeterministicCollisionLogic();
+    runDeterministicCollisionLogic();
     // runCircularStochasticCollisionLogic();
-    runTrajectoryDependentCollisionLogic();
+    // runTrajectoryDependentCollisionLogic();
     finalCILEffectX = polarityChangeCilX;
     finalCILEffectY = polarityChangeCilY;
 
@@ -1036,11 +1036,17 @@ void CellAgent::runDeterministicCollisionLogic() {
 
         bool withinRadius{displacementActingToLocal < (2 * cellBodyRadius)};
         bool withinFront{std::abs(angleMod(angleActingToLocal-flowDirection)) < M_PI_2};
-
+        //  and withinFront
         // Collide if within radius:
-        if (withinRadius and withinFront) {
+        if (withinRadius) {
             // Record collision:
             collisionsThisTimepoint += 1;
+
+            // Get area of overlap:
+            double sagitta{cellBodyRadius - (displacementActingToLocal/2)};
+            double centralAngle{2*std::acos((cellBodyRadius - sagitta)/cellBodyRadius)};
+            double overlapArea{std::pow(cellBodyRadius, 2)*(centralAngle - std::sin(centralAngle))};
+            double overlapRatio{overlapArea / (0.25*M_PI*std::pow(cellBodyRadius, 2))};
 
             // Exert reduction in actin flow for acting cell:
             double angleOfRestitution{angleActingToLocal - M_PI};
@@ -1050,7 +1056,7 @@ void CellAgent::runDeterministicCollisionLogic() {
             if (componentOfActingFlowOntoCollision < 0) {
                 // Calculate change in actin flow:
                 double reductionInFlow{
-                    dt * collisionFlowReductionRate * flowMagnitude * std::abs(componentOfActingFlowOntoCollision)
+                    dt * collisionFlowReductionRate * flowMagnitude * std::abs(componentOfActingFlowOntoCollision) * overlapRatio
                 };
                 double cappedReductionInFlow{std::min(reductionInFlow, flowMagnitude * std::abs(componentOfActingFlowOntoCollision))};
                 double dxActinFlow{std::cos(angleOfRestitution) * cappedReductionInFlow};
@@ -1076,7 +1082,7 @@ void CellAgent::runDeterministicCollisionLogic() {
             if (componentOfLocalFlowOntoSample <= 0) {
                 // Calculate change in actin flow:
                 double reductionInFlow{
-                    dt * collisionFlowReductionRate * localFlowMagnitude * std::abs(componentOfLocalFlowOntoSample)
+                    dt * collisionFlowReductionRate * localFlowMagnitude * std::abs(componentOfLocalFlowOntoSample) * overlapRatio
                 };
                 double dxActinFlow{std::cos(angleActingToLocal) * reductionInFlow};
                 double dyActinFlow{std::sin(angleActingToLocal) * reductionInFlow};

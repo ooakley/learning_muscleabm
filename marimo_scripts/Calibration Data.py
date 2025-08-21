@@ -85,7 +85,7 @@ def _(distances, np):
 def _(distances, normalised_parameters, np):
     # Get appropriate values of epsilon:
     # Posterior for WT1:
-    mask = distances[:, 5] < np.quantile(distances[:, 5], 0.025)
+    mask = distances[:, 5] < np.quantile(distances[:, 5], 0.01)
     print(np.count_nonzero(mask))
     wt_posterior = normalised_parameters[mask, :]
     # wt_posterior = parameters[mask, :]
@@ -386,9 +386,11 @@ def _(
         tensor_input, mean_predictions = run_grad_inference(
             *model_tuple, _mde
         )
-    
+
         # Calculate hessian matrix:
-        _hessian = calculate_hessian(mean_predictions, tensor_input, create_graph=True)
+        _hessian = calculate_hessian(
+            mean_predictions, tensor_input, create_graph=True
+        )
         hessians.append(_hessian.detach().numpy().squeeze())
     return (
         hessians,

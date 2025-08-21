@@ -54,6 +54,8 @@ def get_trajectory_list_from_site(site_dataframe):
         x_pos = np.array(site_dataframe[particle_mask]["x"])
         y_pos = np.array(site_dataframe[particle_mask]["y"])
         frame_array = np.array(site_dataframe[particle_mask]["frame"])
+        if len(frame_array) < 500:
+            continue
         trajectory_list.append((frame_array, x_pos, y_pos))
 
     return trajectory_list
