@@ -1,6 +1,10 @@
 #pragma once
 #include <boost/numeric/ublas/matrix.hpp>
+#include <deque>
 namespace boostMatrix = boost::numeric::ublas;
+using FibreUnit = std::deque<float>;
+using FibreRow = std::vector<FibreUnit>;
+using FibreMatrix = std::vector<FibreRow>;
 
 class ECMField{
 public:
@@ -29,6 +33,8 @@ public:
         std::tuple<double, double> position, double cellHeading
     ) const;
 
+    std::tuple<double, double> sampleFibreMatrix(int i, int j);
+
     boostMatrix::matrix<double> getLocalMatrixHeading(std::tuple<double, double> position) const;
     boostMatrix::matrix<double> getLocalMatrixDensity(std::tuple<double, double> position) const;
 
@@ -40,6 +46,7 @@ public:
     // --- --- Matrix Setters:
     void setSubMatrix(int i, int j, double heading, double polarity, const boostMatrix::matrix<double>& kernel);
     void setIndividualECMLattice(int i, int j, double heading, double polarity, double weighting);
+    void addToFibreMatrix(int i, int j, double heading);
 
     // --- --- Collision Setters:
     void setCellPresence(std::tuple<double, double> position, int cellType, double cellHeading);
@@ -71,6 +78,9 @@ private:
     boostMatrix::matrix<int> cellType1CountMatrix;
 
     boostMatrix::matrix<double> cellHeadingMatrix;
+
+    // Alternative matrix deposition logic:
+    FibreMatrix fibreMatrix;
 
     // Simulation functions:
     void addToMatrix(int i, int j, double heading, double polarity, double kernelWeighting);

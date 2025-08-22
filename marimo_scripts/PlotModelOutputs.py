@@ -331,8 +331,8 @@ def _(get_trajectory_data, read_matrix_into_numpy):
 def _(TIMESTEPS, ecm_matrix, plot_superiteration, plt, trajectory_dataframe):
     _fig, _ax = plt.subplots(figsize=(10, 10))
     plot_superiteration(
-        trajectory_dataframe, ecm_matrix, TIMESTEPS-1, _ax, 83,
-        plot_matrix=False, plot_trajectories=True, plot_ellipses=False
+        trajectory_dataframe, ecm_matrix, TIMESTEPS-1, _ax, 60,
+        plot_matrix=True, plot_trajectories=True, plot_ellipses=True
     )
     plt.show()
     return
@@ -472,7 +472,7 @@ def _(
         _fig, _ax = plt.subplots(figsize=(7.5, 7.5), layout='constrained')
         plot_superiteration(
             trajectory_dataframe, ecm_matrix, timeframe, _ax, 36,
-            plot_matrix=False, plot_trajectories=False, plot_ellipses=True
+            plot_matrix=False, plot_trajectories=False, plot_ellipses=False
         )
 
         # Export to array:

@@ -115,7 +115,6 @@ void World::writeMatrixToCSV(std::ofstream& matrixFile) {
 void World::runSimulationStep() {
     // Shuffling acting order of cells:
     std::shuffle(std::begin(cellAgentVector), std::end(cellAgentVector), shuffleGenerator);
-
     // Looping through cells and running their behaviour:
     for (int i = 0; i < numberOfCells; ++i) {
         runCellStep(cellAgentVector[i]);
@@ -189,11 +188,24 @@ void World::runCellStep(std::shared_ptr<CellAgent> actingCell) {
     // Calculating matrix percept:
     std::vector<double> attachmentPoint{actingCell->sampleAttachmentPoint()};
     double cellDirection{actingCell->getActinFlowDirection()};
-    const auto [deltaHeading, localDensity] = getPerceptAtAttachment(attachmentPoint, cellDirection);
-    assert(localDensity < 1);
+    bool useDetailedFibreSimulation{true};
 
-    // Setting percepts of local matrix:
-    if (thereIsMatrixInteraction) {
+    if (!useDetailedFibreSimulation) {
+        const auto [deltaHeading, localDensity] = getPerceptAtAttachment(attachmentPoint, cellDirection);
+        assert(localDensity < 1);
+
+        // Setting percepts of local matrix:
+        if (thereIsMatrixInteraction) {
+            actingCell->setDirectionalInfluence(deltaHeading);
+            actingCell->setDirectionalIntensity(localDensity);
+            actingCell->setLocalECMDensity(localDensity);
+        }
+    } else {
+        const auto [iECM, jECM] = getECMIndexFromLocation({attachmentPoint[0], attachmentPoint[1]});
+        const auto [iSafe, jSafe] = rollIndex(iECM, jECM);
+        const auto [ecmHeading, localDensity] = ecmField.sampleFibreMatrix(iSafe, jSafe);
+        double deltaHeading{calculateCellDeltaTowardsECM(ecmHeading, cellDirection)};
+
         actingCell->setDirectionalInfluence(deltaHeading);
         actingCell->setDirectionalIntensity(localDensity);
         actingCell->setLocalECMDensity(localDensity);
@@ -214,11 +226,17 @@ void World::runCellStep(std::shared_ptr<CellAgent> actingCell) {
     double angleFromCellToAttachment{std::atan2(dy, dx)};
 
     // double attachmentWeighting{1.0 / attachmentNumber};
-    depositAtAttachment(
-        attachmentPoint,
-        actingCell->getActinFlowDirection(), 1,
-        1
-    );
+    if (!useDetailedFibreSimulation) {
+        depositAtAttachment(
+            attachmentPoint,
+            actingCell->getActinFlowDirection(), 1,
+            1
+        );
+    } else {
+        const auto [iECM, jECM] = getECMIndexFromLocation({attachmentPoint[0], attachmentPoint[1]});
+        const auto [iSafe, jSafe] = rollIndex(iECM, jECM);
+        ecmField.addToFibreMatrix(iSafe, jSafe, actingCell->getActinFlowDirection());
+    }
 
     // Rollover the cell if out of bounds:
     actingCell->setPosition(rollPosition(cellFinish));
