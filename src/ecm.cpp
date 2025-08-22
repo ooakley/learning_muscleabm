@@ -1,9 +1,14 @@
 #include "ecm.h"
 #include <cmath>
 #include <boost/numeric/ublas/matrix.hpp>
-
+#include <deque>
 #include <iostream>
+#include <random>
+
 namespace boostMatrix = boost::numeric::ublas;
+using FibreUnit = std::deque<float>;
+using FibreRow = std::vector<FibreUnit>;
+using FibreMatrix = std::vector<FibreRow>;
 
 // Constructor:
 ECMField::ECMField(
@@ -25,6 +30,15 @@ ECMField::ECMField(
     , matrixTurnoverRate{setMatrixTurnoverRate}
     , matrixAdditionRate{setMatrixAdditionRate}
 {
+    // Initialise the fibre matrix:
+    for (int i = 0; i < matrixElementCount; ++i) {
+        FibreRow rowConstruct{};
+        for (int j = 0; j < matrixElementCount; ++j) {
+            FibreUnit emptyUnit;
+            rowConstruct.push_back(emptyUnit);
+        }
+        fibreMatrix.push_back(rowConstruct);
+    }
 }
 
 // Getters:
@@ -43,7 +57,7 @@ double ECMField::getHeading(int i, int j) const {
 double ECMField::getMatrixDensity(std::tuple<double, double> position) const {
     auto [i, j] = getMatrixIndexFromLocation(position);
     double indexedDensity{ecmDensityMatrix(i, j)};
-    if (indexedDensity >= 1) {
+    if (indexedDensity > 1) {
         std::cout << "indexedDensity: " << indexedDensity << std::endl;
         assert(indexedDensity < 1);
     };
@@ -51,7 +65,7 @@ double ECMField::getMatrixDensity(std::tuple<double, double> position) const {
 }
 double ECMField::getMatrixDensity(int i, int j) const {
     double indexedDensity{ecmDensityMatrix(i, j)};
-    if (indexedDensity >= 1) {
+    if (indexedDensity > 1) {
         std::cout << "indexedDensity: " << indexedDensity << std::endl;
         assert(indexedDensity < 1);
     };
@@ -117,6 +131,24 @@ std::tuple<double, double> ECMField::getAverageDeltaHeadingAroundPosition(
     double angleIntensity{std::sqrt(std::pow(sineMean, 2) + std::pow(cosineMean, 2))};
     return {angleAverage, angleIntensity};
 }
+
+std::tuple<double, double> ECMField::sampleFibreMatrix(int i, int j) {
+    // Return 0 density if no fibers present:
+    assert(0 <= i & i < matrixElementCount);
+    assert(0 <= j & j < matrixElementCount);
+    int sampleSize{static_cast<int>(fibreMatrix[i][j].size())};
+    if (sampleSize == 0) {
+        return {0, 0};
+    }
+
+    // Return 1 density if fibers present:
+    std::uniform_int_distribution<> indexDistribution(0, sampleSize-1);
+    std::random_device randomDeviceInitialiser;
+    std::mt19937 generator(randomDeviceInitialiser());
+    int sampledIndex{indexDistribution(generator)};
+    double sampledFibreHeading{fibreMatrix[i][j][sampledIndex]};
+    return {sampledFibreHeading, 1};
+};
 
 boostMatrix::matrix<bool> ECMField::getCellTypeContactState(
     std::tuple<double, double> position, int cellType
@@ -277,6 +309,20 @@ void ECMField::setSubMatrix(
 
 void ECMField::setIndividualECMLattice(int i, int j, double heading, double polarity, double weighting) {
     addToMatrix(i, j, heading, polarity, weighting);
+}
+
+void ECMField::addToFibreMatrix(int i, int j, double heading) {
+    assert(0 <= i & i < matrixElementCount);
+    assert(0 <= j & j < matrixElementCount);
+    // Add to fibre matrix:
+    double nematicHeading{heading};
+    while (nematicHeading < 0) {nematicHeading += M_PI;}
+    fibreMatrix[i][j].push_back(nematicHeading);
+
+    // Age fibre unit:
+    if (fibreMatrix[i][j].size() >= 1000) {
+        fibreMatrix[i][j].pop_front();
+    }
 }
 
 void ECMField::setCellPresence(std::tuple<double, double> position, int cellType, double cellHeading) {

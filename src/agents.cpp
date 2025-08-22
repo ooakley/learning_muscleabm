@@ -1046,7 +1046,7 @@ void CellAgent::runDeterministicCollisionLogic() {
             double sagitta{cellBodyRadius - (displacementActingToLocal/2)};
             double centralAngle{2*std::acos((cellBodyRadius - sagitta)/cellBodyRadius)};
             double overlapArea{std::pow(cellBodyRadius, 2)*(centralAngle - std::sin(centralAngle))};
-            double overlapRatio{overlapArea / (0.25*M_PI*std::pow(cellBodyRadius, 2))};
+            double overlapRatio{overlapArea / (0.5*M_PI*std::pow(cellBodyRadius, 2))};
 
             // Exert reduction in actin flow for acting cell:
             double angleOfRestitution{angleActingToLocal - M_PI};

@@ -37,46 +37,17 @@ def _():
     }
 
     GRIDSEARCH_PARAMETERS = {
-        "cueDiffusionRate": [
-            0.0001,
-            2.5
-        ],
-        "cueKa": [
-            0.0001,
-            5
-        ],
-        "fluctuationAmplitude": [
-            5e-05,
-            0.1
-        ],
-        "fluctuationTimescale": [
-            1,
-            20
-        ],
-        "maximumSteadyStateActinFlow": [
-            0.0,
-            3
-        ],
-        "numberOfCells": [
-            75,
-            250
-        ],
-        "actinAdvectionRate": [
-            0.0,
-            3
-        ],
-        "cellBodyRadius": [
-            15,
-            100
-        ],
-        "collisionFlowReductionRate": [
-            0.0,
-            1
-        ],
-        "collisionAdvectionRate": [
-            0.0,
-            1.5
-        ]
+        "cueDiffusionRate": [0.0001, 2.5],
+        "cueKa": [0.0001, 5],
+        "fluctuationAmplitude": [1e-5, 1e-2],
+        "fluctuationTimescale": [1, 20],
+        "maximumSteadyStateActinFlow": [0.0, 3],
+        "numberOfCells": [75, 175],
+        "actinAdvectionRate": [0.0, 3],
+        "cellBodyRadius": [5, 75],
+        # Collisions:
+        "collisionFlowReductionRate": [0.0, 1],
+        "collisionAdvectionRate": [0.0, 1.5],
     }
     return CONSTANT_PARAMETERS, GRIDSEARCH_PARAMETERS
 
@@ -84,18 +55,23 @@ def _():
 @app.cell
 def _(GRIDSEARCH_PARAMETERS, np):
     parameters = np.load(
-        "./gridsearch_data/out_20250821NoMatrix/collated_inputs.npy"
+        "./gridsearch_data/out_20250822CFSearch/collated_inputs.npy"
     )
     distances = np.load(
-        "./gridsearch_data/out_20250821NoMatrix/collated_distances.npy"
+        "./gridsearch_data/out_20250822CFSearch/collated_distances.npy"
     )
     order_parameters = np.load(
-        "./gridsearch_data/out_20250821NoMatrix/collated_order_parameters.npy"
+        "./gridsearch_data/out_20250822CFSearch/collated_order_parameters.npy"
     )
     speeds = np.load(
-        "./gridsearch_data/out_20250821NoMatrix/collated_magnitudes.npy"
+        "./gridsearch_data/out_20250822CFSearch/collated_magnitudes.npy"
     )
-
+    coherency_fractions = np.load(
+        "./gridsearch_data/out_20250822CFSearch/coherency_fractions.npy"
+    )
+    ann_indices = np.load(
+        "./gridsearch_data/out_20250822CFSearch/ann_indices.npy"
+    )
 
 
     _nan_mask = np.any(np.isnan(distances), axis=(1, 2))
@@ -103,6 +79,8 @@ def _(GRIDSEARCH_PARAMETERS, np):
     nan_parameters = parameters[_nan_mask, :]
     parameters = parameters[~_nan_mask, :]
     distances = distances[~_nan_mask, :]
+    coherency_fractions = coherency_fractions[~_nan_mask, :]
+    ann_indices = ann_indices[~_nan_mask, :]
     order_parameters = order_parameters[~_nan_mask, 0]
     speeds = speeds[~_nan_mask, 0]
 
@@ -118,6 +96,8 @@ def _(GRIDSEARCH_PARAMETERS, np):
     # euclidean_distances = np.sqrt(np.sum(distances[:, :, :]**2, axis=2))
     euclidean_distances = np.sum(np.log(distances), axis=2)
     return (
+        ann_indices,
+        coherency_fractions,
         distances,
         euclidean_distances,
         index,
@@ -131,9 +111,75 @@ def _(GRIDSEARCH_PARAMETERS, np):
 
 
 @app.cell
-def _(order_parameters, plt):
-    plt.hist(order_parameters);
+def _(coherency_fractions):
+    coherency_fractions
+    return
+
+
+@app.cell
+def _(coherency_fractions, np, plt):
+    plt.hist(np.mean(coherency_fractions, axis=1));
     plt.show()
+    return
+
+
+@app.cell
+def _(ann_indices, coherency_fractions, np, speeds):
+    mean_coherency = np.mean(coherency_fractions, axis=1)
+    mean_anni = np.mean(ann_indices, axis=1)
+
+    mask_coherency = 0.05 < mean_coherency
+    mask_anni = np.logical_and(1.2 < mean_anni, mean_anni < 1.5)
+    mask_speed = speeds < 0.75
+    full_mask = np.all(
+        np.stack([mask_coherency, mask_anni, mask_speed], axis=1),
+        axis=1
+    )
+    np.argwhere(full_mask)
+    return (
+        full_mask,
+        mask_anni,
+        mask_coherency,
+        mask_speed,
+        mean_anni,
+        mean_coherency,
+    )
+
+
+@app.cell
+def _(mean_anni, np):
+    np.argwhere(mean_anni < 0.5)
+    return
+
+
+@app.cell
+def _(coherency_fractions, plt):
+    plt.hist(coherency_fractions.flatten());
+    plt.show()
+    return
+
+
+@app.cell
+def _(ann_indices, coherency_fractions, np, plt):
+    plt.scatter(
+        np.mean(coherency_fractions, axis=1),
+        np.mean(ann_indices, axis=1)
+    )
+    return
+
+
+@app.cell
+def _(ann_indices, coherency_fractions, np, plt):
+    plt.scatter(
+        np.mean(coherency_fractions, axis=1),
+        np.mean(ann_indices, axis=1)
+    )
+    return
+
+
+@app.cell
+def _(coherency_fractions, np):
+    np.argmax(np.mean(coherency_fractions, axis=1))
     return
 
 
@@ -154,63 +200,6 @@ def _(GRIDSEARCH_PARAMETERS, index, nan_parameters, np, plt):
         norm_nan_parameters[:, _index] = \
             (nan_parameters[:, index] - _minimum) / (_maximum - _minimum)
     return axs, fig, norm_nan_parameters
-
-
-@app.cell
-def _(GRIDSEARCH_PARAMETERS, norm_nan_parameters, np, plt):
-    def _():
-        parameter_count = len(GRIDSEARCH_PARAMETERS)
-        _fig, _axs = plt.subplots(
-            parameter_count, parameter_count, figsize=(20, 20),
-            sharex='col',
-            layout='constrained'
-        )
-        ranges = list(GRIDSEARCH_PARAMETERS.values())
-        labels = list(GRIDSEARCH_PARAMETERS.keys())
-        range_spacing = [(max - min)*0.1 for min, max in ranges]
-        axis_limits = [
-            (minmax[0] - spacer, minmax[1] + spacer)
-            for minmax, spacer in zip(ranges, range_spacing)
-        ]
-
-        for _diagonal in range(parameter_count):
-            _axs[_diagonal, _diagonal].hist(
-                norm_nan_parameters[:, _diagonal],
-                range=(0,1), bins=20
-            )
-            _axs[_diagonal, _diagonal].set_xlim(-0.1, 1.1)
-            _axs[_diagonal, _diagonal].set_ylim(None)
-
-        for i, j in zip(
-            np.triu_indices(parameter_count, 1)[0],
-            np.triu_indices(parameter_count, 1)[1]
-        ):
-            # Upper diagonal:
-            #  , c=distances[mask, 1]
-            _axs[i, j].scatter(
-                norm_nan_parameters[:, j], norm_nan_parameters[:, i],
-                s=10, edgecolor='None'
-            )
-            _axs[i, j].set_xlim(-0.1, 1.1)
-            _axs[i, j].set_ylim(-0.1, 1.1)
-
-            _axs[i, j].set_xlabel(labels[j])
-            _axs[i, j].set_ylabel(labels[i])
-
-            # Lower diagonal:
-            _axs[j, i].scatter(
-                norm_nan_parameters[:, i], norm_nan_parameters[:, j],
-                s=10, edgecolor='None'
-            )
-            _axs[j, i].set_xlim(-0.1, 1.1)
-            _axs[j, i].set_ylim(-0.1, 1.1)
-            _axs[j, i].set_xlabel(labels[i])
-            _axs[j, i].set_ylabel(labels[j])
-        return plt.show()
-
-
-    _()
-    return
 
 
 @app.cell
@@ -295,7 +284,7 @@ def _(euclidean_distances, mask, plt):
 def _(CONSTANT_PARAMETERS, GRIDSEARCH_PARAMETERS, json, parameters):
     optim_params = dict(zip(
         list(GRIDSEARCH_PARAMETERS.keys()),
-        parameters[5899, :]
+        parameters[5202, :]
     ))
     CONSTANT_PARAMETERS.update(optim_params)
     print(json.dumps(CONSTANT_PARAMETERS, sort_keys=False, indent=4))
@@ -310,7 +299,7 @@ def _(
     normalised_parameters,
     np,
 ):
-    CELL_INDEX = 0
+    CELL_INDEX = 5
 
     # Posterior for WT1:
     # mask = euclidean_distances[:, CELL_INDEX] \
@@ -319,10 +308,10 @@ def _(
     # mask = np.all(distances[:, CELL_INDEX, :3] < 0.8, axis=1)
 
     distance_quantiles = np.quantile(
-        distances[:, CELL_INDEX, :2],
+        distances[:, CELL_INDEX, :3],
         0.05, axis=0
     )
-    quantile_check = distances[:, CELL_INDEX, :2] < distance_quantiles 
+    quantile_check = distances[:, CELL_INDEX, :3] < distance_quantiles 
     mask = np.all(quantile_check, axis=1)
     print(np.argwhere(mask))
 
@@ -407,6 +396,88 @@ def _(
 
     plt.show()
     return axis_limits, i, j, labels, parameter_count, range_spacing, ranges
+
+
+@app.cell
+def _(CELL_INDEX, distances, np):
+    def get_nroy():
+        nroy_dataset = []
+        for cell_index in range(6):
+            distance_quantiles = np.quantile(
+                distances[:, cell_index, :3],
+                0.1, axis=0
+            )
+            quantile_check = distances[:, CELL_INDEX, :3] < distance_quantiles 
+            mask = np.all(quantile_check, axis=1)
+            nroy_dataset.extend(np.argwhere(mask))
+    
+        return np.array(nroy_dataset)
+
+    nroy_dataset = get_nroy()
+    return get_nroy, nroy_dataset
+
+
+@app.cell
+def _(normalised_parameters, np, nroy_dataset):
+    nroy_posterior = np.squeeze(normalised_parameters[nroy_dataset, :])
+    return (nroy_posterior,)
+
+
+@app.cell
+def _(GRIDSEARCH_PARAMETERS, np, nroy_posterior, plt):
+    def _():
+        parameter_count = len(GRIDSEARCH_PARAMETERS)
+        _fig, _axs = plt.subplots(
+            parameter_count, parameter_count, figsize=(20, 20),
+            sharex='col',
+            layout='constrained'
+        )
+        ranges = list(GRIDSEARCH_PARAMETERS.values())
+        labels = list(GRIDSEARCH_PARAMETERS.keys())
+        range_spacing = [(max - min)*0.1 for min, max in ranges]
+        axis_limits = [
+            (minmax[0] - spacer, minmax[1] + spacer)
+            for minmax, spacer in zip(ranges, range_spacing)
+        ]
+
+        for _diagonal in range(parameter_count):
+            _axs[_diagonal, _diagonal].hist(
+                nroy_posterior[:, _diagonal],
+                range=(0,1), bins=10
+            )
+            _axs[_diagonal, _diagonal].set_xlim(0, 1)
+            _axs[_diagonal, _diagonal].set_ylim(None)
+
+        for i, j in zip(
+            np.triu_indices(parameter_count, 1)[0],
+            np.triu_indices(parameter_count, 1)[1]
+        ):
+            # Upper diagonal:
+            #  , c=distances[mask, 1]
+            _axs[i, j].scatter(
+                nroy_posterior[:, j], nroy_posterior[:, i],
+                s=10, edgecolor='None'
+            )
+            _axs[i, j].set_xlim(0, 1)
+            _axs[i, j].set_ylim(0, 1)
+
+            _axs[i, j].set_xlabel(labels[j])
+            _axs[i, j].set_ylabel(labels[i])
+
+            # Lower diagonal:
+            _axs[j, i].scatter(
+                nroy_posterior[:, i], nroy_posterior[:, j],
+                s=10, edgecolor='None'
+            )
+            _axs[j, i].set_xlim(0, 1)
+            _axs[j, i].set_ylim(0, 1)
+            _axs[j, i].set_xlabel(labels[i])
+            _axs[j, i].set_ylabel(labels[j])
+    
+        plt.show()
+
+    _()
+    return
 
 
 @app.cell

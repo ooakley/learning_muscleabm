@@ -6,98 +6,29 @@ protected:
     void SetUp() override {
         // Basic cell agent:
         cellAgent = new CellAgent(
-            // Defined behaviour parameters:
-            false, 1, 1,
-
-            // Movement parameters:
-            0.5, 0.5,
-            0.5, 0.5,
-            0.5,
-
-            // Polarisation parameters:
-            0.5,
-            0.5,
-            0.5,
-
-            // Matrix sensation parameters:
-            0.5, 
-            0.5,
-
-            // Collision parameters:
-            0.5,
-            0.5,
-            0.5,
-            0.5,
-
-            // Randomised initial state parameters:
-            1., 1., 1.,
-
-            // Binary simulation parameters (deterministic):
-            1, 1, 1, 1, 1
+            0, 1, 1,
+            1, 1, 1, 1, 1, 1, 1, 1,
+            1, 1, 1,
+            1, 1,
+            0, 0, 0
         );
 
         // Cell agent with the same random seed:
         cellAgentAlt = new CellAgent(
-            // Defined behaviour parameters:
-            false, 1, 1,
-
-            // Movement parameters:
-            0.5, 0.5,
-            0.5, 0.5,
-            0.5,
-
-            // Polarisation parameters:
-            0.5,
-            0.5,
-            0.5,
-
-            // Matrix sensation parameters:
-            0.5, 
-            0.5,
-
-            // Collision parameters:
-            0.5,
-            0.5,
-            0.5,
-            0.5,
-
-            // Randomised initial state parameters:
-            1., 1., 1.,
-
-            // Binary simulation parameters (deterministic):
-            1, 1, 1, 1, 1
+            0, 1, 1,
+            1, 1, 1, 1, 1, 1, 1, 1,
+            1, 1, 1,
+            1, 1,
+            0, 0, 0
         );
 
         // Cell agent with a different random seed:
         cellAgentDifferent = new CellAgent(
-            // Defined behaviour parameters:
-            false, 2, 1,
-
-            // Movement parameters:
-            0.5, 0.5,
-            0.5, 0.5,
-            0.5,
-
-            // Polarisation parameters:
-            0.5,
-            0.5,
-            0.5,
-
-            // Matrix sensation parameters:
-            0.5, 
-            0.5,
-
-            // Collision parameters:
-            0.5,
-            0.5,
-            0.5,
-            0.5,
-
-            // Randomised initial state parameters:
-            1., 1., 1.,
-
-            // Binary simulation parameters (deterministic):
-            1, 1, 1, 1, 1
+            1, 1, 1,
+            1, 1, 1, 1, 1, 1, 1, 1,
+            1, 1, 1,
+            1, 1,
+            0, 0, 0
         );
     }
 
