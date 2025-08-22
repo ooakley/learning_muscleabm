@@ -1,6 +1,7 @@
 """A script to run the simulation based on a set of parameters in a .json file."""
 # flake8: noqa: E501
 # ^ disabling line length linting warnings.
+import time
 import argparse
 import os
 import json
@@ -14,6 +15,7 @@ def parse_arguments():
 
 
 def main():
+    start_time = time.time()
     args = parse_arguments()
 
     with open(args.path_to_config, 'r') as file:
@@ -26,33 +28,14 @@ def main():
         argument_string = f"--{key} {value} "
         full_command += argument_string
 
-    # run_command = \
-    #     f"./build/src/main \
-    #     --jobArrayID {parameter_dictionary['jobArrayID']} \
-    #     --superIterationCount {parameter_dictionary['superIterationCount']} \
-    #     --timestepsToRun {parameter_dictionary['timestepsToRun']} \
-    #     --numberOfCells {parameter_dictionary['numberOfCells']} \
-    #     --worldSize {parameter_dictionary['worldSize']} \
-    #     --gridSize {parameter_dictionary['gridSize']} \
-    #     --matrixTurnoverRate {parameter_dictionary['matrixTurnoverRate']} \
-    #     --matrixAdditionRate {parameter_dictionary['matrixAdditionRate']} \
-    #     --thereIsMatrixInteraction {parameter_dictionary['thereIsMatrixInteraction']} \
-    #     --dt {parameter_dictionary['dt']} \
-    #     --cueDiffusionRate {parameter_dictionary['cueDiffusionRate']} \
-    #     --cueKa {parameter_dictionary['cueKa']} \
-    #     --fluctuationAmplitude {parameter_dictionary['fluctuationAmplitude']} \
-    #     --fluctuationTimescale {parameter_dictionary['fluctuationTimescale']} \
-    #     --actinAdvectionRate {parameter_dictionary['actinAdvectionRate']} \
-    #     --matrixAdvectionRate {parameter_dictionary['matrixAdvectionRate']} \
-    #     --collisionAdvectionRate {parameter_dictionary['collisionAdvectionRate']} \
-    #     --maximumSteadyStateActinFlow {parameter_dictionary['maximumSteadyStateActinFlow']} \
-    #     --cellBodyRadius {parameter_dictionary['cellBodyRadius']} \
-    #     --aspectRatio {parameter_dictionary['aspectRatio']} \
-    #     --collisionFlowReductionRate {parameter_dictionary['collisionFlowReductionRate']} \
-    #     "
-
     print(full_command)
     os.system(full_command)
+
+    text_filepath = os.path.join(os.path.dirname(args.path_to_config), "sim_time.txt")
+    with open(text_filepath, 'w') as output:
+        time_taken = str(time.time() - start_time)
+        output.write(time_taken)
+
     return None
 
 

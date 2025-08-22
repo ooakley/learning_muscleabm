@@ -21,6 +21,7 @@ OUTPUT_COLUMN_NAMES = [
     "sampled_angle"
 ]
 
+
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Process a folder with a given integer name.')
     parser.add_argument('--folder_id', type=int, help='Integer corresponding to the folder name')
@@ -70,11 +71,12 @@ def main():
 
         # Reshape into (CELL_NUM, TIMESTEPS) arrays:
         # Averaging over cells in a particular superiteration:
-        try: 
+        try:
             actin_magnitude = np.reshape(actin_magnitude, (cell_number, timesteps))
             collisions = np.reshape(collisions, (cell_number, timesteps))
         except ValueError as ve:
             print(f"Something has gone wrong with the outputs for this subiteration: {seed}")
+            print(ve)
             print("Skipping for now...")
             continue
 
@@ -84,8 +86,8 @@ def main():
         # Get change in angle & average over cells in superiteration:
         actin_direction = np.reshape(actin_direction, (cell_number, timesteps))
         angle_change = np.diff(actin_direction, axis=1)
-        angle_change[angle_change > np.pi] -= 2*np.pi
-        angle_change[angle_change < -np.pi] += 2*np.pi
+        angle_change[angle_change > np.pi] -= 2 * np.pi
+        angle_change[angle_change < -np.pi] += 2 * np.pi
         dtheta = np.abs(angle_change)
         mean_dtheta = np.mean(dtheta, axis=0)
 

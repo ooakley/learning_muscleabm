@@ -33,7 +33,7 @@ OUTPUT_COLUMN_NAMES = [
 ]
 
 TIME_WEIGHTING = 2880 / 1440
-TRAJECTORY_INTERACTION_DISTANCE = 75
+TRAJECTORY_INTERACTION_DISTANCE = 150
 
 
 def parse_arguments():
@@ -491,11 +491,12 @@ def main():
     # Define variables needed for matrix reshaping later on:
     # timesteps = simulation_arguments["timestepsToRun"]
     cell_number = simulation_arguments["numberOfCells"]
-    superiteration_number = simulation_arguments["superIterationCount"]
+    # superiteration_number = simulation_arguments["superIterationCount"]
 
     # Loop through subiterations:
     simulation_dataframes = []
-    for seed in range(superiteration_number):
+    # for seed in range(superiteration_number):
+    for seed in range(12):
         # Read dataframe into memory:
         print(f"Reading and analysing subiteration {seed}...")
         filename = f"positions_seed{seed:03d}.csv"

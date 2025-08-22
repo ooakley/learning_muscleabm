@@ -1,14 +1,13 @@
 import argparse
-import json
 import os
 
 import numpy as np
-import numpy.lib as npl
 
-SAMPLE_COUNT = 10000
+SAMPLE_COUNT = int(16384 / 2)
 # SAMPLE_COUNT = 50
-TIMESTEPS = 1440
-SUPERITERATION_NUMBER = 50
+TIMESTEPS = 2880
+SUPERITERATION_NUMBER = 12
+
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Process an outputs folder with a given name.')
@@ -27,25 +26,29 @@ def collate_data(args, out_filename, in_file):
         if (folder_id + 1) % 1000 == 0:
             print(folder_id + 1)
         id_filepath = f'./{args.folder_name}/{folder_id}/{in_file}.npy'
-        superiteration_averages = np.load(id_filepath)
+        try:
+            superiteration_averages = np.load(id_filepath)
 
-        # Assert that matrices have expected dimesions:
-        if in_file == "dtheta_cellmeans":
-            if superiteration_averages.shape != (SUPERITERATION_NUMBER, TIMESTEPS-1):
-                print(folder_id)
-                assert superiteration_averages.shape == (SUPERITERATION_NUMBER, TIMESTEPS-1)
-        else:
-            if superiteration_averages.shape != (SUPERITERATION_NUMBER, TIMESTEPS):
-                print(folder_id)
-                assert superiteration_averages.shape == (SUPERITERATION_NUMBER, TIMESTEPS)
+            # Assert that matrices have expected dimesions:
+            if in_file == "dtheta_cellmeans":
+                if superiteration_averages.shape != (SUPERITERATION_NUMBER, TIMESTEPS - 1):
+                    print(folder_id)
+                    assert superiteration_averages.shape == (SUPERITERATION_NUMBER, TIMESTEPS - 1)
+            else:
+                if superiteration_averages.shape != (SUPERITERATION_NUMBER, TIMESTEPS):
+                    print(folder_id)
+                    assert superiteration_averages.shape == (SUPERITERATION_NUMBER, TIMESTEPS)
 
-        stationary_mean = np.mean(superiteration_averages[:, 1000:], axis=1)
-        # ^ of shape (SUPERITERATIONS)
+            stationary_mean = np.mean(superiteration_averages[:, 1440:], axis=1)
+            # ^ of shape (SUPERITERATIONS)
 
-        # Get mean and standard deviation over simulation runs:
-        overall_mean = np.mean(stationary_mean, axis=0)
-        overall_std = np.std(stationary_mean, axis=0)
-        out_data.append([overall_mean, overall_std])
+            # Get mean and standard deviation over simulation runs:
+            overall_mean = np.mean(stationary_mean, axis=0)
+            overall_std = np.std(stationary_mean, axis=0)
+            out_data.append([overall_mean, overall_std])
+        except:
+            print(f"Empty or incorrect data encountered at {folder_id}, skipping...")
+            out_data.append([np.nan, np.nan])
 
     out_data = np.stack(out_data, axis=0)
     out_filepath = os.path.join(f"out_{args.output_name}", out_filename)

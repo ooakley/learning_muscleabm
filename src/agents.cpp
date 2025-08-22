@@ -321,28 +321,28 @@ void CellAgent::takeRandomStep() {
     addToPositionHistory(x, y);
     addToMovementHistory(std::cos(flowDirection), std::sin(flowDirection));
 
-    // Age stadium attachment:
-    double lengthScale{cellBodyRadius*stretchFactor};
-    double stretchDistance{std::sqrt(
-        std::pow(x - stadiumX, 2) + 
-        std::pow(y - stadiumY, 2)
-    )};
-    double slipRate{
-        1 - std::exp(-stretchDistance / lengthScale)
-    };
-    double randomDeterminant{uniformDistribution(generatorInfluence)};
-    if (randomDeterminant < slipFactor*slipRate) {
-        // Update stadium point:
-        const auto [sampledIndex, newStadiumX, newStadiumY] = samplePositionHistory();
-        stadiumX = newStadiumX;
-        stadiumY = newStadiumY;
+    // // Age stadium attachment:
+    // double lengthScale{cellBodyRadius*stretchFactor};
+    // double stretchDistance{std::sqrt(
+    //     std::pow(x - stadiumX, 2) + 
+    //     std::pow(y - stadiumY, 2)
+    // )};
+    // double slipRate{
+    //     1 - std::exp(-stretchDistance / lengthScale)
+    // };
+    // double randomDeterminant{uniformDistribution(generatorInfluence)};
+    // if (randomDeterminant < slipFactor*slipRate) {
+    //     // Update stadium point:
+    //     const auto [sampledIndex, newStadiumX, newStadiumY] = samplePositionHistory();
+    //     stadiumX = newStadiumX;
+    //     stadiumY = newStadiumY;
 
-        // Truncate history to new point:
-        for (int i{0}; i < sampledIndex; ++i) {
-            xPositionHistory.pop_front();
-            yPositionHistory.pop_front();
-        }
-    }
+    //     // Truncate history to new point:
+    //     for (int i{0}; i < sampledIndex; ++i) {
+    //         xPositionHistory.pop_front();
+    //         yPositionHistory.pop_front();
+    //     }
+    // }
 
     // Zero out CIL effects:
     polarityChangeCilX = 0.0;

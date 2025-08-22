@@ -5,7 +5,7 @@ import json
 from scipy.stats import qmc
 
 # Defines the parameter ranges, with [start, stop]:
-NUM_SAMPLES_EXPONENT = 3
+NUM_SAMPLES_EXPONENT = 13
 SIMULATION_INDEX = 0
 
 CONSTANT_PARAMETERS = {
@@ -15,32 +15,28 @@ CONSTANT_PARAMETERS = {
     "gridSize": 64,
     "dt": 1,
     "thereIsMatrixInteraction": 1,
-    "matrixTurnoverRate": 0.05,
-    "matrixAdditionRate": 0.05,
-    "matrixAdvectionRate": 0.0,
     "aspectRatio": 1,
-    "stretchFactor": 7.015735718887299,
-    "slipFactor": 0.01
-    # # Collision parameters:
-    # "collisionFlowReductionRate": 0,
-    # "collisionAdvectionRate": 0,
+    # Shape:
+    "stretchFactor": 0.01,
+    "slipFactor": 1,
+    # Matrix turnover:
+    "matrixTurnoverRate": 0,
+    "matrixAdditionRate": 0,
+    "matrixAdvectionRate": 0,
 }
 
 GRIDSEARCH_PARAMETERS = {
     "cueDiffusionRate": [0.0001, 2.5],
     "cueKa": [0.0001, 5],
-    "fluctuationAmplitude": [5e-5, 5e-3],
-    "fluctuationTimescale": [1, 250],
+    "fluctuationAmplitude": [5e-5, 1e-1],
+    "fluctuationTimescale": [1, 20],
     "maximumSteadyStateActinFlow": [0.0, 3],
-    "numberOfCells": [75, 150],
-    "actinAdvectionRate": [0.0, 1.5],
-    "cellBodyRadius": [15, 75],
+    "numberOfCells": [75, 250],
+    "actinAdvectionRate": [0.0, 3],
+    "cellBodyRadius": [15, 100],
     # Collisions:
-    "collisionFlowReductionRate": [0.0, 0.25],
+    "collisionFlowReductionRate": [0.0, 1],
     "collisionAdvectionRate": [0.0, 1.5],
-    # Shape:
-    "stretchFactor": [0.0, 7.5],
-    "slipFactor": [1e-5, 1e-2]
 }
 
 
@@ -55,7 +51,7 @@ class JSONOutputManager:
         """Generate set of config files from parameter matrix."""
         for row_index in range(parameter_matrix.shape[0]):
             # Print progress:
-            if (row_index + 1)% 1000 == 0:
+            if (row_index + 1) % 1000 == 0:
                 print(row_index + 1)
 
             # Populate simulation config file:
