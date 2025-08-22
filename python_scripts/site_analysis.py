@@ -129,7 +129,7 @@ def main():
     ann_indices = []
     for seed in range(superiteration_number):
         # Read dataframe into memory:
-        print(f"Reading subiteration {seed}...")
+        print(f"Reading subiteration {seed} for site analysis...")
         filename = f"positions_seed{seed:03d}.csv"
         filepath = os.path.join(subdirectory_path, filename)
         trajectory_dataframe = pd.read_csv(

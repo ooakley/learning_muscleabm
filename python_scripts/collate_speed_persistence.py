@@ -3,7 +3,7 @@ import os
 
 import numpy as np
 
-SAMPLE_COUNT = int(16384 / 2)
+SAMPLE_COUNT = int(16384)
 # SAMPLE_COUNT = 50
 TIMESTEPS = 2880
 SUPERITERATION_NUMBER = 12

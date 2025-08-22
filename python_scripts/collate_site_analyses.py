@@ -25,17 +25,17 @@ def collate_data(args, out_filename, in_file):
             print(folder_id + 1)
         try:
             id_filepath = f'./{args.folder_name}/{folder_id}/{in_file}.npy'
-            superiteration_averages = np.load(id_filepath)
-            if superiteration_averages.shape != (6, 6):  # (CELL TYPE) X (SS DISTANCE)
-                blank_data = np.array([np.nan] * 36)
-                blank_data = np.reshape(blank_data, (6, 6))
+            superiteration_values = np.load(id_filepath)
+            if superiteration_values.shape != (12,):  # (CELL TYPE) X (SS DISTANCE)
+                print(f"Wrong shape found at {folder_id}, appending NaN...")
+                print(f"Shape: {superiteration_values.shape}")
+                blank_data = np.array([np.nan] * 12)
                 out_data.append(blank_data)
             else:
-                out_data.append(superiteration_averages)
+                out_data.append(superiteration_values)
         except FileNotFoundError:
             print(f"No data file found at {folder_id}, appending NaN...")
-            blank_data = np.array([np.nan] * 36)
-            blank_data = np.reshape(blank_data, (6, 6))
+            blank_data = np.array([np.nan] * 12)
             out_data.append(blank_data)
 
     out_data = np.stack(out_data, axis=0)
@@ -51,7 +51,8 @@ def main():
         os.mkdir(output_folder)
 
     # Collate individual simulation data into set of comprehensive numpy arrays:
-    collate_data(args, "collated_distances.npy", "distributional_distances")
+    collate_data(args, "ann_indices.npy", "ann_indices")
+    collate_data(args, "coherency_fractions.npy", "coherency_fractions")
 
 
 if __name__ == "__main__":

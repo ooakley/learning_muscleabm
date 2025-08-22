@@ -5,7 +5,7 @@ import json
 from scipy.stats import qmc
 
 # Defines the parameter ranges, with [start, stop]:
-NUM_SAMPLES_EXPONENT = 13
+NUM_SAMPLES_EXPONENT = 14
 SIMULATION_INDEX = 0
 
 CONSTANT_PARAMETERS = {
@@ -28,7 +28,7 @@ CONSTANT_PARAMETERS = {
 GRIDSEARCH_PARAMETERS = {
     "cueDiffusionRate": [0.0001, 2.5],
     "cueKa": [0.0001, 5],
-    "fluctuationAmplitude": [5e-5, 1e-1],
+    "fluctuationAmplitude": [1e-5, 1e-2],
     "fluctuationTimescale": [1, 20],
     "maximumSteadyStateActinFlow": [0.0, 3],
     "numberOfCells": [75, 250],

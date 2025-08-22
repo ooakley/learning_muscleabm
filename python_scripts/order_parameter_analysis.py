@@ -109,7 +109,7 @@ def main():
         matrix = read_matrix_into_numpy(matrix_filepath, MESH_NUMBER, TIMESTEPS)
         final_matrix = matrix[-1, 0:2, :, :]
         orderparameter_scale = generate_order_parameter_scale_curve(final_matrix)
-        orderparameter_auc = np.trapz(orderparameter_scale)
+        orderparameter_auc = np.trapezoid(orderparameter_scale)
 
         # Accumulating in lists:
         order_parameter_list.append(orderparameter_scale)

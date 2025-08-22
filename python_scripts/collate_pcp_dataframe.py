@@ -19,7 +19,7 @@ GRIDSEARCH_PARAMETERS = {
 
 def main():
     input_matrix = []
-    for i in range(int(16384 / 2)):
+    for i in range(int(16384)):
         with open(f'./fileOutputs/{i}/{i}_arguments.json') as json_data:
             # Reading data:
             parameter_dict = json.load(json_data)
