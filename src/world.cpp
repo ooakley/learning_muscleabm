@@ -279,8 +279,10 @@ std::tuple<double, double> World::getPerceptAtAttachment(std::vector<double> att
 
 double World::calculateCellDeltaTowardsECM(double ecmHeading, double cellHeading) {
     // Ensuring input values are in the correct range:
-    assert((ecmHeading >= 0) && (ecmHeading <= M_PI));
-
+    if (! ((ecmHeading >= 0) && (ecmHeading <= M_PI))) {
+        std::cout << "ecmHeading: " << ecmHeading << std::endl;
+        assert((ecmHeading >= 0) && (ecmHeading <= M_PI));
+    }
     if (! ((cellHeading >= -M_PI) && (cellHeading <= M_PI))) {
         std::cout << "cellHeading: " << cellHeading << std::endl;
         assert((cellHeading >= -M_PI) && (cellHeading <= M_PI));

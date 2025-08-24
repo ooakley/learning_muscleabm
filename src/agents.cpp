@@ -460,7 +460,7 @@ void CellAgent::runTrajectoryDependentCollisionLogic() {
         }
 
         // Determine whether collision occurs:
-        const auto [collisionDetected, closestX, closestY, minimumDistance] = isPositionInStadium(
+        const auto [collisionDetected, closestX, closestY, minimumDistance, clampedDotProduct] = isPositionInStadium(
                 globalFrameX, globalFrameY, correctedStartX, correctedStartY, correctedEndX, correctedEndY
         );
 
@@ -478,11 +478,11 @@ void CellAgent::runTrajectoryDependentCollisionLogic() {
             double angleActingToLocal{std::atan2(actingToLocalY, actingToLocalX)};
 
             // Get degree of overlap:
-            double sagitta{cellBodyRadius - (minimumDistance/2)};
+            double sagitta{cellBodyRadius - (minimumDistance/(2 - clampedDotProduct))};
             double centralAngle{2*std::acos((cellBodyRadius - sagitta)/cellBodyRadius)};
             double overlapArea{std::pow(cellBodyRadius, 2)*(centralAngle - std::sin(centralAngle))};
             double overlapRatio{overlapArea / (0.5*M_PI*std::pow(cellBodyRadius, 2))};
-            overlapRatio = std::min(overlapRatio, 1.0);
+            overlapRatio = std::clamp(overlapRatio, 0.0, 1.0);
 
             // Exert reduction in actin flow for acting cell:
             double angleOfRestitution{angleActingToLocal - M_PI};
@@ -503,6 +503,18 @@ void CellAgent::runTrajectoryDependentCollisionLogic() {
                 double yFlowComponent{std::sin(flowDirection)*flowMagnitude};
                 xFlowComponent += dxActinFlow;
                 yFlowComponent += dyActinFlow;
+
+                if (std::isnan(xFlowComponent) or std::isnan(yFlowComponent)) {
+                    std::cout << "--- --- --- ---" << std::endl;
+                    std::cout << "clampedDotProduct: " << clampedDotProduct << std::endl;
+                    std::cout << "minimumDistance: " << minimumDistance << std::endl;
+                    std::cout << "scaledDistance: " << minimumDistance/(1 + clampedDotProduct) << std::endl;
+                    std::cout << "sagitta: " << sagitta << std::endl;
+                    std::cout << "overlapArea: " << overlapArea << std::endl;
+                    std::cout << "overlapRatio: " << overlapRatio << std::endl;
+                    std::cout << "xFlowComponent " << xFlowComponent << std::endl;
+                    std::cout << "yFlowComponent " << xFlowComponent << std::endl;
+                }
 
                 // Set acting cell actin flow to new values:
                 flowDirection = std::atan2(yFlowComponent, xFlowComponent);
@@ -1174,7 +1186,7 @@ std::tuple<double, double, double, double> CellAgent::sampleTrajectoryStadium() 
 }
 
 
-std::tuple<bool, double, double, double> CellAgent::isPositionInStadium(
+std::tuple<bool, double, double, double, double> CellAgent::isPositionInStadium(
     double samplePointX, double samplePointY,
     double startX, double startY,
     double endX, double endY
@@ -1188,6 +1200,7 @@ std::tuple<bool, double, double, double> CellAgent::isPositionInStadium(
     // Get scaled dot product:
     double scaledDotProduct{xStartToSample*xStartToEnd + yStartToSample*yStartToEnd};
     scaledDotProduct /= std::pow(xStartToEnd, 2) + std::pow(yStartToEnd, 2);
+    double clampedDotProduct{std::clamp(scaledDotProduct, 0.0, 1.0)};
 
     // Determine closest point on segment:
     double closestPointX{0};
@@ -1234,7 +1247,7 @@ std::tuple<bool, double, double, double> CellAgent::isPositionInStadium(
 
         // Collision distance is one cell radii,
         // plus a scaled cell radii to reflect tapering.
-        isColliding = minimumDistance < (cellBodyRadius*(1+scaledDotProduct));
+        isColliding = minimumDistance < (cellBodyRadius*(2-scaledDotProduct));
     }
 
     // Find distance to closest point:
@@ -1243,7 +1256,7 @@ std::tuple<bool, double, double, double> CellAgent::isPositionInStadium(
     //     std::pow(samplePointY - closestPointY, 2)
     // )};
     // bool isColliding{minimumDistance < (cellBodyRadius * 2)};
-    return {isColliding, closestPointX, closestPointY, minimumDistance};
+    return {isColliding, closestPointX, closestPointY, minimumDistance, clampedDotProduct};
 }
 
 

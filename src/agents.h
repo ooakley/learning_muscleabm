@@ -201,7 +201,7 @@ private:
     void runDeterministicCollisionLogic();
     std::tuple<int, double, double> samplePositionHistory();
     // void collideWithCell(CellAgent localCell);
-    std::tuple<bool, double, double, double> isPositionInStadium(
+    std::tuple<bool, double, double, double, double> isPositionInStadium(
         double samplePointX, double samplePointY,
         double startX, double startY,
         double endX, double endY
