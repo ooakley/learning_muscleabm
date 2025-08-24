@@ -220,9 +220,9 @@ void CellAgent::takeRandomStep() {
 
     // Collide with adjacent cells:
     collisionsThisTimepoint = 0;
-    runDeterministicCollisionLogic();
+    // runDeterministicCollisionLogic();
     // runCircularStochasticCollisionLogic();
-    // runTrajectoryDependentCollisionLogic();
+    runTrajectoryDependentCollisionLogic();
     finalCILEffectX = polarityChangeCilX;
     finalCILEffectY = polarityChangeCilY;
 
@@ -321,28 +321,28 @@ void CellAgent::takeRandomStep() {
     addToPositionHistory(x, y);
     addToMovementHistory(std::cos(flowDirection), std::sin(flowDirection));
 
-    // // Age stadium attachment:
-    // double lengthScale{cellBodyRadius*stretchFactor};
-    // double stretchDistance{std::sqrt(
-    //     std::pow(x - stadiumX, 2) + 
-    //     std::pow(y - stadiumY, 2)
-    // )};
-    // double slipRate{
-    //     1 - std::exp(-stretchDistance / lengthScale)
-    // };
-    // double randomDeterminant{uniformDistribution(generatorInfluence)};
-    // if (randomDeterminant < slipFactor*slipRate) {
-    //     // Update stadium point:
-    //     const auto [sampledIndex, newStadiumX, newStadiumY] = samplePositionHistory();
-    //     stadiumX = newStadiumX;
-    //     stadiumY = newStadiumY;
+    // Age stadium attachment:
+    double lengthScale{cellBodyRadius*stretchFactor};
+    double stretchDistance{std::sqrt(
+        std::pow(x - stadiumX, 2) + 
+        std::pow(y - stadiumY, 2)
+    )};
+    double slipRate{
+        1 - std::exp(-stretchDistance / lengthScale)
+    };
+    double randomDeterminant{uniformDistribution(generatorInfluence)};
+    if (randomDeterminant < slipFactor*slipRate) {
+        // Update stadium point:
+        const auto [sampledIndex, newStadiumX, newStadiumY] = samplePositionHistory();
+        stadiumX = newStadiumX;
+        stadiumY = newStadiumY;
 
-    //     // Truncate history to new point:
-    //     for (int i{0}; i < sampledIndex; ++i) {
-    //         xPositionHistory.pop_front();
-    //         yPositionHistory.pop_front();
-    //     }
-    // }
+        // Truncate history to new point:
+        for (int i{0}; i < sampledIndex; ++i) {
+            xPositionHistory.pop_front();
+            yPositionHistory.pop_front();
+        }
+    }
 
     // Zero out CIL effects:
     polarityChangeCilX = 0.0;
@@ -460,7 +460,7 @@ void CellAgent::runTrajectoryDependentCollisionLogic() {
         }
 
         // Determine whether collision occurs:
-        const auto [collisionDetected, closestX, closestY] = isPositionInStadium(
+        const auto [collisionDetected, closestX, closestY, minimumDistance] = isPositionInStadium(
                 globalFrameX, globalFrameY, correctedStartX, correctedStartY, correctedEndX, correctedEndY
         );
 
@@ -477,6 +477,13 @@ void CellAgent::runTrajectoryDependentCollisionLogic() {
             double actingToLocalY{localCellY - actingCellY};
             double angleActingToLocal{std::atan2(actingToLocalY, actingToLocalX)};
 
+            // Get degree of overlap:
+            double sagitta{cellBodyRadius - (minimumDistance/2)};
+            double centralAngle{2*std::acos((cellBodyRadius - sagitta)/cellBodyRadius)};
+            double overlapArea{std::pow(cellBodyRadius, 2)*(centralAngle - std::sin(centralAngle))};
+            double overlapRatio{overlapArea / (0.5*M_PI*std::pow(cellBodyRadius, 2))};
+            overlapRatio = std::min(overlapRatio, 1.0);
+
             // Exert reduction in actin flow for acting cell:
             double angleOfRestitution{angleActingToLocal - M_PI};
             double componentOfActingFlowOntoCollision{
@@ -485,7 +492,7 @@ void CellAgent::runTrajectoryDependentCollisionLogic() {
             if (componentOfActingFlowOntoCollision < 0) {
                 // Calculate change in actin flow:
                 double reductionInFlow{
-                    dt * collisionFlowReductionRate * flowMagnitude * std::abs(componentOfActingFlowOntoCollision)
+                    dt * collisionFlowReductionRate * flowMagnitude * std::abs(componentOfActingFlowOntoCollision) * overlapRatio
                 };
                 double cappedReductionInFlow{std::min(reductionInFlow, flowMagnitude * std::abs(componentOfActingFlowOntoCollision))};
                 double dxActinFlow{std::cos(angleOfRestitution) * cappedReductionInFlow};
@@ -511,8 +518,9 @@ void CellAgent::runTrajectoryDependentCollisionLogic() {
             if (componentOfLocalFlowOntoCollision <= 0) {
                 // Calculate change in actin flow:
                 double reductionInFlow{
-                    dt * collisionFlowReductionRate * localFlowMagnitude * std::abs(componentOfLocalFlowOntoCollision)
+                    dt * collisionFlowReductionRate * localFlowMagnitude * std::abs(componentOfLocalFlowOntoCollision) * overlapRatio
                 };
+                double cappedReductionInFlow{std::min(reductionInFlow, localFlowMagnitude * std::abs(componentOfLocalFlowOntoCollision))};
                 double dxActinFlow{std::cos(angleActingToLocal) * reductionInFlow};
                 double dyActinFlow{std::sin(angleActingToLocal) * reductionInFlow};
 
@@ -529,8 +537,8 @@ void CellAgent::runTrajectoryDependentCollisionLogic() {
             }
 
             // Calculate CIL effect:
-            double actingRepulsionX{std::cos(angleActingToLocal)};
-            double actingRepulsionY{std::sin(angleActingToLocal)};
+            double actingRepulsionX{std::cos(angleActingToLocal) * overlapRatio};
+            double actingRepulsionY{std::sin(angleActingToLocal) * overlapRatio};
             polarityChangeCilX -= actingRepulsionX;
             polarityChangeCilY -= actingRepulsionY;
             // --> Simulate effect of CIL on RhoA redistribution for local cell:
@@ -1140,21 +1148,19 @@ std::vector<double> CellAgent::sampleAttachmentPoint() {
 std::tuple<int, double, double> CellAgent::samplePositionHistory() {
     // Weight sampling to more recent points in trajectory:
     int currentLength{static_cast<int>(xPositionHistory.size())};
-    std::vector<double> probabilityWeights(currentLength);
+    // std::vector<double> probabilityWeights(currentLength);
     // std::iota(probabilityWeights.begin(), probabilityWeights.end(), 1);
-    std::fill(probabilityWeights.begin(), probabilityWeights.end(), 1);
+    // std::fill(probabilityWeights.begin(), probabilityWeights.end(), 1);
 
     // Sample trajectory indices:
-    std::random_device randomDevice;
-    std::mt19937 generator(randomDevice());
-    std::discrete_distribution<int> indexDistribution(
-        probabilityWeights.begin(), probabilityWeights.end()
-    );
-    int indexSelected{indexDistribution(generator)};
+    std::uniform_int_distribution<> indexDistribution(0, currentLength-1);
+    std::random_device randomDeviceInitialiser;
+    std::mt19937 generator(randomDeviceInitialiser());
+    int sampledIndex{indexDistribution(generator)};
 
     // Return positions at these points:
     return {
-        indexSelected, xPositionHistory[indexSelected], yPositionHistory[indexSelected]
+        sampledIndex, xPositionHistory[sampledIndex], yPositionHistory[sampledIndex]
     };
 }
 
@@ -1168,7 +1174,7 @@ std::tuple<double, double, double, double> CellAgent::sampleTrajectoryStadium() 
 }
 
 
-std::tuple<bool, double, double> CellAgent::isPositionInStadium(
+std::tuple<bool, double, double, double> CellAgent::isPositionInStadium(
     double samplePointX, double samplePointY,
     double startX, double startY,
     double endX, double endY
@@ -1186,24 +1192,58 @@ std::tuple<bool, double, double> CellAgent::isPositionInStadium(
     // Determine closest point on segment:
     double closestPointX{0};
     double closestPointY{0};
+    double minimumDistance{0};
+    bool isColliding{false};
+
     if (scaledDotProduct < 0) {
+        // Colliding with cell body:
         closestPointX = startX;
         closestPointY = startY;
+
+        // Get minimum distance:
+        minimumDistance = std::sqrt(
+            std::pow(samplePointX - closestPointX, 2) +
+            std::pow(samplePointY - closestPointY, 2)
+        );
+
+        // Collision distance is two cell radii:
+        isColliding = minimumDistance < (cellBodyRadius * 2);
     } else if (scaledDotProduct > 1) {
+        // Colliding with final point of extension:
         closestPointX = endX;
         closestPointY = endY;
+
+        // Get minimum distance:
+        minimumDistance = std::sqrt(
+            std::pow(samplePointX - closestPointX, 2) +
+            std::pow(samplePointY - closestPointY, 2)
+        );
+
+        // Collision distance is one cell radii as it has tapered to a point:
+        isColliding = minimumDistance < cellBodyRadius;
     } else {
+        // Colliding with central part of extension:
         closestPointX = startX + scaledDotProduct*xStartToEnd;
         closestPointY = startY + scaledDotProduct*yStartToEnd;
+
+        // Get minimum distance:
+        minimumDistance = std::sqrt(
+            std::pow(samplePointX - closestPointX, 2) +
+            std::pow(samplePointY - closestPointY, 2)
+        );
+
+        // Collision distance is one cell radii,
+        // plus a scaled cell radii to reflect tapering.
+        isColliding = minimumDistance < (cellBodyRadius*(1+scaledDotProduct));
     }
 
     // Find distance to closest point:
-    double minimumDistance{std::sqrt(
-        std::pow(samplePointX - closestPointX, 2) +
-        std::pow(samplePointY - closestPointY, 2)
-    )};
-    bool isColliding{minimumDistance < (cellBodyRadius * 2)};
-    return {isColliding, closestPointX, closestPointY};
+    // double minimumDistance{std::sqrt(
+    //     std::pow(samplePointX - closestPointX, 2) +
+    //     std::pow(samplePointY - closestPointY, 2)
+    // )};
+    // bool isColliding{minimumDistance < (cellBodyRadius * 2)};
+    return {isColliding, closestPointX, closestPointY, minimumDistance};
 }
 
 

@@ -721,7 +721,7 @@ def _(experiment_dataframe):
 def _(OUTPUT_COLUMN_NAMES, os, pd):
     # Constant display variables:
     MESH_NUMBER = 64
-    CELL_NUMBER = 140
+    CELL_NUMBER = 250
     TIMESTEPS = 2880
     TIMESTEP_WIDTH = 1440
     WORLD_SIZE = 2048
@@ -796,7 +796,7 @@ def _(CELL_NUMBER, TIMESTEPS, get_trajectory_data, np):
     trajectory_dataframe = get_trajectory_data(0, 0)
     positions = trajectory_dataframe.sort_values(['particle', 'frame']).loc[:, ('x', 'y')]
     position_array = np.array(positions).reshape(CELL_NUMBER, TIMESTEPS, 2)
-    position_array = position_array[:, 1400:, :]
+    position_array = position_array[:, 1440:, :]
     return position_array, positions, trajectory_dataframe
 
 
