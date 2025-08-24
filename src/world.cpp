@@ -34,7 +34,7 @@ World::World
     , thereIsMatrixInteraction{setThereIsMatrixInteraction}
     , simulationTime{0}
     , cellParameters{setCellParameters}
-    , collisionCellList{CollisionCellList(10, 2048)}
+    , collisionCellList{CollisionCellList(4, 2048)}
 {
     // Initialising randomness:
     seedGenerator = std::mt19937(worldSeed);
