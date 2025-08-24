@@ -16,9 +16,6 @@ CONSTANT_PARAMETERS = {
     "dt": 1,
     "thereIsMatrixInteraction": 1,
     "aspectRatio": 1,
-    # Shape:
-    "stretchFactor": 0.01,
-    "slipFactor": 1,
     # Matrix turnover:
     "matrixTurnoverRate": 0,
     "matrixAdditionRate": 0,
@@ -37,6 +34,9 @@ GRIDSEARCH_PARAMETERS = {
     # Collisions:
     "collisionFlowReductionRate": [0.0, 1],
     "collisionAdvectionRate": [0.0, 1],
+    # Shape:
+    "stretchFactor": [0.25, 3],
+    "slipFactor": [0.0001, 0.1],
 }
 
 

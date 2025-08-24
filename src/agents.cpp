@@ -537,8 +537,8 @@ void CellAgent::runTrajectoryDependentCollisionLogic() {
             }
 
             // Calculate CIL effect:
-            double actingRepulsionX{std::cos(angleActingToLocal) * overlapRatio};
-            double actingRepulsionY{std::sin(angleActingToLocal) * overlapRatio};
+            double actingRepulsionX{std::cos(angleActingToLocal)};
+            double actingRepulsionY{std::sin(angleActingToLocal)};
             polarityChangeCilX -= actingRepulsionX;
             polarityChangeCilY -= actingRepulsionY;
             // --> Simulate effect of CIL on RhoA redistribution for local cell:
