@@ -16,9 +16,6 @@ CONSTANT_PARAMETERS = {
     "dt": 1,
     "thereIsMatrixInteraction": 1,
     "aspectRatio": 1,
-    # Shape:
-    "stretchFactor": 0.01,
-    "slipFactor": 1,
     # Matrix turnover:
     "matrixTurnoverRate": 0,
     "matrixAdditionRate": 0,
@@ -29,14 +26,17 @@ GRIDSEARCH_PARAMETERS = {
     "cueDiffusionRate": [0.0001, 2.5],
     "cueKa": [0.0001, 5],
     "fluctuationAmplitude": [1e-5, 1e-2],
-    "fluctuationTimescale": [1, 20],
-    "maximumSteadyStateActinFlow": [0.0, 3],
-    "numberOfCells": [75, 250],
-    "actinAdvectionRate": [0.0, 3],
+    "fluctuationTimescale": [1, 75],
+    "maximumSteadyStateActinFlow": [0.1, 3],
+    "numberOfCells": [75, 175],
+    "actinAdvectionRate": [0.1, 3],
     "cellBodyRadius": [15, 100],
     # Collisions:
     "collisionFlowReductionRate": [0.0, 1],
-    "collisionAdvectionRate": [0.0, 1.5],
+    "collisionAdvectionRate": [0.0, 1],
+    # Shape:
+    "stretchFactor": [0.25, 3],
+    "slipFactor": [0.0001, 0.1],
 }
 
 
