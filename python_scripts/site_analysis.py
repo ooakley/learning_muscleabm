@@ -139,6 +139,7 @@ def main():
         # Sort by cell and then by frame:
         positions = trajectory_dataframe.sort_values(['particle', 'frame']).loc[:, ('x', 'y')]
         position_array = np.array(positions).reshape(cell_number, timesteps, 2)
+        position_array = position_array[:, 1440:, :]
 
         # Interpolate to match 2.5 minute timestep of wetlab data:
         interpolated_array = interpolate_to_wetlab_frames(position_array)
@@ -148,7 +149,7 @@ def main():
 
         # Loop through frames to get average ANNI:
         anni_timeseries = []
-        for timepoint in range(1440, 2880):
+        for timepoint in range(position_array.shape[1]):
             anni_timeseries.append(find_anni(position_array[:, timepoint, :]))
         site_anni = np.mean(anni_timeseries)
 
