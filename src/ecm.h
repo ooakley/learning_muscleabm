@@ -1,6 +1,8 @@
 #pragma once
 #include <boost/numeric/ublas/matrix.hpp>
 #include <deque>
+#include <random>
+
 namespace boostMatrix = boost::numeric::ublas;
 using FibreUnit = std::deque<float>;
 using FibreRow = std::vector<FibreUnit>;
@@ -11,8 +13,9 @@ public:
     // Constructor:
     ECMField(
         int setMatrixElements, int setCollisionElements, double setFieldSize,
-        double setMatrixTurnoverRate, double setMatrixAdditionRate
+        double setMatrixTurnoverRate, double setMatrixAdditionRate, int setECMSeed
     );
+    ECMField() = default;
 
     // Getters:
     // --- --- Matrix Getters:
@@ -57,6 +60,11 @@ public:
     void ageIndividualECMLattice(int i, int j);
 
 private:
+    // Necessary structures for reproducible random sampling:
+    std::mt19937 seedGenerator;
+    std::uniform_int_distribution<unsigned int> seedDistribution;
+    std::mt19937 generatorFibreSampling;
+
     // Simulation properties of matrix:
     double matrixTurnoverRate;
     double matrixAdditionRate;

@@ -332,16 +332,22 @@ void CellAgent::takeRandomStep() {
     };
     double randomDeterminant{uniformDistribution(generatorInfluence)};
     if (randomDeterminant < slipFactor*slipRate) {
-        // Update stadium point:
-        const auto [sampledIndex, newStadiumX, newStadiumY] = samplePositionHistory();
-        stadiumX = newStadiumX;
-        stadiumY = newStadiumY;
+        // // Update stadium point:
+        // const auto [sampledIndex, newStadiumX, newStadiumY] = samplePositionHistory();
+        // stadiumX = newStadiumX;
+        // stadiumY = newStadiumY;
 
-        // Truncate history to new point:
-        for (int i{0}; i < sampledIndex; ++i) {
-            xPositionHistory.pop_front();
-            yPositionHistory.pop_front();
-        }
+        // // Truncate history to new point:
+        // for (int i{0}; i < sampledIndex; ++i) {
+        //     xPositionHistory.pop_front();
+        //     yPositionHistory.pop_front();
+        // }
+
+        // Set to current position:
+        stadiumX = x;
+        stadiumY = y;
+        xPositionHistory.clear();
+        yPositionHistory.clear();
     }
 
     // Zero out CIL effects:
@@ -483,6 +489,7 @@ void CellAgent::runTrajectoryDependentCollisionLogic() {
             double overlapArea{std::pow(cellBodyRadius, 2)*(centralAngle - std::sin(centralAngle))};
             double overlapRatio{overlapArea / (0.5*M_PI*std::pow(cellBodyRadius, 2))};
             overlapRatio = std::clamp(overlapRatio, 0.0, 1.0);
+            overlapRatio = 1;
 
             // Exert reduction in actin flow for acting cell:
             double angleOfRestitution{angleActingToLocal - M_PI};
@@ -1166,9 +1173,7 @@ std::tuple<int, double, double> CellAgent::samplePositionHistory() {
 
     // Sample trajectory indices:
     std::uniform_int_distribution<> indexDistribution(0, currentLength-1);
-    std::random_device randomDeviceInitialiser;
-    std::mt19937 generator(randomDeviceInitialiser());
-    int sampledIndex{indexDistribution(generator)};
+    int sampledIndex{indexDistribution(generatorInfluence)};
 
     // Return positions at these points:
     return {
@@ -1202,11 +1207,30 @@ std::tuple<bool, double, double, double, double> CellAgent::isPositionInStadium(
     scaledDotProduct /= std::pow(xStartToEnd, 2) + std::pow(yStartToEnd, 2);
     double clampedDotProduct{std::clamp(scaledDotProduct, 0.0, 1.0)};
 
-    // Determine closest point on segment:
+     // Determine closest point on segment:
     double closestPointX{0};
     double closestPointY{0};
     double minimumDistance{0};
     bool isColliding{false};
+
+    // Check stadium length:
+    double stadiumLength{std::sqrt(std::pow(xStartToEnd, 2) + std::pow(xStartToEnd, 2))};
+    if (stadiumLength < cellBodyRadius) {
+        // Colliding with cell body:
+        closestPointX = startX;
+        closestPointY = startY;
+
+        // Get minimum distance:
+        minimumDistance = std::sqrt(
+            std::pow(samplePointX - closestPointX, 2) +
+            std::pow(samplePointY - closestPointY, 2)
+        );
+
+        // Collision distance is two cell radii:
+        isColliding = minimumDistance < (cellBodyRadius * 2);
+        clampedDotProduct = 0;
+        return {isColliding, closestPointX, closestPointY, minimumDistance, clampedDotProduct};
+    }
 
     if (scaledDotProduct < 0) {
         // Colliding with cell body:

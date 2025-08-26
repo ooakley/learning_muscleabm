@@ -763,6 +763,7 @@ def _(np, skimage):
                 xy_t1 = np.floor(xy_data[frame_index+1, :]).astype(int)
                 if np.any(np.concatenate([xy_t, xy_t1]) == 1024):
                     continue
+
                 # Account for periodic boundaries:
                 distance = np.sqrt(np.sum((xy_t - xy_t1)**2, axis=0))
                 if distance > 512:
@@ -797,7 +798,24 @@ def _(CELL_NUMBER, TIMESTEPS, get_trajectory_data, np):
     positions = trajectory_dataframe.sort_values(['particle', 'frame']).loc[:, ('x', 'y')]
     position_array = np.array(positions).reshape(CELL_NUMBER, TIMESTEPS, 2)
     position_array = position_array[:, 1440:, :]
-    return position_array, positions, trajectory_dataframe
+
+    stadia = trajectory_dataframe.sort_values(['particle', 'frame'])\
+        .loc[:, ('stadium_x', 'stadium_y')]
+    stadium_array = np.array(stadia).reshape(CELL_NUMBER, TIMESTEPS, 2)
+    stadium_array = stadium_array[:, 1440:, :]
+    return (
+        position_array,
+        positions,
+        stadia,
+        stadium_array,
+        trajectory_dataframe,
+    )
+
+
+@app.cell
+def _(trajectory_dataframe):
+    trajectory_dataframe
+    return
 
 
 @app.cell
@@ -834,7 +852,7 @@ def _(
 
 @app.cell
 def _(larr, plt):
-    fig, ax = plt.subplots(figsize=(20, 20))
+    fig, ax = plt.subplots(figsize=(10, 10))
     ax.imshow(larr, vmin=0, vmax=2, cmap='gray', interpolation='bilinear')
     ax.set_xticks([])
     ax.set_yticks([])
@@ -853,7 +871,7 @@ def _(np):
             axis=-1
         )
         distance_matrix = np.sqrt(distance_sq)
-    
+
         # Set all diagonal entries to a large number, so minimum func can be broadcast:
         diagonal_idx = np.diag_indices(distance_matrix.shape[0], 2)
         distance_matrix[diagonal_idx] = 2048
@@ -869,7 +887,7 @@ def _(np):
 @app.cell
 def _(find_anni, position_array):
     anni_timeseries = []
-    for _i in range(1440, 2880):
+    for _i in range(1440):
         anni_timeseries.append(find_anni(position_array[:, _i, :]))
     return (anni_timeseries,)
 
@@ -877,6 +895,97 @@ def _(find_anni, position_array):
 @app.cell
 def _(anni_timeseries, plt):
     plt.plot(anni_timeseries)
+    return
+
+
+@app.cell
+def _(trajectory_dataframe):
+    trajectory_dataframe
+    return
+
+
+@app.cell
+def _(np, position_array, skimage, stadium_array):
+    def _():
+        RADIUS = 25 / 2
+
+        # Test tapered stadium plots:
+        line_array = np.zeros((1024, 1024))
+        timepoint = -1
+
+        for cell_index in range(position_array.shape[0]):
+            # Get cell data:
+            cell_position = position_array[cell_index, timepoint, :] / 2
+            position_index = np.floor(cell_position).astype(int)
+            stadium_position = stadium_array[cell_index, timepoint, :] / 2
+            stadium_index = np.floor(stadium_position).astype(int)
+
+            # Get indices of cell body perimeter:
+            rr, cc = skimage.draw.circle_perimeter(
+                *position_index, int(RADIUS), shape=(1024, 1024)
+            )
+            line_array[rr, cc] += 1
+
+            # Account for periodic boundaries:
+            distance = np.sqrt(np.sum((position_index - stadium_index)**2, axis=0))
+            if distance > 512:
+                continue
+            if distance < (1.1*RADIUS):
+                continue
+
+            # # Get line to stadium:
+            # rr, cc = skimage.draw.line(*position_index, *stadium_index)
+            # line_array[rr, cc] += 1
+
+            # Get angle from stadium:
+            stadium_to_center = position_index - stadium_index
+            angle = np.arctan2(stadium_to_center[1], stadium_to_center[0])
+            perpendicular_one = angle + (np.pi/2)
+            perpendicular_two = angle - (np.pi/2)
+
+            # Get cone end points on circle:
+            flank_one = position_index + \
+                (RADIUS*np.array([np.cos(perpendicular_one), np.sin(perpendicular_one)]))
+            flank_one_index = np.floor(flank_one).astype(int)
+        
+            flank_two = position_index + \
+                (RADIUS*np.array([np.cos(perpendicular_two), np.sin(perpendicular_two)]))
+            flank_two_index = np.floor(flank_two).astype(int)
+
+            # Draw flanks:
+            rr, cc = skimage.draw.line(*flank_one_index, *stadium_index)
+            rr[rr>=1024] -= 1024
+            cc[cc>=1024] -= 1024
+            rr[rr<0] += 1024
+            cc[cc<0] += 1024
+            line_array[rr, cc] += 1
+
+            rr, cc = skimage.draw.line(*flank_two_index, *stadium_index)
+            rr[rr>=1024] -= 1024
+            cc[cc>=1024] -= 1024
+            rr[rr<0] += 1024
+            cc[cc<0] += 1024
+            line_array[rr, cc] += 1
+
+        return line_array
+
+    test_plot = _()
+    return (test_plot,)
+
+
+@app.cell
+def _(plt, test_plot):
+    _fig, _ax = plt.subplots(figsize=(10, 10))
+    _ax.imshow(test_plot, vmin=0, vmax=1, cmap='gray')
+    _ax.set_xticks([]);
+    _ax.set_yticks([]);
+
+    plt.show()
+    return
+
+
+@app.cell
+def _():
     return
 
 

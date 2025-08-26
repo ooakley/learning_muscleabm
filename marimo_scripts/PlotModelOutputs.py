@@ -332,7 +332,18 @@ def _(TIMESTEPS, ecm_matrix, plot_superiteration, plt, trajectory_dataframe):
     _fig, _ax = plt.subplots(figsize=(10, 10))
     plot_superiteration(
         trajectory_dataframe, ecm_matrix, TIMESTEPS-1, _ax, 50,
-        plot_matrix=True, plot_trajectories=False, plot_ellipses=False
+        plot_matrix=True, plot_trajectories=True, plot_ellipses=False
+    )
+    plt.show()
+    return
+
+
+@app.cell
+def _(TIMESTEPS, ecm_matrix, plot_superiteration, plt, trajectory_dataframe):
+    _fig, _ax = plt.subplots(figsize=(10, 10))
+    plot_superiteration(
+        trajectory_dataframe, ecm_matrix, TIMESTEPS-1, _ax, 50,
+        plot_matrix=True, plot_trajectories=True, plot_ellipses=False
     )
     plt.show()
     return

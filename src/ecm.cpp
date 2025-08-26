@@ -13,7 +13,7 @@ using FibreMatrix = std::vector<FibreRow>;
 // Constructor:
 ECMField::ECMField(
     int setMatrixElements, int setCollisionElements, double setFieldSize,
-    double setMatrixTurnoverRate, double setMatrixAdditionRate
+    double setMatrixTurnoverRate, double setMatrixAdditionRate, int setECMSeed
     )
     : matrixElementCount{setMatrixElements}
     , collisionElementCount{setCollisionElements}
@@ -39,6 +39,11 @@ ECMField::ECMField(
         }
         fibreMatrix.push_back(rowConstruct);
     }
+
+    // Initialise the RNG for sampling fibres:
+    seedGenerator = std::mt19937(setECMSeed);
+    seedDistribution = std::uniform_int_distribution<unsigned int>(0, UINT32_MAX);
+    generatorFibreSampling = std::mt19937(seedDistribution(seedGenerator));
 }
 
 // Getters:
@@ -143,9 +148,7 @@ std::tuple<double, double> ECMField::sampleFibreMatrix(int i, int j) {
 
     // Return 1 density if fibers present:
     std::uniform_int_distribution<> indexDistribution(0, sampleSize-1);
-    std::random_device randomDeviceInitialiser;
-    std::mt19937 generator(randomDeviceInitialiser());
-    int sampledIndex{indexDistribution(generator)};
+    int sampledIndex{indexDistribution(generatorFibreSampling)};
     double sampledFibreHeading{fibreMatrix[i][j][sampledIndex]};
     return {sampledFibreHeading, 1};
 };

@@ -29,7 +29,6 @@ World::World
     , worldSideLength{setWorldSideLength}
     , countECMElement{setECMElementCount}
     , lengthECMElement{worldSideLength/countECMElement}
-    , ecmField{ECMField(countECMElement, 16, setWorldSideLength, setMatrixTurnoverRate, setMatrixAdditionRate)}
     , numberOfCells{setNumberOfCells}
     , thereIsMatrixInteraction{setThereIsMatrixInteraction}
     , simulationTime{0}
@@ -58,6 +57,12 @@ World::World
     positionDistribution = std::uniform_real_distribution<double>(0, worldSideLength);
     headingDistribution = std::uniform_real_distribution<double>(-M_PI, M_PI);
     contactInhibitionDistribution  = std::uniform_real_distribution<double>(0, 1);
+
+    // Initialise ECM:
+    ecmField = ECMField(
+        countECMElement, 16, setWorldSideLength, setMatrixTurnoverRate, setMatrixAdditionRate,
+        seedDistribution(seedGenerator)
+    );
 
     // Initialising cells:
     initialiseCellVector();
