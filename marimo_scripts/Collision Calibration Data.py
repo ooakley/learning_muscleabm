@@ -39,8 +39,8 @@ def _():
     GRIDSEARCH_PARAMETERS = {
         "cueDiffusionRate": [0.0001, 2.5],
         "cueKa": [0.0001, 5],
-        "fluctuationAmplitude": [1e-5, 1e-2],
-        "fluctuationTimescale": [1, 20],
+        "fluctuationAmplitude": [1e-5, 0.01],
+        "fluctuationTimescale": [1, 75],
         "maximumSteadyStateActinFlow": [0.0, 3],
         "numberOfCells": [75, 175],
         "actinAdvectionRate": [0.0, 3],
@@ -55,22 +55,22 @@ def _():
 @app.cell
 def _(GRIDSEARCH_PARAMETERS, np):
     parameters = np.load(
-        "./gridsearch_data/out_20250822CFSearch/collated_inputs.npy"
+        "./gridsearch_data/out_20250822CircularCollisions/collated_inputs.npy"
     )
     distances = np.load(
-        "./gridsearch_data/out_20250822CFSearch/collated_distances.npy"
+        "./gridsearch_data/out_20250822CircularCollisions/collated_distances.npy"
     )
     order_parameters = np.load(
-        "./gridsearch_data/out_20250822CFSearch/collated_order_parameters.npy"
+        "./gridsearch_data/out_20250822CircularCollisions/collated_order_parameters.npy"
     )
     speeds = np.load(
-        "./gridsearch_data/out_20250822CFSearch/collated_magnitudes.npy"
+        "./gridsearch_data/out_20250822CircularCollisions/collated_magnitudes.npy"
     )
     coherency_fractions = np.load(
-        "./gridsearch_data/out_20250822CFSearch/coherency_fractions.npy"
+        "./gridsearch_data/out_20250822CircularCollisions/coherency_fractions.npy"
     )
     ann_indices = np.load(
-        "./gridsearch_data/out_20250822CFSearch/ann_indices.npy"
+        "./gridsearch_data/out_20250822CircularCollisions/ann_indices.npy"
     )
 
 
@@ -284,7 +284,7 @@ def _(euclidean_distances, mask, plt):
 def _(CONSTANT_PARAMETERS, GRIDSEARCH_PARAMETERS, json, parameters):
     optim_params = dict(zip(
         list(GRIDSEARCH_PARAMETERS.keys()),
-        parameters[5202, :]
+        parameters[11530, :]
     ))
     CONSTANT_PARAMETERS.update(optim_params)
     print(json.dumps(CONSTANT_PARAMETERS, sort_keys=False, indent=4))
@@ -296,10 +296,11 @@ def _(
     GRIDSEARCH_PARAMETERS,
     distances,
     euclidean_distances,
+    mean_coherency,
     normalised_parameters,
     np,
 ):
-    CELL_INDEX = 5
+    CELL_INDEX = 0
 
     # Posterior for WT1:
     # mask = euclidean_distances[:, CELL_INDEX] \
@@ -307,12 +308,14 @@ def _(
     # mask = euclidean_distances[:, CELL_INDEX] <= -10
     # mask = np.all(distances[:, CELL_INDEX, :3] < 0.8, axis=1)
 
+    coherency_mask = mean_coherency > 0.03
     distance_quantiles = np.quantile(
         distances[:, CELL_INDEX, :3],
-        0.05, axis=0
+        0.5, axis=0
     )
     quantile_check = distances[:, CELL_INDEX, :3] < distance_quantiles 
     mask = np.all(quantile_check, axis=1)
+    mask = np.logical_and(coherency_mask, mask)
     print(np.argwhere(mask))
 
     wt_posterior = normalised_parameters[mask, :]
@@ -325,6 +328,7 @@ def _(
     return (
         CELL_INDEX,
         argmins,
+        coherency_mask,
         distance_quantiles,
         mask,
         mde,

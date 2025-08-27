@@ -45,6 +45,8 @@ public:
     boostMatrix::matrix<bool> getCellTypeContactState(std::tuple<double, double> position, int cellType) const;
     boostMatrix::matrix<double> getLocalCellHeadingState(std::tuple<double, double> position) const;
 
+    std::tuple<double, double, double> summariseFibreMatrix(int i, int j) const;
+
     // Setters:
     // --- --- Matrix Setters:
     void setSubMatrix(int i, int j, double heading, double polarity, const boostMatrix::matrix<double>& kernel);

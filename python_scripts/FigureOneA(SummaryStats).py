@@ -794,7 +794,7 @@ def _(np, skimage):
 
 @app.cell
 def _(CELL_NUMBER, TIMESTEPS, get_trajectory_data, np):
-    trajectory_dataframe = get_trajectory_data(0, 0)
+    trajectory_dataframe = get_trajectory_data(1, 0)
     positions = trajectory_dataframe.sort_values(['particle', 'frame']).loc[:, ('x', 'y')]
     position_array = np.array(positions).reshape(CELL_NUMBER, TIMESTEPS, 2)
     position_array = position_array[:, 1440:, :]
@@ -907,7 +907,7 @@ def _(trajectory_dataframe):
 @app.cell
 def _(np, position_array, skimage, stadium_array):
     def _():
-        RADIUS = 25 / 2
+        RADIUS = 30 / 2
 
         # Test tapered stadium plots:
         line_array = np.zeros((1024, 1024))
