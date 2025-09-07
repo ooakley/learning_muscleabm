@@ -24,6 +24,7 @@ python3 ./python_scripts/call_json_parameters.py --path_to_config ./example_conf
 int main(int argc, char** argv) {
     // Declaring variables to be parsed:
     // Simulation structural variables:
+    std::string outputFolder;
     int jobArrayID;
     int superIterationCount;
     int timeStepsToRun;
@@ -40,6 +41,9 @@ int main(int argc, char** argv) {
     // Parsing variables from the command line:
     po::options_description desc("Parameters to be set for the simulation.");
     desc.add_options()
+        ("outputFolder", po::value<std::string>(&outputFolder)->required(),
+            "Name of the folder in which to place outputs."
+        )
         ("jobArrayID", po::value<int>(&jobArrayID)->required(),
             "ID of the job array, to be referenced against gridsearch.txt. Ignore if not using array."
         )
@@ -127,13 +131,20 @@ int main(int argc, char** argv) {
     }
 
     // Creating output directory if not present:
-    const std::string directoryPath{"./fileOutputs/"};
+    const std::string directoryPath{outputFolder + "/"};
     if (!boostfs::exists(directoryPath)) {
         boostfs::create_directory(directoryPath);
     }
 
+    // Generating folder hierarchy:
+    const int moduloIndex{static_cast<int>(std::floor(jobArrayID / 1000))};
+    const std::string hierarchyFolder{directoryPath + std::to_string(moduloIndex) + "/"};
+    if (!boostfs::exists(hierarchyFolder)) {
+        boostfs::create_directory(hierarchyFolder);
+    }
+
     // Generating subdirectory to store simulation results:
-    const std::string subdirectoryPath{directoryPath + std::to_string(jobArrayID) + "/"};
+    const std::string subdirectoryPath{hierarchyFolder + std::to_string(jobArrayID) + "/"};
     if (!boostfs::exists(subdirectoryPath)) {
         boostfs::create_directory(subdirectoryPath);
     }

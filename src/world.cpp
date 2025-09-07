@@ -104,12 +104,19 @@ void World::writeMatrixToCSV(std::ofstream& matrixFile) {
     //         matrixFile << ecmField.getMatrixDensity(i, j) << ",";
     //     }
     // }
+    // for (int i = 0; i < countECMElement; i++) {
+    //     for (int j = 0; j < countECMElement; j++) {
+    //         const auto [heading, count, concentration] = ecmField.summariseFibreMatrix(i, j);
+    //         matrixFile << heading << ",";
+    //         matrixFile << count << ",";
+    //         matrixFile << concentration << ",";
+    //     }
+    // }
     for (int i = 0; i < countECMElement; i++) {
         for (int j = 0; j < countECMElement; j++) {
-            const auto [heading, count, concentration] = ecmField.summariseFibreMatrix(i, j);
-            matrixFile << heading << ",";
-            matrixFile << count << ",";
-            matrixFile << concentration << ",";
+            matrixFile << 0 << ",";
+            matrixFile << 0 << ",";
+            matrixFile << 0 << ",";
         }
     }
 }

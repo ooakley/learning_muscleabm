@@ -10,7 +10,7 @@ def _():
     import torch
     import json
     import skimage
-
+    import cv2
     import time
     import itertools
     import os
@@ -29,6 +29,7 @@ def _():
     return (
         DataLoader,
         TensorDataset,
+        cv2,
         emd2_1d,
         gpytorch,
         itertools,
@@ -539,12 +540,12 @@ def _(np, skimage):
                 # Get indices of line:
                 xy_t = xy_data[frame_index, :].astype(int)
                 xy_t1 = xy_data[frame_index+1, :].astype(int)
-    
+
                 # Account for periodic boundaries:
                 distance = np.sqrt(np.sum((xy_t - xy_t1)**2, axis=0))
                 if distance > 1024:
                     continue
-    
+
                 # Plot line indices on matrix:
                 _rr, _cc = skimage.draw.line(*xy_t, *xy_t1)
                 line_array[_rr, _cc] += 1
@@ -721,7 +722,7 @@ def _(experiment_dataframe):
 def _(OUTPUT_COLUMN_NAMES, os, pd):
     # Constant display variables:
     MESH_NUMBER = 64
-    CELL_NUMBER = 250
+    CELL_NUMBER = 75
     TIMESTEPS = 2880
     TIMESTEP_WIDTH = 1440
     WORLD_SIZE = 2048
@@ -794,15 +795,15 @@ def _(np, skimage):
 
 @app.cell
 def _(CELL_NUMBER, TIMESTEPS, get_trajectory_data, np):
-    trajectory_dataframe = get_trajectory_data(1, 0)
+    trajectory_dataframe = get_trajectory_data(0, 0)
     positions = trajectory_dataframe.sort_values(['particle', 'frame']).loc[:, ('x', 'y')]
     position_array = np.array(positions).reshape(CELL_NUMBER, TIMESTEPS, 2)
-    position_array = position_array[:, 1440:, :]
+    position_array = position_array[:, -1440:, :]
 
     stadia = trajectory_dataframe.sort_values(['particle', 'frame'])\
         .loc[:, ('stadium_x', 'stadium_y')]
     stadium_array = np.array(stadia).reshape(CELL_NUMBER, TIMESTEPS, 2)
-    stadium_array = stadium_array[:, 1440:, :]
+    stadium_array = stadium_array[:, -1440:, :]
     return (
         position_array,
         positions,
@@ -813,8 +814,8 @@ def _(CELL_NUMBER, TIMESTEPS, get_trajectory_data, np):
 
 
 @app.cell
-def _(trajectory_dataframe):
-    trajectory_dataframe
+def _(np, trajectory_dataframe):
+    np.mean(trajectory_dataframe["actin_mag"])
     return
 
 
@@ -853,10 +854,9 @@ def _(
 @app.cell
 def _(larr, plt):
     fig, ax = plt.subplots(figsize=(10, 10))
-    ax.imshow(larr, vmin=0, vmax=2, cmap='gray', interpolation='bilinear')
+    ax.imshow(larr, vmin=0, vmax=1, cmap='gray', interpolation='bilinear')
     ax.set_xticks([])
     ax.set_yticks([])
-
     plt.show()
     return ax, fig
 
@@ -906,12 +906,11 @@ def _(trajectory_dataframe):
 
 @app.cell
 def _(np, position_array, skimage, stadium_array):
-    def _():
-        RADIUS = 30 / 2
+    def plot_wireframe(timepoint):
+        RADIUS = 43 / 2
 
         # Test tapered stadium plots:
         line_array = np.zeros((1024, 1024))
-        timepoint = -1
 
         for cell_index in range(position_array.shape[0]):
             # Get cell data:
@@ -947,7 +946,7 @@ def _(np, position_array, skimage, stadium_array):
             flank_one = position_index + \
                 (RADIUS*np.array([np.cos(perpendicular_one), np.sin(perpendicular_one)]))
             flank_one_index = np.floor(flank_one).astype(int)
-        
+
             flank_two = position_index + \
                 (RADIUS*np.array([np.cos(perpendicular_two), np.sin(perpendicular_two)]))
             flank_two_index = np.floor(flank_two).astype(int)
@@ -969,13 +968,13 @@ def _(np, position_array, skimage, stadium_array):
 
         return line_array
 
-    test_plot = _()
-    return (test_plot,)
+    test_plot = plot_wireframe(0)
+    return plot_wireframe, test_plot
 
 
 @app.cell
 def _(plt, test_plot):
-    _fig, _ax = plt.subplots(figsize=(10, 10))
+    _fig, _ax = plt.subplots(figsize=(7.5, 7.5), layout='constrained')
     _ax.imshow(test_plot, vmin=0, vmax=1, cmap='gray')
     _ax.set_xticks([]);
     _ax.set_yticks([]);
@@ -985,8 +984,35 @@ def _(plt, test_plot):
 
 
 @app.cell
-def _():
-    return
+def _(cv2, np, plot_wireframe, plt):
+    size = 750, 750
+    fps = 60
+    out = cv2.VideoWriter(
+        './trajectory_wireframe_video.mp4', cv2.VideoWriter_fourcc(*'avc1'),
+        fps, (size[1], size[0]), True
+    )
+
+    for timestep in range(0, 1440, 5):
+        if (timestep) % 200 == 0:
+            print(timestep)
+
+        wireframe_plot = plot_wireframe(timestep)
+        _fig, _ax = plt.subplots(figsize=(7.5, 7.5), layout='constrained')
+        _ax.imshow(wireframe_plot, vmin=0, vmax=1, cmap='gray')
+        _ax.set_xticks([]);
+        _ax.set_yticks([]);
+
+        # Export to array:
+        _fig.canvas.draw()
+        array_plot = np.array(_fig.canvas.renderer.buffer_rgba())
+        plt.close(_fig)
+
+        # Save array plot to opencv file:
+        bgr_data = cv2.cvtColor(array_plot, cv2.COLOR_RGB2BGR)
+        out.write(bgr_data)
+
+    out.release()
+    return array_plot, bgr_data, fps, out, size, timestep, wireframe_plot
 
 
 @app.cell

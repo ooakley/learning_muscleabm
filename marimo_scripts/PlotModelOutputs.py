@@ -322,8 +322,8 @@ def _(
 
 @app.cell
 def _(get_trajectory_data, read_matrix_into_numpy):
-    ecm_matrix = read_matrix_into_numpy(1, 0)
-    trajectory_dataframe = get_trajectory_data(1, 0)
+    ecm_matrix = read_matrix_into_numpy(0, 0)
+    trajectory_dataframe = get_trajectory_data(0, 0)
     return ecm_matrix, trajectory_dataframe
 
 
@@ -331,7 +331,7 @@ def _(get_trajectory_data, read_matrix_into_numpy):
 def _(TIMESTEPS, ecm_matrix, plot_superiteration, plt, trajectory_dataframe):
     _fig, _ax = plt.subplots(figsize=(10, 10))
     plot_superiteration(
-        trajectory_dataframe, ecm_matrix, TIMESTEPS-1, _ax, 10,
+        trajectory_dataframe, ecm_matrix, TIMESTEPS-1, _ax, 54,
         plot_matrix=True, plot_trajectories=True, plot_ellipses=True
     )
     plt.show()
