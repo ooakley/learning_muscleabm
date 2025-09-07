@@ -1,4 +1,5 @@
 #include "ecm.h"
+#include <algorithm>
 #include <cmath>
 #include <boost/numeric/ublas/matrix.hpp>
 #include <deque>
@@ -285,6 +286,48 @@ boostMatrix::matrix<double> ECMField::getLocalMatrixDensity(std::tuple<double, d
     return localMatrix;
 };
 
+std::tuple<double, double, double> ECMField::summariseFibreMatrix(int i, int j) const {
+    // Get fibre count and return early if nothing deposited:
+    int fibreCount{static_cast<int>(fibreMatrix[i][j].size())};
+    if (fibreCount == 0) {
+        return {0, 0, 0};
+    }
+    if (fibreCount == 1) {
+        return {fibreMatrix[i][j][0], 1, 1};
+    }
+
+    // Double headings:
+    std::vector<double> doubleHeadings{};
+    std::transform(
+        fibreMatrix[i][j].cbegin(), fibreMatrix[i][j].cend(),
+        std::back_inserter(doubleHeadings),
+        [](double nematicAngle) -> double {return 2.0*nematicAngle;}
+    );
+
+    // Get cartesian components:
+    std::vector<double> cosHeadings{};
+    std::vector<double> sinHeadings{};
+    std::transform(
+        doubleHeadings.cbegin(), doubleHeadings.cend(),
+        std::back_inserter(cosHeadings),
+        [](double heading) -> double {return std::cos(heading);}
+    );
+    std::transform(
+        doubleHeadings.cbegin(), doubleHeadings.cend(),
+        std::back_inserter(sinHeadings),
+        [](double heading) -> double {return std::sin(heading);}
+    );
+
+    // Accumulate and get relevant data:
+    double meanCosine{std::accumulate(cosHeadings.begin(), cosHeadings.end(), 0.0) / fibreCount};
+    double meanSine{std::accumulate(sinHeadings.begin(), sinHeadings.end(), 0.0) / fibreCount};
+
+    double averagedHeading{std::atan2(meanSine, meanCosine) / 2};
+    double concentration{std::sqrt(std::pow(meanCosine, 2) + std::pow(meanSine, 2))};
+
+    return {averagedHeading, concentration, fibreCount};
+};
+
 
 // Setters:
 void ECMField::setSubMatrix(
@@ -327,7 +370,7 @@ void ECMField::addToFibreMatrix(int i, int j, double heading) {
     fibreMatrix[i][j].push_back(nematicHeading);
 
     // Age fibre unit:
-    if (fibreMatrix[i][j].size() >= 1000) {
+    if (fibreMatrix[i][j].size() >= 500) {
         fibreMatrix[i][j].pop_front();
     }
 }

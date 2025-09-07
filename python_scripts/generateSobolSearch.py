@@ -1,14 +1,19 @@
 """Generates range of parameters to sample using low discrepancy Sobol sequences."""
 import os
 import json
+import math
 
 from scipy.stats import qmc
 
+# Define output folder:
+OUTPUT_FOLDER = "sobolOutputs"
+
 # Defines the parameter ranges, with [start, stop]:
-NUM_SAMPLES_EXPONENT = 14
+NUM_SAMPLES_EXPONENT = 12
 SIMULATION_INDEX = 0
 
 CONSTANT_PARAMETERS = {
+    "outputFolder": OUTPUT_FOLDER,
     "superIterationCount": 12,
     "timestepsToRun": 2880,
     "worldSize": 2048,
@@ -71,7 +76,14 @@ class JSONOutputManager:
             argument_json["jobArrayID"] = simulation_id
 
             # Save config file:
-            output_subdirectory = os.path.join("fileOutputs", f"{simulation_id}")
+            # --- First generate hierarchy folder:
+            hierarchy_folder_id = int(math.floor(simulation_id / 1000))
+            hierarchy_directory = os.path.join(OUTPUT_FOLDER, str(hierarchy_folder_id))
+            if not os.path.exists(hierarchy_directory):
+                os.mkdir(hierarchy_directory)
+
+            # --- Generate output directory:
+            output_subdirectory = os.path.join(hierarchy_directory, f"{simulation_id}")
             if not os.path.exists(output_subdirectory):
                 os.mkdir(output_subdirectory)
             output_filepath = os.path.join(output_subdirectory, f"{simulation_id}_arguments.json")
@@ -89,11 +101,11 @@ def main():
     sample_matrix = sobol_sampler.random_base2(m=NUM_SAMPLES_EXPONENT)
 
     # Ensure output folder exists:
-    if not os.path.exists("fileOutputs"):
-        os.mkdir("fileOutputs")
+    if not os.path.exists(OUTPUT_FOLDER):
+        os.mkdir(OUTPUT_FOLDER)
 
     # Save gridsearch configuration space to folder:
-    gridsearch_config_path = os.path.join("fileOutputs", "config.json")
+    gridsearch_config_path = os.path.join(OUTPUT_FOLDER, "config.json")
     with open(gridsearch_config_path, 'w') as output:
         config_dict = {
             "constant": CONSTANT_PARAMETERS,

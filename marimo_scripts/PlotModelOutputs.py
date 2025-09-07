@@ -62,14 +62,14 @@ def _(DATA_DIR_PATH, MESH_NUMBER, OUTPUT_COLUMN_NAMES, TIMESTEPS, np, os, pd):
         filepath = os.path.join(directory_path, filename)
 
         # Calculate the exact number of matrix mesh elements:
-        number_of_elements = (MESH_NUMBER**2)*TIMESTEPS*3
+        number_of_elements = TIMESTEPS*(MESH_NUMBER**2)*3
         flattened_matrix = np.loadtxt(
             filepath, delimiter=',',
             usecols=range(number_of_elements)
         )
 
         # Reshape into (timesteps, [density/orientation/anisotropy], grid, grid):
-        dimensions = (TIMESTEPS, 3, MESH_NUMBER, MESH_NUMBER)
+        dimensions = (TIMESTEPS, MESH_NUMBER, MESH_NUMBER, 3)
         return np.reshape(flattened_matrix, dimensions, order='C')
 
 
@@ -123,9 +123,9 @@ def _(
         Y = np.arange(0, WORLD_SIZE, tile_width) + (tile_width / 2)
         X, Y = np.meshgrid(X, Y)
 
-        matrix = matrix_series[timestep, 0, :, :]
-        U = np.cos(matrix) * matrix_series[int(timestep / DIVISOR), 1, :, :]
-        V = -np.sin(matrix) * matrix_series[int(timestep / DIVISOR), 1, :, :]
+        matrix = matrix_series[timestep, :, :, 0]
+        U = np.cos(matrix) * matrix_series[int(timestep / DIVISOR), :, :, 1]
+        V = -np.sin(matrix) * matrix_series[int(timestep / DIVISOR), :, :, 1]
 
         # Setting up plot
         # colour_list = ['r', 'g']
@@ -176,12 +176,12 @@ def _(
         if plot_matrix:
             speed = np.sqrt(U**2 + V**2)
             if speed.max() != 0:
-                alpha = speed / speed.max()
+                fibre_count = matrix_series[timestep, :, :, 2]
                 ax.quiver(
                     X, Y, U, V, [matrix],
-                    cmap=cc.cm.CET_C6, clim=(0, np.pi),
-                    pivot='mid', scale=50, headwidth=0, headlength=0, headaxislength=0,
-                    width=0.005, alpha=alpha
+                    cmap=cc.cm.CET_C6, clim=(-np.pi/2, np.pi/2),
+                    pivot='mid', scale=35, headwidth=0, headlength=0, headaxislength=0,
+                    width=0.005, alpha=fibre_count/500
                 )
 
 
@@ -331,8 +331,8 @@ def _(get_trajectory_data, read_matrix_into_numpy):
 def _(TIMESTEPS, ecm_matrix, plot_superiteration, plt, trajectory_dataframe):
     _fig, _ax = plt.subplots(figsize=(10, 10))
     plot_superiteration(
-        trajectory_dataframe, ecm_matrix, TIMESTEPS-1, _ax, 50,
-        plot_matrix=True, plot_trajectories=True, plot_ellipses=False
+        trajectory_dataframe, ecm_matrix, TIMESTEPS-1, _ax, 54,
+        plot_matrix=True, plot_trajectories=True, plot_ellipses=True
     )
     plt.show()
     return
@@ -476,14 +476,14 @@ def _(
         fps, (size[1], size[0]), True
     )
 
-    for timeframe in list(range(TIMESTEPS))[1440::5]:
+    for timeframe in list(range(TIMESTEPS))[0:2880:10]:
         if (timeframe) % 200 == 0:
             print(timeframe)
 
         _fig, _ax = plt.subplots(figsize=(7.5, 7.5), layout='constrained')
         plot_superiteration(
             trajectory_dataframe, ecm_matrix, timeframe, _ax, 36,
-            plot_matrix=False, plot_trajectories=False, plot_ellipses=True
+            plot_matrix=True, plot_trajectories=False, plot_ellipses=False
         )
 
         # Export to array:

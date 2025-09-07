@@ -12,6 +12,7 @@ wetlab_data/
 */__marimo__/
 */layouts/
 fileOut*
+*Outputs
 
 # Compiled Object files
 *.slo

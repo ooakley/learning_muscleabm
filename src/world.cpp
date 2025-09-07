@@ -94,21 +94,29 @@ void World::writePositionsToCSV(std::ofstream& csvFile) {
 }
 
 void World::writeMatrixToCSV(std::ofstream& matrixFile) {
+    // for (int i = 0; i < countECMElement; i++) {
+    //     for (int j = 0; j < countECMElement; j++) {
+    //         matrixFile << ecmField.getHeading(i, j) << ",";
+    //     }
+    // }
+    // for (int i = 0; i < countECMElement; i++) {
+    //     for (int j = 0; j < countECMElement; j++) {
+    //         matrixFile << ecmField.getMatrixDensity(i, j) << ",";
+    //     }
+    // }
+    // for (int i = 0; i < countECMElement; i++) {
+    //     for (int j = 0; j < countECMElement; j++) {
+    //         const auto [heading, count, concentration] = ecmField.summariseFibreMatrix(i, j);
+    //         matrixFile << heading << ",";
+    //         matrixFile << count << ",";
+    //         matrixFile << concentration << ",";
+    //     }
+    // }
     for (int i = 0; i < countECMElement; i++) {
         for (int j = 0; j < countECMElement; j++) {
-            matrixFile << ecmField.getHeading(i, j) << ",";
-        }
-    }
-    for (int i = 0; i < countECMElement; i++) {
-        for (int j = 0; j < countECMElement; j++) {
-            matrixFile << ecmField.getMatrixDensity(i, j) << ",";
-        }
-    }
-    for (int i = 0; i < countECMElement; i++) {
-        for (int j = 0; j < countECMElement; j++) {
-            double anisotropy{ecmField.getMatrixAnisotropy(i, j)};
-            double weighting{ecmField.getMatrixWeighting(i, j)};
-            matrixFile << anisotropy/weighting << ",";
+            matrixFile << 0 << ",";
+            matrixFile << 0 << ",";
+            matrixFile << 0 << ",";
         }
     }
 }
