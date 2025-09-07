@@ -150,6 +150,9 @@ std::tuple<double, double> ECMField::sampleFibreMatrix(int i, int j) {
     std::uniform_int_distribution<> indexDistribution(0, sampleSize-1);
     int sampledIndex{indexDistribution(generatorFibreSampling)};
     double sampledFibreHeading{fibreMatrix[i][j][sampledIndex]};
+    while (sampledFibreHeading < 0) {sampledFibreHeading += M_PI;}
+    while (sampledFibreHeading >= M_PI) {sampledFibreHeading -= M_PI;}
+
     return {sampledFibreHeading, 1};
 };
 
@@ -320,6 +323,7 @@ void ECMField::addToFibreMatrix(int i, int j, double heading) {
     // Add to fibre matrix:
     double nematicHeading{heading};
     while (nematicHeading < 0) {nematicHeading += M_PI;}
+    while (nematicHeading >= M_PI) {nematicHeading -= M_PI;}
     fibreMatrix[i][j].push_back(nematicHeading);
 
     // Age fibre unit:
