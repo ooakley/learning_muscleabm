@@ -5,6 +5,7 @@ import numpy as np
 
 # SAMPLE_COUNT = 1000
 SAMPLE_COUNT = int(16384)
+# SAMPLE_COUNT = 2000
 
 
 def parse_arguments():
