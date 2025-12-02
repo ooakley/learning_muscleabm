@@ -16,8 +16,8 @@ namespace boostfs = boost::filesystem;
 namespace po = boost::program_options;
 
 /*
-Hello! There are a lot of command line arguments, for which I apologise.If you'd just like to run the simulation,
-here's a handy python command that you can paste into the terminal after compiling the code:
+Hello! There are a lot of command line arguments - it's much easier to play around with the config file,
+and run the simulation with this handy python script (after compiling the code):
 python3 ./python_scripts/call_json_parameters.py --path_to_config ./example_config.json
 */
 
@@ -136,18 +136,18 @@ int main(int argc, char** argv) {
         boostfs::create_directory(directoryPath);
     }
 
-    // Generating folder hierarchy:
-    const int moduloIndex{static_cast<int>(std::floor(jobArrayID / 1000))};
-    const std::string hierarchyFolder{directoryPath + std::to_string(moduloIndex) + "/"};
-    if (!boostfs::exists(hierarchyFolder)) {
-        boostfs::create_directory(hierarchyFolder);
-    }
+    // // Generating folder hierarchy:
+    // const int moduloIndex{static_cast<int>(std::floor(jobArrayID / 1000))};
+    // const std::string hierarchyFolder{directoryPath + std::to_string(moduloIndex) + "/"};
+    // if (!boostfs::exists(hierarchyFolder)) {
+    //     boostfs::create_directory(hierarchyFolder);
+    // }
 
-    // Generating subdirectory to store simulation results:
-    const std::string subdirectoryPath{hierarchyFolder + std::to_string(jobArrayID) + "/"};
-    if (!boostfs::exists(subdirectoryPath)) {
-        boostfs::create_directory(subdirectoryPath);
-    }
+    // // Generating subdirectory to store simulation results:
+    // const std::string subdirectoryPath{hierarchyFolder + std::to_string(jobArrayID) + "/"};
+    // if (!boostfs::exists(subdirectoryPath)) {
+    //     boostfs::create_directory(subdirectoryPath);
+    // }
 
     // Defining RNG generator for world seeds:
     std::mt19937 seedGenerator = std::mt19937(jobArrayID);
@@ -165,10 +165,10 @@ int main(int argc, char** argv) {
 
         // Generating filepath & filename:
         const std::string positionsFilename{
-            subdirectoryPath + "positions_seed" + iterationString + ".csv"
+            directoryPath + "/" + "positions_seed" + iterationString + ".csv"
         };
         const std::string matrixFilename{
-            subdirectoryPath + "matrix_seed" + iterationString + ".txt"
+            directoryPath + "/" + "matrix_seed" + iterationString + ".txt"
         };
 
         // Opening filestreams:
@@ -199,7 +199,6 @@ int main(int argc, char** argv) {
         // We need to close files to flush remaining outputs to buffer.
         csvFile.close();
         matrixFile.close();
-
     }
 
     return 0;

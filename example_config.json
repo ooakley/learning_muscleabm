@@ -1,5 +1,5 @@
 {
-    "outputFolder": "testOutputs",
+    "outputFolder": "./test_output",
     "jobArrayID": 10000000,
     "superIterationCount": 1,
     "timestepsToRun": 2880,

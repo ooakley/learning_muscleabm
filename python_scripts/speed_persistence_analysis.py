@@ -2,10 +2,10 @@
 import argparse
 import os
 import json
+
 import numpy as np
 import pandas as pd
 
-SIMULATION_OUTPUTS_FOLDER = "./fileOutputs/"
 
 OUTPUT_COLUMN_NAMES = [
     "frame", "particle", "x", "y",
@@ -24,7 +24,8 @@ OUTPUT_COLUMN_NAMES = [
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Process a folder with a given integer name.')
-    parser.add_argument('--folder_id', type=int, help='Integer corresponding to the folder name')
+    parser.add_argument('--run_folderpath', type=str)
+    parser.add_argument('--folder_id', type=int)
     args = parser.parse_args()
     return args
 
@@ -33,12 +34,11 @@ def main():
     """Run basic script logic."""
     # Parse arguments:
     args = parse_arguments()
-
-    # Find specified simulation output files:
-    subdirectory_path = os.path.join(SIMULATION_OUTPUTS_FOLDER, str(args.folder_id))
+    run_folderpath = args.run_folderpath
+    folder_id = args.folder_id
 
     # Get arguments to simulation:
-    json_filepath = os.path.join(subdirectory_path, f"{args.folder_id}_arguments.json")
+    json_filepath = os.path.join(run_folderpath, f"{folder_id}_arguments.json")
     with open(json_filepath) as json_file:
         simulation_arguments = json.load(json_file)
 
@@ -56,7 +56,7 @@ def main():
         # Read dataframe into memory:
         print(f"Reading subiteration {seed}...")
         filename = f"positions_seed{seed:03d}.csv"
-        filepath = os.path.join(subdirectory_path, filename)
+        filepath = os.path.join(run_folderpath, filename)
         trajectory_dataframe = pd.read_csv(
             filepath, index_col=None, header=None, names=OUTPUT_COLUMN_NAMES
         )
@@ -110,16 +110,16 @@ def main():
 
     # Save to .npy files as (SUPERITERATIONS, TIMESTEPS) arrays:
     magnitude_cellmeans = np.stack(magnitude_cellmeans, axis=0)
-    np.save(os.path.join(subdirectory_path, "magnitude_cellmeans.npy"), magnitude_cellmeans)
+    np.save(os.path.join(run_folderpath, "magnitude_cellmeans.npy"), magnitude_cellmeans)
 
     dtheta_cellmeans = np.stack(dtheta_cellmeans, axis=0)
-    np.save(os.path.join(subdirectory_path, "dtheta_cellmeans.npy"), dtheta_cellmeans)
+    np.save(os.path.join(run_folderpath, "dtheta_cellmeans.npy"), dtheta_cellmeans)
 
     order_parameters = np.stack(order_parameters, axis=0)
-    np.save(os.path.join(subdirectory_path, "order_parameters.npy"), order_parameters)
+    np.save(os.path.join(run_folderpath, "order_parameters.npy"), order_parameters)
 
     collision_cellmeans = np.stack(collision_cellmeans, axis=0)
-    np.save(os.path.join(subdirectory_path, "collision_cellmeans.npy"), collision_cellmeans)
+    np.save(os.path.join(run_folderpath, "collision_cellmeans.npy"), collision_cellmeans)
 
 
 if __name__ == "__main__":

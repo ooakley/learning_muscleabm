@@ -7,7 +7,6 @@ import skimage
 import numpy as np
 import pandas as pd
 
-SIMULATION_OUTPUTS_FOLDER = "./fileOutputs/"
 
 OUTPUT_COLUMN_NAMES = [
     "frame", "particle", "x", "y",
@@ -26,7 +25,8 @@ OUTPUT_COLUMN_NAMES = [
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Process a folder with a given integer name.')
-    parser.add_argument('--folder_id', type=int, help='Integer corresponding to the folder name')
+    parser.add_argument('--run_folderpath', type=str)
+    parser.add_argument('--folder_id', type=int)
     args = parser.parse_args()
     return args
 
@@ -110,12 +110,11 @@ def main():
     """Run basic script logic."""
     # Parse arguments:
     args = parse_arguments()
-
-    # Find specified simulation output files:
-    subdirectory_path = os.path.join(SIMULATION_OUTPUTS_FOLDER, str(args.folder_id))
+    run_folderpath = args.run_folderpath
+    folder_id = args.folder_id
 
     # Get arguments to simulation:
-    json_filepath = os.path.join(subdirectory_path, f"{args.folder_id}_arguments.json")
+    json_filepath = os.path.join(run_folderpath, f"{folder_id}_arguments.json")
     with open(json_filepath) as json_file:
         simulation_arguments = json.load(json_file)
 
@@ -131,7 +130,7 @@ def main():
         # Read dataframe into memory:
         print(f"Reading subiteration {seed} for site analysis...")
         filename = f"positions_seed{seed:03d}.csv"
-        filepath = os.path.join(subdirectory_path, filename)
+        filepath = os.path.join(run_folderpath, filename)
         trajectory_dataframe = pd.read_csv(
             filepath, index_col=None, header=None, names=OUTPUT_COLUMN_NAMES
         )
@@ -158,10 +157,10 @@ def main():
 
     # Save to .npy files as (SUPERITERATIONS) arrays:
     coherency_fractions = np.array(coherency_fractions)
-    np.save(os.path.join(subdirectory_path, "coherency_fractions.npy"), coherency_fractions)
+    np.save(os.path.join(run_folderpath, "coherency_fractions.npy"), coherency_fractions)
 
     ann_indices = np.array(ann_indices)
-    np.save(os.path.join(subdirectory_path, "ann_indices.npy"), ann_indices)
+    np.save(os.path.join(run_folderpath, "ann_indices.npy"), ann_indices)
 
 
 if __name__ == "__main__":

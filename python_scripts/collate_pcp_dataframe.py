@@ -1,6 +1,7 @@
+import argparse
 import json
 import os
-import argparse
+import math
 
 import numpy as np
 
@@ -8,15 +9,18 @@ import numpy as np
 GRIDSEARCH_PARAMETERS = {
     "cueDiffusionRate": [0.0001, 2.5],
     "cueKa": [0.0001, 5],
-    "fluctuationAmplitude": [5e-5, 1e-1],
-    "fluctuationTimescale": [1, 20],
-    "maximumSteadyStateActinFlow": [0.0, 3],
-    "numberOfCells": [75, 250],
-    "actinAdvectionRate": [0.0, 3],
+    "fluctuationAmplitude": [1e-5, 1e-2],
+    "fluctuationTimescale": [1, 75],
+    "maximumSteadyStateActinFlow": [0.1, 3],
+    "numberOfCells": [75, 175],
+    "actinAdvectionRate": [0.1, 3],
     "cellBodyRadius": [15, 100],
     # Collisions:
     "collisionFlowReductionRate": [0.0, 1],
-    "collisionAdvectionRate": [0.0, 1.5],
+    "collisionAdvectionRate": [0.0, 1],
+    # Shape:
+    "stretchFactor": [0.25, 3],
+    "slipFactor": [0.0001, 0.1],
 }
 
 
@@ -43,8 +47,10 @@ def main():
     gridsearch_parameters = config_dictionary["gridsearch"]
 
     input_matrix = []
-    for i in range(int(16384)):
-        with open(f'./{args.folder_name}/{i}/{i}_arguments.json') as json_data:
+    for i in range(int(65536)):
+        hierarchy_id = int(math.floor(i / 1000))
+        json_filepath = f'./{args.folder_name}/{hierarchy_id}/{i}/{i}_arguments.json'
+        with open(json_filepath) as json_data:
             # Reading data:
             parameter_dict = json.load(json_data)
             input_row = []
