@@ -133,12 +133,12 @@ def _():
     TD_GRIDSEARCH_PARAMETERS = {
         "cueDiffusionRate": [0.0001, 2.5],
         "cueKa": [0.0001, 5],
-        "fluctuationAmplitude": [1e-5, 1e-2],
+        "fluctuationAmplitude": [1e-5, 1e-3],
         "fluctuationTimescale": [1, 75],
         "maximumSteadyStateActinFlow": [0.1, 3],
-        "numberOfCells": [75, 175],
+        "numberOfCells": [50, 125],
         "actinAdvectionRate": [0.1, 3],
-        "cellBodyRadius": [15, 100],
+        "cellBodyRadius": [20, 60],
         # Collisions:
         "collisionFlowReductionRate": [0.0, 1],
         "collisionAdvectionRate": [0.0, 1],
@@ -155,9 +155,9 @@ def _(TD_GRIDSEARCH_PARAMETERS, np):
         parameters = np.load(
             f"./gridsearch_data/{folder_name}/collated_inputs.npy"
         )
-        distances = np.load(
-            f"./gridsearch_data/{folder_name}/collated_distances.npy"
-        )
+        # distances = np.load(
+        #     f"./gridsearch_data/{folder_name}/collated_distances.npy"
+        # )
         order_parameters = np.load(
             f"./gridsearch_data/{folder_name}/collated_order_parameters.npy"
         )
@@ -173,9 +173,9 @@ def _(TD_GRIDSEARCH_PARAMETERS, np):
 
         gridsearch_parameters = TD_GRIDSEARCH_PARAMETERS
 
-        # Discard failed simulations:
-        nan_mask = np.any(np.isnan(distances), axis=(1, 2))
-        nan_parameters = parameters[nan_mask, :]
+        # # Discard failed simulations:
+        # nan_mask = np.any(np.isnan(distances), axis=(1, 2))
+        # nan_parameters = parameters[nan_mask, :]
 
         # Temporary nan mask for overconfluent simulations:
         cell_number = parameters[:, 5]
@@ -183,13 +183,14 @@ def _(TD_GRIDSEARCH_PARAMETERS, np):
         cell_area = np.pi * (cell_radius ** 2)
         packing_fraction = (cell_area * cell_number) / (2048**2)
         pf_mask = packing_fraction > 0.8
-        nan_mask = np.logical_or(
-            nan_mask, pf_mask
-        )
+        nan_mask = pf_mask
+        # nan_mask = np.logical_or(
+        #     nan_mask, pf_mask
+        # )
 
         # Apply to remaining matrices:
         parameters = parameters[~nan_mask, :]
-        distances = distances[~nan_mask, :]
+        # distances = distances[~nan_mask, :]
         order_parameters = order_parameters[~nan_mask, 0]
         speeds = speeds[~nan_mask, 0]
         coherency_fractions = coherency_fractions[~nan_mask, :]
@@ -202,8 +203,8 @@ def _(TD_GRIDSEARCH_PARAMETERS, np):
             _maximum = parameter_range[1]
             normalised_parameters[:, index] = \
                 (parameters[:, index] - _minimum) / (_maximum - _minimum)
-
-        return normalised_parameters, distances, coherency_fractions, ann_indices, speeds
+        # distances,
+        return normalised_parameters, coherency_fractions, ann_indices, speeds
     return (get_gridsearch_data,)
 
 
@@ -273,23 +274,238 @@ def _(COLUMNS, cf_dictionary, np):
 
 
 @app.cell
+def _(COLUMNS, anni_dictionary, np):
+    anni_imp_boundaries = []
+    for _column in COLUMNS:
+        cell_type_anni_mean = np.mean(anni_dictionary[_column])
+        cell_type_anni_std = np.std(anni_dictionary[_column])
+        anni_imp_boundaries.append([
+            cell_type_anni_mean - cell_type_anni_std,
+            cell_type_anni_mean + cell_type_anni_std
+        ])
+    return anni_imp_boundaries, cell_type_anni_mean, cell_type_anni_std
+
+
+@app.cell
 def _(get_gridsearch_data):
     # Get data:
-    normalised_parameters, distances, coherency_fractions, ann_indices, speeds = \
-        get_gridsearch_data("out_20250826TrajectoryCollisions")
+    normalised_parameters, coherency_fractions, ann_indices, speeds = \
+        get_gridsearch_data("out_largeSearch")
+    return ann_indices, coherency_fractions, normalised_parameters, speeds
+
+
+@app.cell
+def _(coherency_fractions, normalised_parameters, np):
+    MESH_COUNT = 20
+
+    grid_boundaries =  np.linspace(0, 1, MESH_COUNT + 1)
+    parameter_i = 0
+    parameter_j = 6
+
+    phase_array = np.zeros((MESH_COUNT, MESH_COUNT))
+
+    for grid_index_i in range(MESH_COUNT):
+        # Get row parameter mask:
+        i_threshold_low = grid_boundaries[grid_index_i]
+        i_low_mask = i_threshold_low < normalised_parameters[:, parameter_i]
+        i_threshold_high = grid_boundaries[grid_index_i+1]
+        i_high_mask = normalised_parameters[:, parameter_i] < i_threshold_high
+        i_mask = np.logical_and(i_low_mask, i_high_mask)
+
+        for grid_index_j in range(MESH_COUNT):
+            # Get column parameter mask:
+            j_threshold_low = grid_boundaries[grid_index_j]
+            j_low_mask = j_threshold_low < normalised_parameters[:, parameter_j]
+            j_threshold_high = grid_boundaries[grid_index_j+1]
+            j_high_mask = normalised_parameters[:, parameter_j] < j_threshold_high
+            j_mask = np.logical_and(j_low_mask, j_high_mask)
+
+            total_mask = np.logical_and(i_mask, j_mask)
+            phase_array[grid_index_i, grid_index_j] = \
+                np.mean(coherency_fractions[total_mask])
     return (
-        ann_indices,
-        coherency_fractions,
-        distances,
-        normalised_parameters,
-        speeds,
+        MESH_COUNT,
+        grid_boundaries,
+        grid_index_i,
+        grid_index_j,
+        i_high_mask,
+        i_low_mask,
+        i_mask,
+        i_threshold_high,
+        i_threshold_low,
+        j_high_mask,
+        j_low_mask,
+        j_mask,
+        j_threshold_high,
+        j_threshold_low,
+        parameter_i,
+        parameter_j,
+        phase_array,
+        total_mask,
     )
 
 
 @app.cell
-def _(np):
-    cell_index = 5
+def _(phase_array):
+    phase_array.shape
+    return
 
+
+@app.cell
+def _(phase_array, plt):
+    plt.imshow(phase_array, origin='lower', vmin=0.0, vmax=0.08)
+    return
+
+
+@app.cell
+def _(grid_boundaries):
+    grid_boundaries.shape
+    return
+
+
+@app.cell
+def _(ann_indices):
+    ann_indices.shape
+    return
+
+
+@app.cell
+def _(coherency_fractions):
+    print(coherency_fractions.shape)
+    return
+
+
+@app.cell
+def _(
+    ann_indices,
+    anni_imp_boundaries,
+    cf_imp_boundaries,
+    coherency_fractions,
+    normalised_parameters,
+    np,
+    speed_means,
+    speeds,
+):
+    fit_parameters = {}
+    overall_parameters = []
+    for cell_index in range(6):
+        print(f"--- --- Cell Index: {cell_index} --- ---")
+        # Coherency suitability mask:
+        mean_coherency = np.mean(coherency_fractions, axis=1)
+        mask_cf = np.logical_and(
+            cf_imp_boundaries[cell_index][0] < mean_coherency,
+            mean_coherency < cf_imp_boundaries[cell_index][1]
+        )
+        cf_class_dataset = mask_cf.astype(float)
+    
+        # Speed suitability mask:
+        speed_imp_mask = np.logical_and(
+            speeds > speed_means[cell_index] - 0.1,
+            speeds < speed_means[cell_index] + 0.1
+        )
+        speed_class_dataset = speed_imp_mask.astype(float)
+
+        # ANNI suitability mask:
+        mean_anni = np.mean(ann_indices, axis=1)
+        anni_imp_mask = np.logical_and(
+            anni_imp_boundaries[cell_index][0] < mean_anni,
+            mean_anni < anni_imp_boundaries[cell_index][1]
+        )
+        anni_class_dataset = anni_imp_mask.astype(float)
+
+        # Check if we have any current overlap:
+        # sobol_search_native_fit = np.logical_and(
+        #     mask_cf,
+        #     speed_imp_mask
+        # )
+        boolean_dataset = np.stack([mask_cf, speed_imp_mask, anni_imp_mask], axis=1)
+        sobol_search_native_fit = np.all(boolean_dataset, axis=1)
+        print(np.count_nonzero(sobol_search_native_fit))
+
+        # Get parameters:
+        fit_parameters[cell_index] = normalised_parameters[sobol_search_native_fit, :]
+        overall_parameters.append(normalised_parameters[sobol_search_native_fit, :])
+
+    overall_parameters = np.concatenate(overall_parameters, axis=0)
+    return (
+        anni_class_dataset,
+        anni_imp_mask,
+        boolean_dataset,
+        cell_index,
+        cf_class_dataset,
+        fit_parameters,
+        mask_cf,
+        mean_anni,
+        mean_coherency,
+        overall_parameters,
+        sobol_search_native_fit,
+        speed_class_dataset,
+        speed_imp_mask,
+    )
+
+
+@app.cell
+def _():
+    # Demonstrate collective behaviour harder to reproduce without matrix feedback.
+    # Get phase plots for all parameter combinations.
+    # independent / dependent varaible scatterplots along diagonal
+    return
+
+
+@app.cell
+def _(overall_parameters):
+    overall_parameters
+    return
+
+
+@app.cell
+def _(fit_parameters, plt):
+    _fig, _axs = plt.subplots(12, figsize=(3, 8), sharex=True)
+    for _i in range(12):
+        _axs[_i].hist(fit_parameters[5][:, _i])
+
+    plt.show()
+    return
+
+
+@app.cell
+def _(overall_parameters, plt):
+    _fig, _axs = plt.subplots(12, figsize=(3, 8), sharex=True)
+    for _i in range(12):
+        _axs[_i].hist(overall_parameters[:, _i])
+
+    plt.show()
+    return
+
+
+@app.cell
+def _(TD_GRIDSEARCH_PARAMETERS, json):
+    def print_parameter_set(parameter_set):
+        ranged_parameters = []
+        for idx, parameter_range in enumerate(TD_GRIDSEARCH_PARAMETERS.values()):
+            param_min = parameter_range[0]
+            param_max = parameter_range[1]
+            param_range = param_max - param_min
+            value = (parameter_set[idx] * param_range) + param_min
+            ranged_parameters.append(value)
+
+        optim_params = dict(zip(
+            list(TD_GRIDSEARCH_PARAMETERS.keys()),
+            ranged_parameters
+        ))
+        print(json.dumps(optim_params, sort_keys=False, indent=4))
+        return ranged_parameters
+    return (print_parameter_set,)
+
+
+@app.cell
+def _(fit_parameters, print_parameter_set):
+    print_parameter_set(fit_parameters[5][0]);
+    return
+
+
+@app.cell
+def _(cell_index, np):
     cf_train_predictions = np.load(
         f"interpolation_outputs/{cell_index}_cf_train_predictions.npy"
     )
@@ -306,67 +522,12 @@ def _(np):
     joint_mask = np.logical_and(cf_predictions > 0.5, speed_predictions > 0.5)
     print(np.count_nonzero(joint_mask))
     return (
-        cell_index,
         cf_predictions,
         cf_train_predictions,
         joint_mask,
         speed_predictions,
         speed_train_predictions,
     )
-
-
-@app.cell
-def _(
-    cell_index,
-    cf_imp_boundaries,
-    coherency_fractions,
-    np,
-    speed_means,
-    speeds,
-):
-    # Coherency suitability mask:
-    mean_coherency = np.mean(coherency_fractions, axis=1)
-    mask_cf = np.logical_and(
-        cf_imp_boundaries[cell_index][0] < mean_coherency,
-        mean_coherency < cf_imp_boundaries[cell_index][1]
-    )
-    cf_class_dataset = mask_cf.astype(float)
-    print(np.count_nonzero(cf_class_dataset))
-
-    # Speed suitability mask:
-    speed_imp_mask = np.logical_and(
-        speeds > speed_means[cell_index] - 0.1,
-        speeds < speed_means[cell_index] + 0.1
-    )
-    speed_class_dataset = speed_imp_mask.astype(float)
-    print(np.count_nonzero(speed_class_dataset))
-
-    # Check if we have any current overlap:
-    sobol_search_native_fit = np.logical_and(
-        mask_cf,
-        speed_imp_mask
-    )
-    print(np.count_nonzero(sobol_search_native_fit))
-    return (
-        cf_class_dataset,
-        mask_cf,
-        mean_coherency,
-        sobol_search_native_fit,
-        speed_class_dataset,
-        speed_imp_mask,
-    )
-
-
-@app.cell
-def _(normalised_parameters, sobol_search_native_fit):
-    native_fit = normalised_parameters[sobol_search_native_fit, :][0]
-    return (native_fit,)
-
-
-@app.cell
-def _(native_fit, print_parameter_set):
-    print_parameter_set(native_fit);
-    return
 
 
 @app.cell
@@ -396,26 +557,6 @@ def _(TD_GRIDSEARCH_PARAMETERS, qmc):
     bounded_gridsearch =  (oos_sample_matrix * 0.9) + 0.05
     print(bounded_gridsearch.shape)
     return bounded_gridsearch, oos_sample_matrix, oos_sampler
-
-
-@app.cell
-def _(TD_GRIDSEARCH_PARAMETERS, json):
-    def print_parameter_set(parameter_set):
-        ranged_parameters = []
-        for idx, parameter_range in enumerate(TD_GRIDSEARCH_PARAMETERS.values()):
-            param_min = parameter_range[0]
-            param_max = parameter_range[1]
-            param_range = param_max - param_min
-            value = (parameter_set[idx] * param_range) + param_min
-            ranged_parameters.append(value)
-
-        optim_params = dict(zip(
-            list(TD_GRIDSEARCH_PARAMETERS.keys()),
-            ranged_parameters
-        ))
-        print(json.dumps(optim_params, sort_keys=False, indent=4))
-        return ranged_parameters
-    return (print_parameter_set,)
 
 
 @app.cell
