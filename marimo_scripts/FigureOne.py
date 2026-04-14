@@ -1,13 +1,13 @@
 import marimo
 
-__generated_with = "0.12.10"
-app = marimo.App(width="columns")
+__generated_with = "0.19.7"
+app = marimo.App(width="medium")
 
 
 @app.cell
 def _():
     import os
-    import ot
+    # import ot
     import json
     import skimage
     import torch
@@ -35,20 +35,29 @@ def _():
         DataLoader,
         ROWS,
         TensorDataset,
-        cc,
         gpytorch,
         json,
         np,
         os,
-        ot,
         pd,
         plt,
         qmc,
-        scipy,
         skimage,
         sns,
         torch,
     )
+
+
+@app.cell
+def _(np):
+    meander_ratios = np.load('model_experiments/2026-02-09-hm_wave_1/run_data/0/1/meander_ratios.npy')
+    return (meander_ratios,)
+
+
+@app.cell
+def _(meander_ratios, plt):
+    plt.hist(meander_ratios)
+    return
 
 
 @app.cell
@@ -99,7 +108,7 @@ def _(np, skimage):
 def _(DATA_DIRECTORY, os, pd):
     processed_dataset_filepath = os.path.join(DATA_DIRECTORY, "fitting_dataset.csv")
     experiment_dataframe = pd.read_csv(processed_dataset_filepath, index_col=0)
-    return experiment_dataframe, processed_dataset_filepath
+    return (experiment_dataframe,)
 
 
 @app.cell
@@ -134,15 +143,7 @@ def _(COLUMNS, DATA_DIRECTORY, ROWS, os, pd):
                     os.path.join(trajectory_folderpath, csv_filename), index_col=0
                 )
                 trajectory_dictionary[column].append(site_dataframe)
-    return (
-        column,
-        csv_filename,
-        row,
-        site,
-        site_dataframe,
-        trajectory_dictionary,
-        trajectory_folderpath,
-    )
+    return (trajectory_dictionary,)
 
 
 @app.cell
@@ -158,7 +159,7 @@ def _(find_coherency_fraction, trajectory_dictionary):
         return cf_dictionary
 
     cf_dictionary = get_cf_dictionary(trajectory_dictionary)
-    return cf_dictionary, get_cf_dictionary
+    return (cf_dictionary,)
 
 
 @app.cell
@@ -188,7 +189,7 @@ def _(np):
             frame_positions = np.array(site_data[frame_mask].loc[:, ['x', 'y']])
             anni_timeseries.append(get_frame_anni(frame_positions))
         return np.mean(anni_timeseries)
-    return get_frame_anni, get_mean_anni
+    return (get_mean_anni,)
 
 
 @app.cell
@@ -204,7 +205,7 @@ def _(get_mean_anni, trajectory_dictionary):
         return anni_dictionary
 
     anni_dictionary = get_anni_dictionary(trajectory_dictionary)
-    return anni_dictionary, get_anni_dictionary
+    return (anni_dictionary,)
 
 
 @app.cell
@@ -234,20 +235,7 @@ def _(COLUMNS, anni_dictionary, cf_dictionary, experiment_dataframe, np):
             cell_type_anni_mean - cell_type_anni_std,
             cell_type_anni_mean + cell_type_anni_std
         ])
-    return (
-        anni_imp_boundaries,
-        cell_type_anni_mean,
-        cell_type_anni_std,
-        cell_type_cf_mean,
-        cell_type_cf_std,
-        cf_imp_boundaries,
-        col_speeds,
-        column_mask,
-        idx,
-        mean_speed,
-        speed_boundaries,
-        std_speed,
-    )
+    return anni_imp_boundaries, cf_imp_boundaries, speed_boundaries
 
 
 @app.cell
@@ -299,11 +287,7 @@ def _():
         "stretchFactor": [0.25, 3],
         "slipFactor": [0.0001, 0.1],
     }
-    return (
-        CIRCULAR_GRIDSEARCH_PARAMETERS,
-        CONSTANT_PARAMETERS,
-        TD_GRIDSEARCH_PARAMETERS,
-    )
+    return CIRCULAR_GRIDSEARCH_PARAMETERS, TD_GRIDSEARCH_PARAMETERS
 
 
 @app.cell
@@ -566,7 +550,7 @@ def _(DataLoader, TensorDataset, gpytorch, torch):
             loss_history.append(loss.detach())
 
         return loss_history
-    return ApproximateGPModel, instantiate_model, train_model
+    return instantiate_model, train_model
 
 
 @app.cell
@@ -621,7 +605,7 @@ def _(TD_GRIDSEARCH_PARAMETERS, np):
 def _(get_gridsearch_data):
     normalised_parameters, distances, coherency_fractions, ann_indices = \
         get_gridsearch_data("out_20250826TrajectoryCollisions")
-    return ann_indices, coherency_fractions, distances, normalised_parameters
+    return coherency_fractions, distances, normalised_parameters
 
 
 @app.cell
@@ -633,7 +617,7 @@ def _(TD_GRIDSEARCH_PARAMETERS, normalised_parameters, qmc):
     sobol_sampler = qmc.Sobol(d=len(TD_GRIDSEARCH_PARAMETERS), scramble=True, rng=0)
     # inducing_points = sobol_sampler.random_base2(m=exponent) # 9 -> 512 inducing points
     inducing_points = normalised_parameters
-    return exponent, inducing_points, sobol_sampler
+    return (inducing_points,)
 
 
 @app.cell
@@ -691,7 +675,7 @@ def _(CELL_INDEX, cf_imp_boundaries, coherency_fractions, np):
         mean_coherency < cf_imp_boundaries[CELL_INDEX][1]
     )
     cf_class_dataset = mask_cf.astype(float)
-    return cf_class_dataset, mask_cf, mean_coherency
+    return (cf_class_dataset,)
 
 
 @app.cell
@@ -725,7 +709,7 @@ def _(
         normalised_parameters, cf_class_dataset,
         epochs=100
     )
-    return (l_hist,)
+    return
 
 
 @app.cell
@@ -769,7 +753,7 @@ def _(TD_GRIDSEARCH_PARAMETERS, qmc):
     oos_sampler = qmc.Sobol(d=len(TD_GRIDSEARCH_PARAMETERS), scramble=True, rng=0)
     oos_sample_matrix = oos_sampler.random_base2(m=16)
     bounded_gridsearch =  (oos_sample_matrix * 0.9) + 0.05
-    return bounded_gridsearch, oos_sample_matrix, oos_sampler
+    return bounded_gridsearch, oos_sample_matrix
 
 
 @app.cell
@@ -836,7 +820,7 @@ def _(bounded_gridsearch, np, oos_cf_predictions, oos_sample_matrix):
         )
         redistributed_array.append(redistributed_parameter)
     redistributed_array = np.stack(redistributed_array, axis=1)
-    return parameter, redistributed_array, redistributed_parameter
+    return (redistributed_array,)
 
 
 @app.cell
@@ -864,7 +848,7 @@ def _(CELL_INDEX, distances, np):
     mask_speed = cell_speed_wd < 1.0
     print(np.count_nonzero(mask_speed))
     speed_class_dataset = mask_speed.astype(float)
-    return cell_speed_wd, mask_speed, speed_class_dataset
+    return (speed_class_dataset,)
 
 
 @app.cell
@@ -1015,7 +999,7 @@ def _(TD_GRIDSEARCH_PARAMETERS, json):
 def _(joint_mask, oos_sample_matrix, print_parameter_set):
     test_set = oos_sample_matrix[joint_mask, :][0]
     _ = print_parameter_set(test_set)
-    return (test_set,)
+    return
 
 
 @app.cell

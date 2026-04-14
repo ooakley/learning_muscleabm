@@ -31,8 +31,8 @@ public:
         double setCollisionFlowReductionRate,
 
         // Shape parameters:
-        double setStretchFactor,
-        double setSlipFactor,
+        double setCellStiffness,
+        double setSurfaceStickiness,
 
         // Randomised initial state parameters:
         double startX, double startY, double startHeading
@@ -84,6 +84,7 @@ public:
 
     // Simulation code:
     void takeRandomStep();
+    double sampleMovementHistory();
 
 private:
     // Randomness and seeding:
@@ -115,6 +116,7 @@ private:
 
     double stadiumX;
     double stadiumY;
+    double adhesionFraction;
 
     // History variables for analysis:
     int collisionsThisTimepoint;
@@ -132,8 +134,10 @@ private:
     double maximumSteadyStateActinFlow;
 
     // Shape parameters:
-    double stretchFactor;
-    double slipFactor;
+    double cellStiffness;
+    double surfaceStickiness;
+    double adhesionStiffness;
+    double adhesionFragility;
 
     // Collision parameters:
     double cellBodyRadius;
@@ -185,6 +189,9 @@ private:
     std::mt19937 generatorMatrixRadiusSampling;
     std::mt19937 generatorMatrixAngleSampling;
 
+    // Generators for movement history sampling (orientation for fibre):
+    std::mt19937 generatorMovementSampling;
+
     // Generator for selecting for environmental influence:
     std::mt19937 generatorInfluence;
 
@@ -193,8 +200,6 @@ private:
     std::mt19937 randomDeltaSample;
 
     // Simulation subfunctions:
-    double determineMovementDirection();
-    double determineActinFlow();
     void runTrajectoryDependentCollisionLogic();
     void runStochasticCollisionLogic();
     void runCircularStochasticCollisionLogic();
@@ -207,7 +212,16 @@ private:
         double endX, double endY
     );
 
-    // Effectively a utility function for calculating the modulus of angles:
+    void runStickSlipLogic();
+    std::tuple<double, bool> implicitNextAdhesion(
+        double stepSize, double adhesionFraction, double cellExtension
+    );
+    std::tuple<double, bool> implicitNextExtension(
+        double stepSize, double adhesionFraction, double cellExtension
+    );
+
+
+    // Utility functions:
     double angleMod(double angle) const;
     double nematicAngleMod(double angle) const;
     double calculateMinimumAngularDistance(double headingA, double headingB) const;

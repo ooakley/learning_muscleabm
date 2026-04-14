@@ -329,6 +329,11 @@ std::tuple<double, double, double> ECMField::summariseFibreMatrix(int i, int j) 
 };
 
 
+std::deque<float> ECMField::getFibreDeque(int i, int j) const {
+    return fibreMatrix[i][j];
+};
+
+
 // Setters:
 void ECMField::setSubMatrix(
     int iECM, int jECM, double heading, double polarity,

@@ -9,11 +9,12 @@ import numpy as np
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Process an outputs folder with a given name.')
     parser.add_argument('--experiment_folderpath', type=str)
+    parser.add_argument('--sample_count', type=int, default=None)
     args = parser.parse_args()
     return args
 
 
-def collate_data(experiment_folderpath, summarise_filename):
+def collate_data(experiment_folderpath, summarise_filename, sample_count):
     # Code for discontinuous writing to numpy file taken & modified from:
     # https://stackoverflow.com/questions/65882709/how-to-write-ndarray-to-npy-file-iteratively-with-batches
     print(f"Collating data from {summarise_filename}...")
@@ -21,7 +22,6 @@ def collate_data(experiment_folderpath, summarise_filename):
     # Get necessary run information from config file:
     with open(os.path.join(experiment_folderpath, "config.json")) as filestream:
         config_dict = json.load(filestream)
-    sample_count = 2**config_dict["sample_exponent"]
     superiteration_count = config_dict["constant_parameters"]["superIterationCount"]
     simulated_timesteps = config_dict["constant_parameters"]["timestepsToRun"]
 
@@ -29,7 +29,7 @@ def collate_data(experiment_folderpath, summarise_filename):
     out_data = []
     for folder_id in range(0, sample_count):
         if (folder_id + 1) % 1000 == 0:
-            print(folder_id + 1)
+            print(folder_id + 1, flush=True)
         hierarchy_id = int(math.floor(folder_id / 1000))
         id_filepath = os.path.join(
             experiment_folderpath, "run_data", str(hierarchy_id), str(folder_id), summarise_filename
@@ -66,6 +66,12 @@ def collate_data(experiment_folderpath, summarise_filename):
 def main():
     # Parse arguments:
     args = parse_arguments()
+    with open(os.path.join(args.experiment_folderpath, "config.json")) as filestream:
+        config_dict = json.load(filestream)
+    if args.sample_count is None:
+        sample_count = 2**config_dict["sample_exponent"]
+    else:
+        sample_count = args.sample_count
 
     # Generate relevant directory if not present:
     summary_directory = os.path.join(args.experiment_folderpath, "summary_data")
@@ -73,10 +79,10 @@ def main():
         os.mkdir(summary_directory)
 
     # Collate individual simulation data into set of comprehensive numpy arrays:
-    collate_data(args.experiment_folderpath, "magnitude_cellmeans.npy")
-    collate_data(args.experiment_folderpath, "dtheta_cellmeans.npy")
-    collate_data(args.experiment_folderpath, "collision_cellmeans.npy")
-    collate_data(args.experiment_folderpath, "order_parameters.npy")
+    collate_data(args.experiment_folderpath, "magnitude_cellmeans.npy", sample_count)
+    collate_data(args.experiment_folderpath, "dtheta_cellmeans.npy", sample_count)
+    collate_data(args.experiment_folderpath, "collision_cellmeans.npy", sample_count)
+    collate_data(args.experiment_folderpath, "order_parameters.npy", sample_count)
 
 
 if __name__ == "__main__":

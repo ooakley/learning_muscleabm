@@ -21,8 +21,6 @@ def main():
     with open(args.path_to_config, 'r') as file:
         parameter_dictionary = json.load(file)
 
-    # TODO: just build the bash comand using the keys from the parameter dict
-
     full_command = "./build/src/main "
     for key, value in parameter_dictionary.items():
         argument_string = f"--{key} {value} "

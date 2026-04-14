@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.12.10"
+__generated_with = "0.18.1"
 app = marimo.App(width="columns")
 
 
@@ -40,7 +40,7 @@ def _():
     import marimo as mo
     import numpy as np
     import pandas as pd
-    return gpytorch, mo, np, os, pd, plt, pysr, scipy, torch
+    return gpytorch, mo, np, os, plt, pysr, scipy, torch
 
 
 @app.cell
@@ -70,7 +70,7 @@ def _(np):
         for i, y in enumerate(mean_y):
             ax.hlines(y,  edges[i], edges[i + 1], color='tab:orange', alpha=0.75)
             ax.scatter((edges[i] + edges[i + 1]) / 2, y, c='tab:orange', s=15)
-    return get_quantile_data, plot_binscatter, plot_scatter
+    return plot_binscatter, plot_scatter
 
 
 @app.cell
@@ -90,11 +90,8 @@ def _(GRIDSEARCH_PARAMETERS, np, os):
 
     print(parameters.shape)
     return (
-        data_directory,
         dtheta_array,
-        index,
         normalised_parameters,
-        parameter_range,
         parameters,
         simplified_parameters,
         speed_array,
@@ -124,7 +121,7 @@ def _(normalised_parameters, parameter_estimate, speed_array):
 @app.cell
 def _(np, posterior_distribution):
     covariance_matrix = np.cov(posterior_distribution, rowvar=False)
-    return (covariance_matrix,)
+    return
 
 
 @app.cell
@@ -140,7 +137,7 @@ def _(posterior_distribution):
 
     dist = GaussianMultivariate(distribution=BetaUnivariate)
     dist.fit(posterior_distribution)
-    return BetaUnivariate, GaussianKDE, GaussianMultivariate, dist
+    return (dist,)
 
 
 @app.cell
@@ -453,7 +450,7 @@ def _(matrix, plt):
     cbar.set_label('Parameter Diversity')
 
     plt.show()
-    return cbar, palette, pos
+    return
 
 
 @app.cell
@@ -514,7 +511,9 @@ def _(np, plt, speed_array, sr_predictions):
 
 @app.cell
 def _(mo):
-    mo.md(r"""#1 Running GP with cell speed data:""")
+    mo.md(r"""
+    #1 Running GP with cell speed data:
+    """)
     return
 
 
@@ -606,7 +605,7 @@ def _(
                 model.covar_module.base_kernel.lengthscale.detach().numpy()[0]
             }")
             # print(f"Noise estimates: {model.likelihood.noise.item()}")
-    return loss, mll, model_optimiser, predictions
+    return
 
 
 @app.cell
@@ -634,7 +633,7 @@ def _(GRIDSEARCH_PARAMETERS, model, np):
 
     print(list(np.array(list(GRIDSEARCH_PARAMETERS.keys()))[_sorting_indices]))
     print(list(speed_lengthscales[_sorting_indices]))
-    return (speed_lengthscales,)
+    return
 
 
 @app.cell
@@ -716,7 +715,9 @@ def _(det_predicted_mean_speed, deterministic_directory_path, np, os):
 
 @app.cell
 def _(mo):
-    mo.md("""## 2 Running GP with cell persistence data:""")
+    mo.md("""
+    ## 2 Running GP with cell persistence data:
+    """)
     return
 
 
@@ -768,7 +769,7 @@ def _(
             print(f"Iteration {_i+1}/{TRAINING_ITERATIONS}")
             print(f"Lengthscales: {dtheta_model.covar_module.base_kernel.lengthscale.detach().numpy()[0]}")
             # print(f"Noise estimates: {model.likelihood.noise.item()}")
-    return dtheta_loss, dtheta_mll, dtheta_optimiser, dtheta_predictions
+    return
 
 
 @app.cell
@@ -780,7 +781,7 @@ def _(GRIDSEARCH_PARAMETERS, dtheta_model, np):
     _sorting_indices = np.argsort(dtheta_lengthscales)
     print(list(np.array(list(GRIDSEARCH_PARAMETERS.keys()))[_sorting_indices]))
     print(list(dtheta_lengthscales[_sorting_indices]))
-    return (dtheta_lengthscales,)
+    return
 
 
 @app.cell

@@ -23,6 +23,7 @@ World::World
     bool setThereIsMatrixInteraction,
     double setMatrixTurnoverRate,
     double setMatrixAdditionRate,
+    double setMatrixSampleRate,
     CellParameters setCellParameters
 )
     : worldSeed{setWorldSeed}
@@ -31,6 +32,7 @@ World::World
     , lengthECMElement{worldSideLength/countECMElement}
     , numberOfCells{setNumberOfCells}
     , thereIsMatrixInteraction{setThereIsMatrixInteraction}
+    , matrixSampleRate{setMatrixSampleRate}
     , simulationTime{0}
     , cellParameters{setCellParameters}
     , collisionCellList{CollisionCellList(4, 2048)}
@@ -52,6 +54,7 @@ World::World
 
     // Initialising generators for random local sampling of environment by cells:
     kernelSamplingGenerator = std::mt19937(seedDistribution(seedGenerator));
+    matrixSamplingGenerator = std::mt19937(seedDistribution(seedGenerator));
 
     // Distributions:
     positionDistribution = std::uniform_real_distribution<double>(0, worldSideLength);
@@ -70,7 +73,7 @@ World::World
 
 // Getters:
 void World::writePositionsToCSV(std::ofstream& csvFile) {
-    for (int i = 0; i < numberOfCells; ++i) {
+    for (int i = 0; i < numberOfCells; i++) {
         csvFile << simulationTime << ",";
         csvFile << cellAgentVector[i]->getID() << ",";
         csvFile << cellAgentVector[i]->getX() << ",";
@@ -112,13 +115,24 @@ void World::writeMatrixToCSV(std::ofstream& matrixFile) {
     //         matrixFile << concentration << ",";
     //     }
     // }
+
     for (int i = 0; i < countECMElement; i++) {
         for (int j = 0; j < countECMElement; j++) {
-            matrixFile << 0 << ",";
-            matrixFile << 0 << ",";
-            matrixFile << 0 << ",";
+            std::deque<float> fibreDeque{ecmField.getFibreDeque(i, j)};
+            for (float heading : fibreDeque) {
+                matrixFile << heading << ",";
+            }
+            matrixFile << '\n';
         }
     }
+
+    // for (int i = 0; i < countECMElement; i++) {
+    //     for (int j = 0; j < countECMElement; j++) {
+    //         matrixFile << 0 << ",";
+    //         matrixFile << 0 << ",";
+    //         matrixFile << 0 << ",";
+    //     }
+    // }
 }
 
 // Setters:
@@ -128,6 +142,7 @@ void World::writeMatrixToCSV(std::ofstream& matrixFile) {
 void World::runSimulationStep() {
     // Shuffling acting order of cells:
     std::shuffle(std::begin(cellAgentVector), std::end(cellAgentVector), shuffleGenerator);
+
     // Looping through cells and running their behaviour:
     for (int i = 0; i < numberOfCells; ++i) {
         runCellStep(cellAgentVector[i]);
@@ -185,8 +200,8 @@ std::shared_ptr<CellAgent> World::initialiseCell(int setCellID) {
         cellParameters.collisionFlowReductionRate,
 
         // Shape parameters:
-        cellParameters.stretchFactor,
-        cellParameters.slipFactor,
+        cellParameters.cellStiffness,
+        cellParameters.surfaceStickiness,
     
         // Randomised initial state parameters:
         startX, startY, startHeading
@@ -196,17 +211,32 @@ std::shared_ptr<CellAgent> World::initialiseCell(int setCellID) {
 void World::runCellStep(std::shared_ptr<CellAgent> actingCell) {
     // Getting initial cell position:
     const std::tuple<double, double> cellStart{actingCell->getPosition()};
+    bool useDetailedFibreSimulation{true};
+    double cellDirection{actingCell->getActinFlowDirection()};
 
     // // Setting cell percepts:
-    // Calculating matrix percept:
-    std::vector<double> attachmentPoint{actingCell->sampleAttachmentPoint()};
-    double cellDirection{actingCell->getActinFlowDirection()};
-    bool useDetailedFibreSimulation{true};
+    // Sample attachment points:
+    int matrixSampleCount;
+    if (matrixSampleRate == 0) {
+        matrixSampleCount = 0;
+    } else {
+        std::poisson_distribution<int> poissonDistribution(matrixSampleRate);
+        matrixSampleCount = poissonDistribution(matrixSamplingGenerator);
+    }
 
+    // Initialise empty vector of vectors:
+    std::vector<std::vector<double>> attachmentVector;
+    for (int i = 0; i < matrixSampleCount; i++) {
+        attachmentVector.push_back(actingCell->sampleAttachmentPoint());
+    }
+
+    // Get attachment point for non-detailed fibre simulation:
+    std::vector<double> attachmentPoint{actingCell->sampleAttachmentPoint()};
+
+    // Get percepts at points:
     if (!useDetailedFibreSimulation) {
         const auto [deltaHeading, localDensity] = getPerceptAtAttachment(attachmentPoint, cellDirection);
         assert(localDensity < 1);
-
         // Setting percepts of local matrix:
         if (thereIsMatrixInteraction) {
             actingCell->setDirectionalInfluence(deltaHeading);
@@ -214,14 +244,28 @@ void World::runCellStep(std::shared_ptr<CellAgent> actingCell) {
             actingCell->setLocalECMDensity(localDensity);
         }
     } else {
-        const auto [iECM, jECM] = getECMIndexFromLocation({attachmentPoint[0], attachmentPoint[1]});
-        const auto [iSafe, jSafe] = rollIndex(iECM, jECM);
-        const auto [ecmHeading, localDensity] = ecmField.sampleFibreMatrix(iSafe, jSafe);
-        double deltaHeading{calculateCellDeltaTowardsECM(ecmHeading, cellDirection)};
-
-        actingCell->setDirectionalInfluence(deltaHeading);
-        actingCell->setDirectionalIntensity(localDensity);
-        actingCell->setLocalECMDensity(localDensity);
+        // If no sites sampled, continue:
+        if (matrixSampleCount == 0) {
+            actingCell->setDirectionalInfluence(0);
+            actingCell->setDirectionalIntensity(0);
+            actingCell->setLocalECMDensity(0);
+        }
+        else {
+            // Randomly sample multiple matrix sites:
+            double averagedDeltaHeading{0};
+            for (int i = 0; i < matrixSampleCount; i++) {
+                std::vector<double> sampledPoint{attachmentVector[i]};
+                const auto [iECM, jECM] = getECMIndexFromLocation({sampledPoint[0], sampledPoint[1]});
+                const auto [iSafe, jSafe] = rollIndex(iECM, jECM);
+                const auto [ecmHeading, localDensity] = ecmField.sampleFibreMatrix(iSafe, jSafe);
+                double deltaHeading{calculateCellDeltaTowardsECM(ecmHeading, cellDirection)};
+                averagedDeltaHeading += deltaHeading;
+            }
+            averagedDeltaHeading /= matrixSampleCount;
+            actingCell->setDirectionalInfluence(averagedDeltaHeading);
+            actingCell->setDirectionalIntensity(1);
+            actingCell->setLocalECMDensity(1);
+        }
     }
 
     // Run cell intrinsic movement:
@@ -246,9 +290,14 @@ void World::runCellStep(std::shared_ptr<CellAgent> actingCell) {
             1
         );
     } else {
-        const auto [iECM, jECM] = getECMIndexFromLocation({attachmentPoint[0], attachmentPoint[1]});
-        const auto [iSafe, jSafe] = rollIndex(iECM, jECM);
-        ecmField.addToFibreMatrix(iSafe, jSafe, actingCell->getActinFlowDirection());
+        if (matrixSampleCount > 0) {
+            for (int i = 0; i < matrixSampleCount; i++) {
+                std::vector<double> sampledPoint{attachmentVector[i]};
+                const auto [iECM, jECM] = getECMIndexFromLocation({sampledPoint[0], sampledPoint[1]});
+                const auto [iSafe, jSafe] = rollIndex(iECM, jECM);
+                ecmField.addToFibreMatrix(iSafe, jSafe, actingCell->getActinFlowDirection());
+            }
+        }
     }
 
     // Rollover the cell if out of bounds:

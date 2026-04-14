@@ -40,9 +40,16 @@ class JSONOutputManager:
             argument_json = {}
             for parameter_name in self.constant_parameters.keys():
                 argument_json[parameter_name] = self.constant_parameters[parameter_name]
-            for parameter_index, parameter_name in enumerate(self.gridsearch_parameters.keys()):
-                min_value = self.gridsearch_parameters[parameter_name][0]
-                max_value = self.gridsearch_parameters[parameter_name][1]
+
+            parameter_names = [name for name, _ in self.gridsearch_parameters]
+            parameter_ranges = [p_range for _, p_range in self.gridsearch_parameters]
+            for parameter_index in range(len(self.gridsearch_parameters)):
+                # Get parameter info:
+                parameter_name = parameter_names[parameter_index]
+                min_value = parameter_ranges[parameter_index][0]
+                max_value = parameter_ranges[parameter_index][1]
+
+                # Get relevant numerical value:
                 parameter_value = parameter_matrix[row_index, parameter_index]
                 scaled_value = ((max_value - min_value) * parameter_value) + min_value
                 if parameter_name == "numberOfCells":

@@ -5,11 +5,30 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "awkward>=2.8.12",
+    "colorcet>=3.1.0",
+    "colorstamps>=0.1.3",
+    "dppy>=0.3.3",
+    "gpflow>=2.5.2",
+    "gplearn>=0.4.3",
+    "gpytorch>=1.14.3",
+    "kmedoids>=0.5.4",
     "marimo>=0.18.1",
-    "numpy>=2.3.5",
+    "numba>=0.63.1",
+    "numpy<=2.3",
+    "opencv-python>=4.13.0.90",
     "pandas>=2.3.3",
+    "psutil>=7.2.2",
+    "pyro-ppl>=1.9.1",
+    "pysr>=1.5.9",
     "scikit-image>=0.25.2",
     "scipy>=1.16.3",
     "seaborn>=0.13.2",
+    "statsmodels>=0.14.6",
+    "threadpoolctl>=3.6.0",
     "torch>=2.9.1",
+    "umap-learn>=0.5.11",
 ]
+
+[tool.marimo.runtime]
+output_max_bytes = 30_000_000

@@ -1,14 +1,16 @@
 import marimo
 
-__generated_with = "0.12.10"
-app = marimo.App(width="columns")
+__generated_with = "0.19.7"
+app = marimo.App(width="full")
 
 
 @app.cell
 def _():
-    import cv2
-    import matplotlib
     import os
+
+    import matplotlib
+    import cv2
+    import scipy
 
     import numpy as np
     import pandas as pd
@@ -17,18 +19,23 @@ def _():
     import matplotlib.pyplot as plt
     import matplotlib.colors as mcolors
     colors_list = list(mcolors.TABLEAU_COLORS.values())
-    return cc, colors_list, cv2, matplotlib, mcolors, np, os, pd, plt
+    return cc, colors_list, cv2, matplotlib, np, os, pd, plt, scipy
+
+
+@app.cell
+def _():
+    DATA_DIR_PATH = "model_parameter_json/matrix_test"
+    return (DATA_DIR_PATH,)
 
 
 @app.cell
 def _():
     # Constant display variables:
-    MESH_NUMBER = 64
-    CELL_NUMBER = 175
+    MESH_NUMBER = 128
+    CELL_NUMBER = 120
     TIMESTEPS = 2880
     TIMESTEP_WIDTH = 1440
     WORLD_SIZE = 2048
-    DATA_DIR_PATH = "./fileOutputs/"
     OUTPUT_COLUMN_NAMES = [
         "frame", "particle", "x", "y",
         "shapeDirection",
@@ -44,7 +51,6 @@ def _():
     ]
     return (
         CELL_NUMBER,
-        DATA_DIR_PATH,
         MESH_NUMBER,
         OUTPUT_COLUMN_NAMES,
         TIMESTEPS,
@@ -54,30 +60,36 @@ def _():
 
 
 @app.cell
-def _(DATA_DIR_PATH, MESH_NUMBER, OUTPUT_COLUMN_NAMES, TIMESTEPS, np, os, pd):
-    def read_matrix_into_numpy(job_id, subiteration):
+def _(DATA_DIR_PATH, OUTPUT_COLUMN_NAMES, np, os, pd):
+    def read_matrix_into_numpy(subiteration):
         # Determine filepaths:
         filename = f"matrix_seed{subiteration:03d}.txt"
-        directory_path = os.path.join(DATA_DIR_PATH, str(job_id))
-        filepath = os.path.join(directory_path, filename)
+        filepath = os.path.join(DATA_DIR_PATH, filename)
 
-        # Calculate the exact number of matrix mesh elements:
-        number_of_elements = TIMESTEPS*(MESH_NUMBER**2)*3
-        flattened_matrix = np.loadtxt(
-            filepath, delimiter=',',
-            usecols=range(number_of_elements)
-        )
+        array_list = []
+        with open(filepath, "r") as f:
+            for line in f:
+                heading_string = str(line.rstrip())
+                array_list.append(np.fromstring(heading_string, sep=","))
 
-        # Reshape into (timesteps, [density/orientation/anisotropy], grid, grid):
-        dimensions = (TIMESTEPS, MESH_NUMBER, MESH_NUMBER, 3)
-        return np.reshape(flattened_matrix, dimensions, order='C')
+        return array_list
+        # # Calculate the exact number of matrix mesh elements:
+        # number_of_elements = 3 * (MESH_NUMBER**2)
+        # flattened_matrix = np.loadtxt(
+        #     filepath, delimiter=',',
+        #     usecols=range(number_of_elements)
+        # )
+
+        # # Reshape into (timesteps, [density/orientation/anisotropy], grid, grid):
+        # dimensions = (MESH_NUMBER, MESH_NUMBER, 3)
+        # return np.reshape(flattened_matrix, dimensions, order='C')
 
 
-    def get_trajectory_data(job_id, subiteration):
+    def get_trajectory_data(subiteration):
         # Determine filepaths:
         filename = f"positions_seed{subiteration:03d}.csv"
-        directory_path = os.path.join(DATA_DIR_PATH, str(job_id))
-        filepath = os.path.join(directory_path, filename)
+        # directory_path = os.path.join(DATA_DIR_PATH, str(job_id))
+        filepath = os.path.join(DATA_DIR_PATH, filename)
 
         # Get cell trajectory data:
         trajectory_dataframe = pd.read_csv(
@@ -86,6 +98,96 @@ def _(DATA_DIR_PATH, MESH_NUMBER, OUTPUT_COLUMN_NAMES, TIMESTEPS, np, os, pd):
         )
         return trajectory_dataframe
     return get_trajectory_data, read_matrix_into_numpy
+
+
+@app.cell
+def _(trajectory_dataframe):
+    trajectory_dataframe
+    return
+
+
+@app.cell
+def _(WORLD_SIZE, np):
+    def plot_center_of_mass(trajectory_dataframe, timestep, ax):
+        # Plotting information:
+        alpha=0.65
+        linewidth=1.5
+
+        # Get list of particle indices:
+        plot_dataframe = trajectory_dataframe.copy(deep=True)
+        timestep_mask = np.logical_and(plot_dataframe["frame"] > (timestep - 1440), plot_dataframe["frame"] <= timestep)
+        plot_dataframe = plot_dataframe.loc[timestep_mask]
+        particle_indices = np.unique(plot_dataframe["particle"])
+
+        for particle_index in particle_indices:
+            # Get particle information:
+            particle_mask = plot_dataframe["particle"] == particle_index
+            particle_dataframe = plot_dataframe.loc[particle_mask]
+            x_front = np.array(particle_dataframe['x'])
+            y_front = np.array(particle_dataframe['y'])
+            x_back = np.array(particle_dataframe['stadium_x'])
+            y_back = np.array(particle_dataframe['stadium_y'])
+
+            # Get stadium span and account for periodic boundaries:
+            x_span = x_back - x_front
+            y_span = y_back - y_front
+            x_span[x_span < -1024] += 2048
+            x_span[x_span > +1024] -= 2048
+            y_span[y_span < -1024] += 2048
+            y_span[y_span > +1024] -= 2048
+
+            # Get centers of mass:
+            x_com = x_front + (x_span / 2)
+            x_com[x_com > 2048] -= 2048
+            x_com[x_com < 0]    += 2048
+            y_com = y_front + (y_span / 2)
+            y_com[y_com > 2048] -= 2048
+            y_com[y_com < 0]    += 2048
+
+            # Get points of rollover:
+            rollover_x = \
+                np.abs(np.diff(x_com)) > (WORLD_SIZE/2)
+            rollover_y = \
+                np.abs(np.diff(y_com)) > (WORLD_SIZE/2)
+            rollover_mask = rollover_x | rollover_y
+
+            # color = colors_list[particle_index % len(colors_list)]
+            color = "k"
+            if np.count_nonzero(rollover_mask) == 0:
+                ax.plot(
+                    x_com, y_com,
+                    alpha=alpha, linewidth=linewidth, c=color
+                )
+            else:
+                # Plot separated segments:
+                plot_separation_indices = np.argwhere(rollover_mask)
+                prev_index = 0
+                for separation_index in plot_separation_indices:
+                    separation_index = separation_index[0]
+                    sub_x = x_com[prev_index:separation_index + 1]
+                    sub_y = y_com[prev_index:separation_index + 1]
+                    ax.plot(
+                        sub_x, sub_y,
+                        alpha=alpha, linewidth=linewidth,c=color
+                    )
+                    prev_index = separation_index + 1
+
+                # Plotting final segment:
+                x_array = x_com[prev_index:]
+                y_array = y_com[prev_index:]
+                ax.plot(
+                    x_array, y_array,
+                    alpha=alpha, linewidth=linewidth, c=color
+                )
+
+        ax.set_xlim(0, WORLD_SIZE)
+        ax.set_ylim(0, WORLD_SIZE)
+        ax.invert_yaxis()
+        ax.patch.set_edgecolor('black')
+        ax.patch.set_linewidth(2)
+        ax.set_xticks([])
+        ax.set_yticks([])
+    return (plot_center_of_mass,)
 
 
 @app.cell
@@ -100,7 +202,7 @@ def _(
 ):
     DIVISOR = 1
     def plot_superiteration(
-        trajectory_dataframe, matrix_series, timestep, ax, cell_size,
+        trajectory_dataframe, matrix_data, timestep, ax, cell_size,
         plot_trajectories=True, plot_matrix=True, plot_ellipses=True
         ):
         # Accessing and formatting relevant dataframe:
@@ -123,9 +225,10 @@ def _(
         Y = np.arange(0, WORLD_SIZE, tile_width) + (tile_width / 2)
         X, Y = np.meshgrid(X, Y)
 
-        matrix = matrix_series[timestep, :, :, 0]
-        U = np.cos(matrix) * matrix_series[int(timestep / DIVISOR), :, :, 1]
-        V = -np.sin(matrix) * matrix_series[int(timestep / DIVISOR), :, :, 1]
+        # U = np.cos(matrix_data[:, :, 0]) * matrix_data[:, :, 1]
+        # V = -np.sin(matrix_data[:, :, 0]) * matrix_data[:, :, 1]
+        U = np.cos(matrix_data[:, :, 0]) * 1
+        V = -np.sin(matrix_data[:, :, 0]) * 1
 
         # Setting up plot
         # colour_list = ['r', 'g']
@@ -176,12 +279,12 @@ def _(
         if plot_matrix:
             speed = np.sqrt(U**2 + V**2)
             if speed.max() != 0:
-                fibre_count = matrix_series[timestep, :, :, 2]
+                fibre_count = matrix_data[:, :, 1]
                 ax.quiver(
-                    X, Y, U, V, [matrix],
+                    X, Y, U, V, [matrix_data[:, :, 0]],
                     cmap=cc.cm.CET_C6, clim=(-np.pi/2, np.pi/2),
-                    pivot='mid', scale=35, headwidth=0, headlength=0, headaxislength=0,
-                    width=0.005, alpha=fibre_count/500
+                    pivot='mid', scale=50, headwidth=0, headlength=0, headaxislength=0,
+                    width=0.003, alpha=0.5
                 )
 
 
@@ -220,7 +323,7 @@ def _(
         # Run direction plot:
         ax.quiver(
             x_pos, y_pos, x_heading, y_heading, np.array(heading_list).flatten(),
-            pivot='tail', scale=1/500, scale_units='x',
+            pivot='tail', scale=1/300, scale_units='x',
             headwidth=3, headlength=3, headaxislength=3, width=0.004, alpha=1,
             cmap=cc.cm.CET_C6
         )
@@ -289,7 +392,7 @@ def _(
                         (x+2048, y), major_axis, minor_axis, angle=angle,
                         alpha=0.1, color='k'
                     )
-                    ax.add_patch(ellipse)  
+                    ax.add_patch(ellipse)
                 if 2048 - x < cell_size:
                     ellipse = matplotlib.patches.Ellipse(
                         (x-2048, y), major_axis, minor_axis, angle=angle,
@@ -317,35 +420,268 @@ def _(
         ax.patch.set_linewidth(2)
         ax.set_xticks([])
         ax.set_yticks([])
-    return DIVISOR, plot_superiteration
+    return (plot_superiteration,)
 
 
 @app.cell
 def _(get_trajectory_data, read_matrix_into_numpy):
-    ecm_matrix = read_matrix_into_numpy(0, 0)
-    trajectory_dataframe = get_trajectory_data(0, 0)
+    ecm_matrix = read_matrix_into_numpy(0)
+    trajectory_dataframe = get_trajectory_data(0)
     return ecm_matrix, trajectory_dataframe
 
 
 @app.cell
-def _(TIMESTEPS, ecm_matrix, plot_superiteration, plt, trajectory_dataframe):
-    _fig, _ax = plt.subplots(figsize=(10, 10))
-    plot_superiteration(
-        trajectory_dataframe, ecm_matrix, TIMESTEPS-1, _ax, 54,
-        plot_matrix=True, plot_trajectories=True, plot_ellipses=True
-    )
+def _(MESH_NUMBER, ecm_matrix, np):
+    average_heading = np.empty(MESH_NUMBER**2)
+    angular_variance = np.empty(MESH_NUMBER**2)
+    fibre_count = np.empty(MESH_NUMBER**2)
+    for index, heading_array in enumerate(ecm_matrix):
+        fibre_count[index] = len(heading_array)
+        if len(heading_array) == 0:
+            angular_variance[index] = 1
+            average_heading[index] = 0
+            continue
+        x_component = np.cos(heading_array * 2)
+        y_component = np.sin(heading_array * 2)
+        angular_variance[index] = 1 - np.linalg.norm([np.mean(x_component), np.mean(y_component)])
+        average_heading[index] = np.atan2(np.mean(y_component), np.mean(x_component)) / 2
+
+    angular_variance = np.reshape(angular_variance, (MESH_NUMBER, MESH_NUMBER))
+    average_heading = np.reshape(average_heading, (MESH_NUMBER, MESH_NUMBER))
+    fibre_count = np.reshape(fibre_count, (MESH_NUMBER, MESH_NUMBER))
+    return angular_variance, average_heading, fibre_count
+
+
+@app.cell
+def _(angular_variance, average_heading, fibre_count, np):
+    ecm_array = np.stack([average_heading, fibre_count, angular_variance], axis=-1)
+    return (ecm_array,)
+
+
+@app.cell
+def _(CELL_NUMBER, TIMESTEPS):
+    averaged_count = (CELL_NUMBER * TIMESTEPS) / (512 * 512)
+    return
+
+
+@app.cell
+def _(CELL_NUMBER, TIMESTEPS, np, scipy):
+    def get_density_threshold():
+        mean, var = scipy.stats.binom.stats(TIMESTEPS, CELL_NUMBER / (512 * 512), moments='mv')
+        return mean - np.sqrt(var)
+    return (get_density_threshold,)
+
+
+@app.cell
+def _(MESH_NUMBER, NEIGHBOURHOOD_SIZES, np):
+    def get_order_parameter(submatrix):
+        # Getting central values:
+        central_index = int(np.floor(submatrix.shape[0] / 2))
+        central_val = submatrix[central_index, central_index]
+
+        # Getting values in window:
+        central_cutoff = int(np.ceil(submatrix.size / 2))
+        comparators = submatrix.flatten()
+        comparators = np.concatenate([comparators[0:central_cutoff], comparators[central_cutoff + 1:]])
+        angle_diff = comparators * 2 - central_val * 2
+
+        # Calculating order parameter:
+        order_parameter = np.nanmean(np.cos(angle_diff * 2))
+        return order_parameter
+
+
+    def roll_indices(index, half_index):
+        # Need to roll matrix to ensure that the order parameter captures the
+        # periodic boundaries - calculating the amount of rolling is a bit
+        # fiddly however:
+        roll_index = 0
+        index_start = index - half_index
+        index_end = index + (half_index + 1)
+        if index_start < 0:
+            roll_index -= index_start
+            index_start += roll_index
+            index_end += roll_index
+        if index_end > MESH_NUMBER:
+            roll_index = -(index_end - MESH_NUMBER)
+            index_start += roll_index
+            index_end += roll_index
+
+        return roll_index, index_start, index_end
+
+
+    def get_order_parameter_distribution(matrix, neighbourhood_size=3):
+        order_parameters = []
+        half_index = int(np.floor(neighbourhood_size / 2))
+        for i in range(MESH_NUMBER):
+            # Determining amount of rolling required along row:
+            roll_i, i_start, i_end = roll_indices(i, half_index)
+            for j in range(MESH_NUMBER):
+                # Determining amount of rolling required along column:
+                roll_j, j_start, j_end = roll_indices(j, half_index)
+
+                # Rolling matrix:
+                rolled_matrix = np.roll(matrix, roll_i, axis=0)
+                rolled_matrix = np.roll(rolled_matrix, roll_j, axis=1)
+
+                # Getting submatrix:
+                orientation_submatrix = rolled_matrix[i_start:i_end, j_start:j_end]
+                order_parameter = get_order_parameter(orientation_submatrix)
+                order_parameters.append(order_parameter)
+        return np.array(order_parameters)
+
+
+    def generate_order_parameter_scale_curve(matrix):
+        order_parameters = []
+        for neighbourhood_size in NEIGHBOURHOOD_SIZES:
+            mean_order_parameter = np.nanmean(
+                get_order_parameter_distribution(matrix, neighbourhood_size=neighbourhood_size)
+            )
+            order_parameters.append(mean_order_parameter)
+        return np.array(order_parameters)
+    return (get_order_parameter_distribution,)
+
+
+@app.cell
+def _(get_density_threshold):
+    density_threshold = get_density_threshold()
+    return (density_threshold,)
+
+
+@app.cell
+def _(average_heading, fibre_count, np):
+    nan_heading = np.copy(average_heading)
+    nan_heading[fibre_count == 0] = np.nan
+    return (nan_heading,)
+
+
+@app.cell
+def _(get_order_parameter_distribution, nan_heading):
+    op_distribution = get_order_parameter_distribution(nan_heading, 31)
+    return (op_distribution,)
+
+
+@app.cell
+def _(np, op_distribution):
+    np.nanmean(op_distribution)
+    return
+
+
+@app.cell
+def _(np, op_distribution):
+    np.count_nonzero(np.isnan(op_distribution)) / len(op_distribution)
+    return
+
+
+@app.cell
+def _(op_distribution, plt):
+    plt.hist(op_distribution, bins=100, range=(-1, 1));
     plt.show()
     return
 
 
 @app.cell
-def _(TIMESTEPS, ecm_matrix, plot_superiteration, plt, trajectory_dataframe):
+def _(cc, nan_heading, np, plt):
+    plt.imshow(nan_heading, cmap=cc.m_CET_C6, clim=(-np.pi/2, np.pi/2))
+    return
+
+
+@app.cell
+def _(MESH_NUMBER, cc, op_distribution, plt):
+    op_array = op_distribution.reshape((MESH_NUMBER, MESH_NUMBER))
+    plt.imshow(op_array, vmin=-1, vmax=1, cmap=cc.m_CET_D1)
+    return (op_array,)
+
+
+@app.cell
+def _(cc, op_array, plt):
+    plt.imshow(op_array > 0.15, vmin=-1, vmax=1, cmap=cc.m_CET_D1)
+    return
+
+
+@app.cell
+def _(cc, nan_heading, np, op_array, plt):
+    masked_headings = np.copy(nan_heading)
+    masked_headings[op_array < 0.15] = np.nan
+    plt.imshow(masked_headings, cmap=cc.m_CET_C6, clim=(-np.pi/2, np.pi/2))
+    return
+
+
+@app.cell
+def _(angular_variance, cc, plt):
+    plt.imshow(angular_variance, cmap=cc.m_CET_L1, clim=(0, 1))
+    return
+
+
+@app.cell
+def _(cc, fibre_count, plt):
+    plt.imshow(fibre_count, cmap=cc.m_CET_L1, clim=(0, None))
+    return
+
+
+@app.cell
+def _(cc, fibre_count, np, plt, scipy):
+    averaged_fc = scipy.ndimage.gaussian_filter(fibre_count, 1, mode='wrap')
+    print(averaged_fc.min())
+    print(averaged_fc.mean())
+    print("IDR:", np.quantile(averaged_fc, 0.9) - np.quantile(averaged_fc, 0.1))
+    plt.imshow(averaged_fc, interpolation="none", cmap=cc.m_CET_L1, clim=(0, None))
+    return (averaged_fc,)
+
+
+@app.cell
+def _(averaged_fc, cc, density_threshold, plt):
+    plt.imshow(averaged_fc < density_threshold, interpolation="none", cmap=cc.m_CET_L1, clim=(0, None))
+    return
+
+
+@app.cell
+def _(angular_variance, plt, scipy):
+    blurred = scipy.ndimage.gaussian_filter(angular_variance, 5, mode='wrap')
+    print(blurred.min())
+    print(blurred.mean())
+    plt.imshow(blurred, vmin=0, interpolation="none")
+    return (blurred,)
+
+
+@app.cell
+def _(blurred, np, plt):
+    plt.hist(np.log(blurred.flatten() + 1), bins=100);
+    print(np.std(np.log(1 + blurred)))
+    plt.show()
+    return
+
+
+@app.cell
+def _(TIMESTEPS, ecm_array, plot_superiteration, plt, trajectory_dataframe):
     _fig, _ax = plt.subplots(figsize=(10, 10))
     plot_superiteration(
-        trajectory_dataframe, ecm_matrix, TIMESTEPS-1, _ax, 50,
-        plot_matrix=True, plot_trajectories=True, plot_ellipses=False
+        trajectory_dataframe, ecm_array, TIMESTEPS - 1, _ax, 20,
+        plot_matrix=False, plot_trajectories=False, plot_ellipses=True
     )
+    # plot_center_of_mass(trajectory_dataframe, TIMESTEPS - 1, _ax)
     plt.show()
+    return
+
+
+@app.cell
+def _(TIMESTEPS, plot_center_of_mass, plt, trajectory_dataframe):
+    def get_com_plot():
+        fig, ax = plt.subplots(figsize=(10, 10))
+        plot_center_of_mass(trajectory_dataframe, TIMESTEPS-1, ax)
+        plt.show()
+
+    get_com_plot()
+    return
+
+
+@app.cell
+def _():
+    # _fig, _ax = plt.subplots(figsize=(10, 10))
+    # plot_superiteration(
+    #     trajectory_dataframe, ecm_matrix, TIMESTEPS-1, _ax, 50,
+    #     plot_matrix=True, plot_trajectories=True, plot_ellipses=False
+    # )
+    # plt.show()
     return
 
 
@@ -395,46 +731,34 @@ def _():
 
 
 @app.cell
-def _(CELL_NUMBER, TIMESTEPS, np, trajectory_dataframe):
-     # Test out order parameter calculations:
+def _(trajectory_dataframe):
+    # Test out order parameter calculations:
 
     # Sort by cell and then by frame:
     sorted_dataframe = trajectory_dataframe.sort_values(by=["particle", "frame"])
 
-    # Get speed and angle data:
-    actin_magnitude = np.asarray(sorted_dataframe["actin_mag"])
-    actin_direction = np.asarray(sorted_dataframe["actin_flow"])
-    collisions = np.asarray(sorted_dataframe["collision_number"])
+    # # Get speed and angle data:
+    # actin_magnitude = np.asarray(sorted_dataframe[\"actin_mag\"])
+    # actin_direction = np.asarray(sorted_dataframe[\"actin_flow\"])
+    # collisions = np.asarray(sorted_dataframe[\"collision_number\"])
 
-    actin_magnitude = np.reshape(actin_magnitude, (CELL_NUMBER, TIMESTEPS))
-    actin_direction = np.reshape(actin_direction, (CELL_NUMBER, TIMESTEPS))
-    collisions = np.reshape(collisions, (CELL_NUMBER, TIMESTEPS))
-    mean_collisions = np.mean(collisions, axis=0)
+    # actin_magnitude = np.reshape(actin_magnitude, (CELL_NUMBER, TIMESTEPS))
+    # actin_direction = np.reshape(actin_direction, (CELL_NUMBER, TIMESTEPS))
+    # collisions = np.reshape(collisions, (CELL_NUMBER, TIMESTEPS))
+    # mean_collisions = np.mean(collisions, axis=0)
 
-    # Get x and y components across cell populations for each timestep:
-    x_components = np.cos(actin_direction) * actin_magnitude
-    y_components = np.sin(actin_direction) * actin_magnitude
+    # # Get x and y components across cell populations for each timestep:
+    # x_components = np.cos(actin_direction) * actin_magnitude
+    # y_components = np.sin(actin_direction) * actin_magnitude
 
-    # Sum components:
-    summed_x = np.mean(x_components, axis=0)
-    summed_y = np.mean(y_components, axis=0)
-    mean_magnitude = np.mean(actin_magnitude, axis=0)
+    # # Sum components:
+    # summed_x = np.mean(x_components, axis=0)
+    # summed_y = np.mean(y_components, axis=0)
+    # mean_magnitude = np.mean(actin_magnitude, axis=0)
 
-    # Get order parameter:
-    order_parameter = np.sqrt(summed_x**2 + summed_y**2) / mean_magnitude
-    return (
-        actin_direction,
-        actin_magnitude,
-        collisions,
-        mean_collisions,
-        mean_magnitude,
-        order_parameter,
-        sorted_dataframe,
-        summed_x,
-        summed_y,
-        x_components,
-        y_components,
-    )
+    # # Get order parameter:
+    # order_parameter = np.sqrt(summed_x**2 + summed_y**2) / mean_magnitude
+    return
 
 
 @app.cell
@@ -462,8 +786,58 @@ def _(TIMESTEPS, mean_collisions, plt):
 @app.cell
 def _(
     TIMESTEPS,
+    ecm_array,
+    os,
+    plot_superiteration,
+    plt,
+    trajectory_dataframe,
+):
+    def write_video_to_file():
+        size = 750, 750
+
+        if not os.path.exists("img_tmp"):
+            os.mkdir("img_tmp")
+
+        count = 0
+        for timeframe in list(range(TIMESTEPS))[1:2880:50]:
+            if (timeframe) % 200 == 0:
+                print(timeframe)
+
+            fig, ax = plt.subplots(figsize=(7.5, 7.5), layout='constrained')
+            plot_superiteration(
+                trajectory_dataframe, ecm_array, timeframe, ax, 50,
+                plot_matrix=False, plot_trajectories=False, plot_ellipses=True
+            )
+            # plot_center_of_mass(trajectory_dataframe, timeframe, ax)
+            plt.savefig(os.path.join("img_tmp", f"frame_{count}.png"))
+            plt.close()
+            count += 1
+
+    write_video_to_file()
+    return
+
+
+@app.cell
+def _():
+    import subprocess
+    # subprocess.run("ml load FFmpeg/7.1.1-GCCcore-14.2.0; ffmpeg -y -i img_tmp/frame_%d.png -r 24 -vcodec libx264 -crf 18 test_video.mp4", shell=True)
+    subprocess.run("ffmpeg -y -i img_tmp/frame_%d.png -r 24 -vcodec libx264 -crf 18 test_video.mp4", shell=True)
+    return
+
+
+@app.cell
+def _(os):
+    temp_files = os.listdir("img_tmp")
+    for temp_file in temp_files:
+        os.remove(os.path.join("img_tmp", temp_file))
+    return
+
+
+@app.cell
+def _(
+    TIMESTEPS,
     cv2,
-    ecm_matrix,
+    ecm_array,
     np,
     plot_superiteration,
     plt,
@@ -475,15 +849,21 @@ def _(
         './basic_video.mp4', cv2.VideoWriter_fourcc(*'avc1'),
         fps, (size[1], size[0]), True
     )
+    # out = cv2.VideoWriter(
+    #     './basic_video.avi', cv2.VideoWriter_fourcc(*'MJPG'),
+    #     fps, (size[1], size[0]), True
+    # )
 
-    for timeframe in list(range(TIMESTEPS))[0:2880:10]:
+
+
+    for timeframe in list(range(TIMESTEPS))[1440:1500:10]:
         if (timeframe) % 200 == 0:
             print(timeframe)
 
         _fig, _ax = plt.subplots(figsize=(7.5, 7.5), layout='constrained')
         plot_superiteration(
-            trajectory_dataframe, ecm_matrix, timeframe, _ax, 36,
-            plot_matrix=True, plot_trajectories=False, plot_ellipses=False
+            trajectory_dataframe, ecm_array, timeframe, _ax, 63,
+            plot_matrix=False, plot_trajectories=True, plot_ellipses=True
         )
 
         # Export to array:
@@ -496,11 +876,12 @@ def _(
         out.write(bgr_data)
 
     out.release()
-    return array_plot, bgr_data, fps, out, size, timeframe
+    return
 
 
 @app.cell
 def _():
+    "ffmpeg -framerate 1 -pattern_type glob -i '*.png' -c:v libx264 -r 30 -pix_fmt yuv420p output.mp4"
     return
 
 

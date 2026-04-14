@@ -62,3 +62,6 @@ out*
 slurm*
 *Data
 model_experiments/*
+model_parameter_json/*/*.txt
+model_parameter_json/*/*.csv
+img_tmp/*

@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.12.10"
+__generated_with = "0.18.1"
 app = marimo.App(width="columns")
 
 
@@ -21,7 +21,7 @@ def _():
 
     DIMENSIONALITY = 9
     TRAINING_ITERATIONS = 50
-    return DIMENSIONALITY, GRIDSEARCH_PARAMETERS, TRAINING_ITERATIONS
+    return DIMENSIONALITY, GRIDSEARCH_PARAMETERS
 
 
 @app.cell
@@ -60,7 +60,6 @@ def _():
         pysr,
         qmc,
         torch,
-        tqdm,
     )
 
 
@@ -88,7 +87,9 @@ def _(os):
 
 @app.cell
 def _(mo):
-    mo.md(r"""# 1 - Investigating deterministic collisions""")
+    mo.md(r"""
+    # 1 - Investigating deterministic collisions
+    """)
     return
 
 
@@ -183,22 +184,16 @@ def _(GRIDSEARCH_PARAMETERS, np, os):
     return (
         abc_dtheta_array,
         abc_speed_array,
-        abcuniform_directory_path,
         abcuniform_op_array,
         cell_number,
-        det_collisions_array,
         det_dtheta_array,
         det_op_array,
         det_speed_array,
         deterministic_directory_path,
-        index,
         measured_properties,
         normalised_abc_parameters,
         normalised_parameters,
         parameter_array,
-        parameter_range,
-        pred_dtheta_array,
-        pred_speed_array,
         reduced_parameter_inputs,
         resampled_parameters,
     )
@@ -481,7 +476,7 @@ def _(abcuniform_op_array, cv2, np, plot_pcp, plt, resampled_plus):
         out.write(bgr_data)
 
     out.release()
-    return array_plot, bgr_data, filter_point, fps, out, size
+    return
 
 
 @app.cell
@@ -517,7 +512,7 @@ def _(GRIDSEARCH_PARAMETERS, abcuniform_op_array, cv2, np, pd, plt, resampled):
         _out.write(_bgr_data)
 
     _out.release()
-    return df, sample_size, selection_indices, summary_distances
+    return
 
 
 @app.cell
@@ -626,11 +621,7 @@ def _(det_op_array, measured_properties, parameter_array, sampled_indices):
     low_discrepancy_parameters = parameter_array[sampled_indices, :]
     low_discrepancy_properties = measured_properties[sampled_indices, :]
     low_discrepancy_outputs = det_op_array[sampled_indices, 0]
-    return (
-        low_discrepancy_outputs,
-        low_discrepancy_parameters,
-        low_discrepancy_properties,
-    )
+    return low_discrepancy_outputs, low_discrepancy_parameters
 
 
 @app.cell
@@ -754,7 +745,7 @@ def _(DIMENSIONALITY, gpytorch, np):
             mean_x = self.mean_module(x)
             covar_x = self.covar_module(x)
             return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
-    return ApproximateGPModel, ExactGPModel
+    return (ApproximateGPModel,)
 
 
 @app.cell
@@ -781,17 +772,7 @@ def _(
     test_parameters = torch.tensor(normalised_abc_parameters[9000:], dtype=torch.float32)
     test_props = torch.tensor(measured_properties[1::2], dtype=torch.float32)
     test_op = torch.tensor(abcuniform_op_array[9000:, 0], dtype=torch.float32)
-    return (
-        inducing_points,
-        test_op,
-        test_parameters,
-        test_props,
-        train_dataset,
-        train_loader,
-        train_op,
-        train_parameters,
-        train_props,
-    )
+    return test_op, test_parameters, train_op
 
 
 @app.cell
@@ -947,7 +928,7 @@ def _(full_param_likelihood, full_param_model, test_parameters, torch):
 def _(np, predictions):
     mean_predictions = np.mean(predictions.mean.detach().numpy(), axis=0)
     std_predictions = np.std(predictions.mean.detach().numpy(), axis=0)
-    return mean_predictions, std_predictions
+    return (mean_predictions,)
 
 
 @app.cell
@@ -1014,7 +995,7 @@ def _(
             reduced_param_likelihood(reduced_param_model(test_red))
 
     red_mean_predictions = np.mean(red_predictions.mean.detach().numpy(), axis=0)
-    return red_mean_predictions, red_predictions, test_red
+    return (red_mean_predictions,)
 
 
 @app.cell
@@ -1036,7 +1017,7 @@ def _(pysr):
 def _(sr_model):
     sympy_representation = sr_model.sympy()
     sympy_representation
-    return (sympy_representation,)
+    return
 
 
 @app.cell
@@ -1188,10 +1169,8 @@ def _(
     return (
         red_inducing_points,
         red_test_parameters,
-        red_train_dataset,
         red_train_loader,
         red_train_parameters,
-        reduced_ld_params,
         reduced_norm_params,
     )
 
@@ -1238,7 +1217,7 @@ def _(gpytorch, red_likelihood, red_model, red_train_loader, torch, train_op):
         if (_i + 1) % 25 == 0:
             print(_i + 1)
             print(_loss.detach())
-    return red_mll, red_optimizer
+    return
 
 
 @app.cell
@@ -1349,7 +1328,7 @@ def _(cell_number, det_stationary_col_mean, det_stationary_op_mean, m, plt):
     # _fig.suptitle("Speed-Persistence with Stochastic Collisions")
 
     plt.show()
-    return (w_fig,)
+    return
 
 
 @app.cell
@@ -1489,12 +1468,7 @@ def _(det_op_array, np, op_array):
 
     det_ft_mean = np.mean(det_op_array[:, 1000:], axis=1)
     det_order_parameters = det_ft_mean.reshape((4096, 10)).mean(axis=1)
-    return (
-        det_ft_mean,
-        det_order_parameters,
-        final_timepoints_mean,
-        order_parameters,
-    )
+    return det_order_parameters, order_parameters
 
 
 @app.cell

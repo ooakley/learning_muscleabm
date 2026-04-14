@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.12.10"
+__generated_with = "0.18.1"
 app = marimo.App(width="columns")
 
 
@@ -14,97 +14,6 @@ def _():
 
     from torch.utils.data import TensorDataset, DataLoader
     return DataLoader, TensorDataset, gpytorch, np, plt, torch
-
-
-@app.cell
-def _():
-    GRIDSEARCH_PARAMETERS = {
-        "cueDiffusionRate": [
-            0.0025,
-            2.5
-        ],
-        "cueKa": [
-            0.1,
-            5
-        ],
-        "fluctuationAmplitude": [
-            5e-05,
-            0.005
-        ],
-        "fluctuationTimescale": [
-            1,
-            150
-        ],
-        "maximumSteadyStateActinFlow": [
-            0.0,
-            1.25
-        ]
-    }
-    return (GRIDSEARCH_PARAMETERS,)
-
-
-@app.cell
-def _(GRIDSEARCH_PARAMETERS, np):
-    parameters = np.load("./gridsearch_data/out_wd_search/collated_inputs.npy")
-    distances = np.load("./gridsearch_data/out_wd_search/collated_distances.npy")
-
-    nan_mask = ~np.isnan(distances[:, 0])
-    parameters = parameters[nan_mask, :]
-
-    distances = distances[nan_mask, :]
-
-    normalised_parameters = np.zeros_like(parameters)
-    for index, parameter_range in enumerate(GRIDSEARCH_PARAMETERS.values()):
-        _minimum = parameter_range[0]
-        _maximum = parameter_range[1]
-        normalised_parameters[:, index] = \
-            (parameters[:, index] - _minimum) / (_maximum - _minimum)
-    return (
-        distances,
-        index,
-        nan_mask,
-        normalised_parameters,
-        parameter_range,
-        parameters,
-    )
-
-
-@app.cell
-def _(parameters):
-    parameters.shape
-    return
-
-
-@app.cell
-def _(distances, np):
-    print(np.min(distances, axis=0))
-    return
-
-
-@app.cell
-def _(distances, normalised_parameters, np):
-    # Get appropriate values of epsilon:
-    # Posterior for WT1:
-    mask = distances[:, 5] < np.quantile(distances[:, 5], 0.01)
-    print(np.count_nonzero(mask))
-    wt_posterior = normalised_parameters[mask, :]
-    # wt_posterior = parameters[mask, :]
-    return mask, wt_posterior
-
-
-@app.cell
-def _(np, wt_posterior):
-    mde = np.mean(wt_posterior, axis=0)
-    print(mde)
-    return (mde,)
-
-
-@app.cell
-def _(distances, mask, np, wt_posterior):
-    weights = np.expand_dims(1 / distances[mask, 1], axis=1)
-    weighted_mde = np.sum(wt_posterior * weights, axis=0) / np.sum(weights)
-    weighted_mde
-    return weighted_mde, weights
 
 
 @app.cell
@@ -149,7 +58,7 @@ def _(
         _axs[j, i].set_ylim(0, 1)
 
     plt.show()
-    return axis_limits, i, j, range_spacing, ranges
+    return
 
 
 @app.cell
@@ -314,7 +223,7 @@ def _(distances, instantiate_model, normalised_parameters, train_model):
             epochs=50
         )
         models.append((model, likelihood))
-    return likelihood, loss_history, model, models
+    return (models,)
 
 
 @app.cell
@@ -363,7 +272,7 @@ def _(torch):
         return calculate_jacobian(
             calculate_jacobian(y, x, create_graph=True), x, create_graph=create_graph
         )
-    return calculate_hessian, calculate_jacobian
+    return (calculate_hessian,)
 
 
 @app.cell
@@ -392,15 +301,7 @@ def _(
             mean_predictions, tensor_input, create_graph=True
         )
         hessians.append(_hessian.detach().numpy().squeeze())
-    return (
-        hessians,
-        masks,
-        mdes,
-        mean_predictions,
-        model_tuple,
-        posteriors,
-        tensor_input,
-    )
+    return (hessians,)
 
 
 @app.cell
@@ -432,11 +333,6 @@ def _(eig_result):
 
 
 @app.cell
-def _():
-    return
-
-
-@app.cell
 def _(eigenvector_matrix):
     eigenvector_matrix
     return
@@ -460,11 +356,6 @@ def _(distances, eigenparameter_matrix, mask, plt):
     _ax.set_xlim(-_lim, _lim)
     _ax.set_ylim(-_lim, _lim)
     plt.show()
-    return
-
-
-@app.cell
-def _():
     return
 
 

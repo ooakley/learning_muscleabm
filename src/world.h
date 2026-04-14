@@ -23,8 +23,8 @@ struct CellParameters {
     collisionFlowReductionRate,
 
     // Shape parameters:
-    stretchFactor,
-    slipFactor;
+    cellStiffness,
+    surfaceStickiness;
 };
 
 class World {
@@ -39,6 +39,7 @@ public:
         bool setThereIsMatrixInteraction,
         double setMatrixTurnoverRate,
         double setMatrixAdditionRate,
+        double setMatrixSampleRate,
         CellParameters setCellParameters
     );
 
@@ -61,6 +62,7 @@ private:
     int countECMElement;
     double lengthECMElement;
     bool thereIsMatrixInteraction;
+    double matrixSampleRate;
 
     // Complex objects from our libraries:
     std::vector<std::shared_ptr<CellAgent>> cellAgentVector;
@@ -86,6 +88,7 @@ private:
     std::mt19937 contactInhibitionGenerator;
 
     std::mt19937 kernelSamplingGenerator;
+    std::mt19937 matrixSamplingGenerator;
 
     // Distributions for seeding position and initial heading:
     std::uniform_real_distribution<double> positionDistribution;

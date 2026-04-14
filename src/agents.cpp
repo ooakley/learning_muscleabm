@@ -52,8 +52,8 @@ CellAgent::CellAgent(
     double setCollisionFlowReductionRate,
 
     // Shape parameters:
-    double setStretchFactor,
-    double setSlipFactor,
+    double setCellStiffness,
+    double setSurfaceStickiness,
 
     // Randomised initial state parameters:
     double startX, double startY, double startHeading
@@ -81,8 +81,10 @@ CellAgent::CellAgent(
     , minorAxisScaling{std::sqrt(1/setAspectRatio)}
 
     // Shape parameters:
-    , stretchFactor{setStretchFactor}
-    , slipFactor{setSlipFactor}
+    , cellStiffness{setCellStiffness}
+    , surfaceStickiness{setSurfaceStickiness}
+    , adhesionStiffness{20}
+    , adhesionFragility{5}
 
     // State parameters:
     , x{startX}
@@ -105,6 +107,7 @@ CellAgent::CellAgent(
     , sampledAngle{0}
     , polarityChangeCilX{0}
     , polarityChangeCilY{0}
+    , adhesionFraction{1e-3}
 
     // History variables:
     , collisionsThisTimepoint{0}
@@ -140,6 +143,9 @@ CellAgent::CellAgent(
     // Generator for finding random angle after loss of polarisation:
     generatorRandomRepolarisation = std::mt19937(seedDistribution(seedGenerator));
     randomDeltaSample = std::mt19937(seedDistribution(seedGenerator));
+
+    // Generator for deposition-movement history samping:
+    generatorMovementSampling = std::mt19937(seedDistribution(seedGenerator));
 
     // Ensuring shape direction is direction-agnostic:
     shapeDirection = nematicAngleMod(shapeDirection);
@@ -312,43 +318,19 @@ void CellAgent::takeRandomStep() {
     y += dy;
 
     // Roll position if out of bounds:
-    while (x < 0) {x += 2048;}
-    while (y < 0) {y += 2048;}
+    if (x < 0) {
+        double remainder{std::fmod(-x, 2048)};
+        x = 2048. - remainder;
+    }
+    if (y < 0) {
+        double remainder{std::fmod(-y, 2048)};
+        y = 2048. - remainder;
+    }
     x = std::fmod(x, 2048);
     y = std::fmod(y, 2048);
 
-    // Add to cell history:
-    addToPositionHistory(x, y);
-    addToMovementHistory(std::cos(flowDirection), std::sin(flowDirection));
-
-    // Age stadium attachment:
-    double lengthScale{cellBodyRadius*stretchFactor};
-    double stretchDistance{std::sqrt(
-        std::pow(x - stadiumX, 2) + 
-        std::pow(y - stadiumY, 2)
-    )};
-    double slipRate{
-        1 - std::exp(-stretchDistance / lengthScale)
-    };
-    double randomDeterminant{uniformDistribution(generatorInfluence)};
-    if (randomDeterminant < slipFactor*slipRate) {
-        // // Update stadium point:
-        // const auto [sampledIndex, newStadiumX, newStadiumY] = samplePositionHistory();
-        // stadiumX = newStadiumX;
-        // stadiumY = newStadiumY;
-
-        // // Truncate history to new point:
-        // for (int i{0}; i < sampledIndex; ++i) {
-        //     xPositionHistory.pop_front();
-        //     yPositionHistory.pop_front();
-        // }
-
-        // Set to current position:
-        stadiumX = x;
-        stadiumY = y;
-        xPositionHistory.clear();
-        yPositionHistory.clear();
-    }
+    // Update stadium positions and run relevant ODEs:
+    runStickSlipLogic();
 
     // Zero out CIL effects:
     polarityChangeCilX = 0.0;
@@ -389,6 +371,223 @@ void CellAgent::takeRandomStep() {
     // }
 }
 
+
+void CellAgent::runStickSlipLogic() {
+    // Calculate extension of cell back:
+    double xCellSpan{x - stadiumX};
+    if (xCellSpan < -1024) {xCellSpan += 2048;};
+    if (xCellSpan > 1024) {xCellSpan -= 2048;};
+    double yCellSpan{y - stadiumY};
+    if (yCellSpan < -1024) {yCellSpan += 2048;};
+    if (yCellSpan > 1024) {yCellSpan -= 2048;};
+
+    double stretchDistance{std::sqrt(
+        std::pow(xCellSpan, 2) + 
+        std::pow(yCellSpan, 2)
+    )};
+    double cellExtension{std::max(stretchDistance - cellBodyRadius, 0.0) / cellBodyRadius};
+    if (std::isnan(cellExtension)) {
+        std::cout << "Initial cell extension calculation from position has failed." << std::endl;
+        std::cout << "stretchDistance: " << stretchDistance << std::endl;
+        std::cout << "cellBodyRadius: " << cellBodyRadius << std::endl;
+        assert(!std::isnan(cellExtension));
+    }
+
+    // Calculate change in adhesions with Newton-Raphson:
+    // -- Get adjustment for non-dimensionalisation:
+    double timeScaling{1e-3};
+    int subdivisionCount{1};
+    bool nrConverged{false};
+
+    double nextAdhesion;
+    double nextExtension;
+    while (!nrConverged) {
+        // Initialise to current values:
+        nextAdhesion = adhesionFraction;
+        nextExtension = cellExtension;
+
+        // Calculate step size:
+        double stepSize{(timeScaling * dt) / subdivisionCount};
+
+        // Iterate through subdivided steps:
+        bool adhesionFailure{false};
+        bool extensionFailure{false};
+        for (int i = 0; i < subdivisionCount; i++) {
+            // Calculate adhesions:
+            auto [updateAdhesion, adhesionFailure] = implicitNextAdhesion(stepSize, nextAdhesion, nextExtension);
+            if (adhesionFailure) {
+                goto nextSubdivision;
+            }
+            auto [updateExtension, extensionFailure] = implicitNextExtension(stepSize, nextAdhesion, nextExtension);
+            if (extensionFailure) {
+                goto nextSubdivision;
+            }
+
+            // If no estimation failure (so far), update next substep:
+            nextAdhesion = updateAdhesion;
+            nextExtension = updateExtension;
+        }
+
+        // If we've reached the end of the loop without failure, we've converged:
+        // if (subdivisionCount > 1) {
+        //     std::cout << ">> Convergence with adaptive subdivion of: " << subdivisionCount << std::endl;
+        // }
+        nrConverged = true;
+
+        // We can skip to the next subdivision of the current timestep if the NR fails:
+        nextSubdivision:;
+        if (subdivisionCount >= 4096 and not nrConverged) {
+            // std::cout << ">> Convergence not reached with adaptive subdivision of: " << subdivisionCount << std::endl;
+            nextAdhesion = adhesionFraction;
+            nextExtension = cellExtension * 0.9;
+            nrConverged = true;
+        }
+        subdivisionCount *= 4;
+    }
+
+    // Update adhesions:
+    adhesionFraction = nextAdhesion;
+
+    // Update cell extension:
+    double nextSpan{(nextExtension  * cellBodyRadius) + cellBodyRadius};
+    if (nextSpan > stretchDistance) {
+        // We change nothing - no extensive force, only retraction.
+    } else {
+        stadiumX = x - (xCellSpan / stretchDistance) * nextSpan;
+        stadiumY = y - (yCellSpan / stretchDistance) * nextSpan;
+    }
+
+    // Roll position if out of bounds:
+    if (stadiumX < 0) {
+        double remainder{std::fmod(-stadiumX, 2048)};
+        stadiumX = 2048. - remainder;
+    }
+    if (stadiumY < 0) {
+        double remainder{std::fmod(-stadiumY, 2048)};
+        stadiumY = 2048. - remainder;
+    }
+    stadiumX = std::fmod(stadiumX, 2048);
+    stadiumY = std::fmod(stadiumY, 2048);
+}
+
+std::tuple<double, bool> CellAgent::implicitNextAdhesion(
+    double stepSize, double adhesionFraction, double cellExtension
+) {
+    // -- Get initial guess from forward Euler (or not, if broken):
+    double exponentialScale{(cellStiffness * cellExtension) / adhesionFragility};
+    double popRate{std::exp(exponentialScale / adhesionFraction)};
+    double forwardAdhesionUpdate{
+        (surfaceStickiness * (1 - adhesionFraction)) - (adhesionFraction * popRate)
+    };
+    double nextAdhesion{adhesionFraction + (stepSize * forwardAdhesionUpdate)};
+    if (std::isnan(nextAdhesion)) {
+        nextAdhesion = adhesionFraction;
+    }
+
+    // -- NR Iteration to get backward integration of adhesion occupancy:
+    double epsilon{1};
+    int iterationCount{0};
+    while (std::abs(epsilon) > 1e-8) {
+        // Get NR numerator:
+        double nrPopRate{std::exp(exponentialScale / nextAdhesion)};
+        double nrAdhesionUpdate{
+            (surfaceStickiness * (1 - nextAdhesion)) - (nextAdhesion * nrPopRate)
+        };
+        double nrNumerator{nextAdhesion - adhesionFraction - (stepSize * nrAdhesionUpdate)};
+
+        // Get NR denominator:
+        double nrDenominator{
+            1 - (stepSize * (
+                ((exponentialScale * nrPopRate) / nextAdhesion)
+                - nrPopRate
+                - surfaceStickiness
+            ))
+        };
+
+        // Update estimate of root:
+        epsilon = nrNumerator / nrDenominator;
+        nextAdhesion -= nrNumerator / nrDenominator;
+
+        // Break if we run into divide by zero errors:
+        if (std::isnan(nextAdhesion)) {
+            return {1, true};
+        }
+
+        // Break if we exceed max iterations:
+        iterationCount += 1;
+        if (iterationCount > 10) {
+            return {1, true};
+        };
+    }
+
+    // Return functional next adhesion value if iteration successful:
+    return {nextAdhesion, false};
+}
+
+std::tuple<double, bool> CellAgent::implicitNextExtension(
+    double stepSize, double adhesionFraction, double cellExtension
+) {
+    // Calculate change in back position:
+    // -- Get constants:
+    double dAlpha{cellStiffness / (adhesionFraction * adhesionStiffness)};
+    double dBeta{cellStiffness / (adhesionFraction * adhesionFragility)};
+
+    // -- Get initial guess with forward Euler:
+    double forwardExtensionUpdate{dAlpha * cellExtension * std::exp(dBeta * cellExtension)};
+    double nextExtension{
+        cellExtension - (stepSize * forwardExtensionUpdate)
+    };
+
+    // -- If initial guess is broken, use current value:
+    if (std::isnan(nextExtension)) {
+        nextExtension = cellExtension;
+    }
+
+    // -- Iterate with NR to get implicit Euler estimation of change in extension:
+    double epsilon{1};
+    double iterationCount{0};
+    while (std::abs(epsilon) > 1e-8) {
+        // Get NR extension numerator:
+        double nrExtensionUpdate{
+            dAlpha * nextExtension * std::exp(dBeta * nextExtension)
+        };
+        double nrNumerator{nextExtension - cellExtension + (stepSize * nrExtensionUpdate)};
+
+        // Get NR extension denominator:
+        double nrDenominator{
+            1 + (stepSize * (
+                (dAlpha*std::exp(dBeta * nextExtension))
+                + ((dAlpha * dBeta * nextExtension) * std::exp(dBeta * nextExtension))
+            ))
+        };
+
+        // Update estimate of root:
+        epsilon = nrNumerator / nrDenominator;
+        nextExtension -= nrNumerator / nrDenominator;
+
+        // Break if we run into divide by zero errors:
+        if (std::isnan(nextExtension)) {
+            std::cout << "Extension NR estimation failed..." << std::endl;
+            std::cout << "epsilon: " << epsilon << std::endl;
+            return {0, true};
+        }
+
+        // Break if we exceed max iterations:
+        iterationCount += 1;
+        if (iterationCount > 10) {
+            std::cout << "Extension NR exceeded max iterations..." << epsilon << std::endl;
+            return {0, true};
+        };
+    }
+
+    if (std::isnan(nextExtension)) {
+        std::cout << "Extension ODE broken..." << std::endl;
+        std::cout << "nextExtension: " << nextExtension << std::endl;
+        assert(!std::isnan(nextExtension));
+    }
+
+    return {nextExtension, false};
+}
 
 void CellAgent::runTrajectoryDependentCollisionLogic() {
     // Useful points:
@@ -484,12 +683,12 @@ void CellAgent::runTrajectoryDependentCollisionLogic() {
             double angleActingToLocal{std::atan2(actingToLocalY, actingToLocalX)};
 
             // Get degree of overlap:
-            double sagitta{cellBodyRadius - (minimumDistance/(2 - clampedDotProduct))};
+            double sagitta{cellBodyRadius - (minimumDistance / 2)};
             double centralAngle{2*std::acos((cellBodyRadius - sagitta)/cellBodyRadius)};
             double overlapArea{std::pow(cellBodyRadius, 2)*(centralAngle - std::sin(centralAngle))};
             double overlapRatio{overlapArea / (0.5*M_PI*std::pow(cellBodyRadius, 2))};
             overlapRatio = std::clamp(overlapRatio, 0.0, 1.0);
-            overlapRatio = 1;
+            // overlapRatio = 1;
 
             // Exert reduction in actin flow for acting cell:
             double angleOfRestitution{angleActingToLocal - M_PI};
@@ -1207,7 +1406,7 @@ std::tuple<bool, double, double, double, double> CellAgent::isPositionInStadium(
     scaledDotProduct /= std::pow(xStartToEnd, 2) + std::pow(yStartToEnd, 2);
     double clampedDotProduct{std::clamp(scaledDotProduct, 0.0, 1.0)};
 
-     // Determine closest point on segment:
+    // Determine closest point on segment:
     double closestPointX{0};
     double closestPointY{0};
     double minimumDistance{0};
@@ -1256,8 +1455,8 @@ std::tuple<bool, double, double, double, double> CellAgent::isPositionInStadium(
             std::pow(samplePointY - closestPointY, 2)
         );
 
-        // Collision distance is one cell radii as it has tapered to a point:
-        isColliding = minimumDistance < cellBodyRadius;
+        // Collision distance is two cell radii:
+        isColliding = minimumDistance < (cellBodyRadius * 2);
     } else {
         // Colliding with central part of extension:
         closestPointX = startX + scaledDotProduct*xStartToEnd;
@@ -1269,9 +1468,8 @@ std::tuple<bool, double, double, double, double> CellAgent::isPositionInStadium(
             std::pow(samplePointY - closestPointY, 2)
         );
 
-        // Collision distance is one cell radii,
-        // plus a scaled cell radii to reflect tapering.
-        isColliding = minimumDistance < (cellBodyRadius*(2-scaledDotProduct));
+        // Collision distance is two cell radii:
+        isColliding = minimumDistance < (cellBodyRadius * 2);
     }
 
     // Find distance to closest point:
@@ -1487,6 +1685,21 @@ void CellAgent::addToMovementHistory(double movementX, double movementY) {
         yMovementHistory.pop_front();
     }
 }
+
+double CellAgent::sampleMovementHistory() {
+    // Return random direction if we have no movement history:
+    int sampleSize{static_cast<int>(xMovementHistory.size())};
+    if (sampleSize == 0) {
+        return angleUniformDistribution(generatorMovementSampling);
+    }
+
+    // Return 1 density if fibers present:
+    std::uniform_int_distribution<> indexDistribution(0, sampleSize-1);
+    int sampledIndex{indexDistribution(generatorMovementSampling)};
+    double xComponent{xMovementHistory[sampledIndex]};
+    double yComponent{yMovementHistory[sampledIndex]};
+    return std::atan2(yComponent, xComponent);
+};
 
 void CellAgent::addToPositionHistory(double positionX, double positionY) {
     xPositionHistory.push_back(positionX);

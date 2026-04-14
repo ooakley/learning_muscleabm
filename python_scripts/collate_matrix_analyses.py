@@ -35,13 +35,7 @@ def collate_data(experiment_folderpath, summarise_filename, sample_count):
                 experiment_folderpath, "run_data", str(hierarchy_id), str(folder_id), summarise_filename
             )
             superiteration_values = np.load(id_filepath)
-            if superiteration_values.shape != (superiteration_count,):
-                print(f"Wrong shape found at {folder_id}, appending NaN...", flush=True)
-                print(f"Shape: {superiteration_values.shape}", flush=True)
-                blank_data = np.array([np.nan] * superiteration_count)
-                out_data.append(blank_data)
-            else:
-                out_data.append(superiteration_values)
+            out_data.append(superiteration_values)
         except (FileNotFoundError, EOFError):
             print(f"No data file found at {folder_id}, appending NaN...", flush=True)
             blank_data = np.array([np.nan] * superiteration_count)
@@ -68,16 +62,8 @@ def main():
         os.mkdir(summary_directory)
 
     # Collate individual simulation data into set of comprehensive numpy arrays:
-    com = True
-    if not com:
-        collate_data(args.experiment_folderpath, "meander_ratios.npy", sample_count)
-        collate_data(args.experiment_folderpath, "ann_indices.npy", sample_count)
-        collate_data(args.experiment_folderpath, "coherency_fractions.npy", sample_count)
-    else:
-        collate_data(args.experiment_folderpath, "com_ann_indices.npy", sample_count)
-        collate_data(args.experiment_folderpath, "com_coherency_fractions.npy", sample_count)
-        collate_data(args.experiment_folderpath, "com_meander_ratios.npy", sample_count)
-        collate_data(args.experiment_folderpath, "com_speeds.npy", sample_count)
+    collate_data(args.experiment_folderpath, "matrix_order_parameters.npy", sample_count)
+    collate_data(args.experiment_folderpath, "density_idr.npy", sample_count)
 
 
 if __name__ == "__main__":

@@ -46,6 +46,7 @@ public:
     boostMatrix::matrix<double> getLocalCellHeadingState(std::tuple<double, double> position) const;
 
     std::tuple<double, double, double> summariseFibreMatrix(int i, int j) const;
+    std::deque<float> getFibreDeque(int i, int j) const;
 
     // Setters:
     // --- --- Matrix Setters:

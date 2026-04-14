@@ -34,6 +34,7 @@ int main(int argc, char** argv) {
     bool thereIsMatrixInteraction;
     double matrixAdditionRate;
     double matrixTurnoverRate;
+    double matrixSampleRate;
 
     // Cell behaviour parameters:
     CellParameters cellParams;
@@ -67,6 +68,9 @@ int main(int argc, char** argv) {
         )
         ("matrixAdditionRate", po::value<double>(&matrixAdditionRate)->required(),
             "Stability of the matrix under reorientation by cell movement."
+        )
+        ("matrixSampleRate", po::value<double>(&matrixSampleRate)->required(),
+            "Rate of matrix sampling by cells."
         )
         ("thereIsMatrixInteraction", po::value<bool>(&thereIsMatrixInteraction)->required(),
             "Whether or not cells undergo interaction with the matrx."
@@ -110,11 +114,11 @@ int main(int argc, char** argv) {
             "Rate at which actin flow in the direction of a collision is reduced by a collision."
         )
         // Shape parameters:
-        ("stretchFactor", po::value<double>(&cellParams.stretchFactor)->required(),
-            "Multiply body radius to get length scale for distance decay of stadium retraction."
+        ("cellStiffness", po::value<double>(&cellParams.cellStiffness)->required(),
+            "The k value that determines the spring properties acting on the retracting end of the cell."
         )
-        ("slipFactor", po::value<double>(&cellParams.slipFactor)->required(),
-            "Maximal chance for resampling of stadium point - i.e. slipping - per timestep."
+        ("surfaceStickiness", po::value<double>(&cellParams.surfaceStickiness)->required(),
+            "The Kon rate for stick-slip adhesions at the end of the cell."
         )
     ;
 
@@ -178,6 +182,7 @@ int main(int argc, char** argv) {
         matrixFile.open(matrixFilename);
 
         // Running simulation:
+        std::cout << "Instantiating world..." << std::endl;
         World mainWorld{
             World(
                 seedDistribution(seedGenerator),
@@ -187,16 +192,23 @@ int main(int argc, char** argv) {
                 thereIsMatrixInteraction,
                 matrixTurnoverRate,
                 matrixAdditionRate,
+                matrixSampleRate,
                 cellParams
             )
         };
+
+        std::cout << "Running simulation..." << std::endl;
         for (int i = 0; i < timeStepsToRun; ++i) {
             mainWorld.runSimulationStep();
             mainWorld.writePositionsToCSV(csvFile);
-            mainWorld.writeMatrixToCSV(matrixFile);
         }
+        
+        // Write final matrix to file:
+        // std::cout << "Writing matrix to file..." << std::endl;
+        mainWorld.writeMatrixToCSV(matrixFile);
 
         // We need to close files to flush remaining outputs to buffer.
+        // std::cout << "Closing files..." << std::endl;
         csvFile.close();
         matrixFile.close();
     }

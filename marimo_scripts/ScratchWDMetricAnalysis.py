@@ -210,7 +210,7 @@ def _(
             # Take average over trajectory:
             trajectory_distances.append(np.mean(mean_neighbour_distances))
 
-            # Get trajectory characteristics: 
+            # Get trajectory characteristics:
             x = x_positions * 2
             y = y_positions * 2
             dx = x[-1] - x[0]
@@ -223,7 +223,7 @@ def _(
                 x_displacements**2 + y_displacements**2
             ))
 
-            speed.append(path_length / (length*2.5))
+            speed.append(path_length / (length * 2.5))  # We multiply by 2.5 to get pixels per minute.
             meander_ratio.append(total_displacement / path_length)
 
         return speed, meander_ratio, trajectory_distances, mma
