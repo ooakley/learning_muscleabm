@@ -9,6 +9,7 @@ import numpy as np
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Process an outputs folder with a given name.')
     parser.add_argument('--experiment_folderpath', type=str)
+    parser.add_argument('--collation_target', type=str)
     parser.add_argument('--sample_count', type=int, default=None)
     args = parser.parse_args()
     return args
@@ -36,14 +37,14 @@ def collate_data(experiment_folderpath, summarise_filename, sample_count):
             )
             superiteration_values = np.load(id_filepath)
             if superiteration_values.shape != (superiteration_count,):
-                print(f"Wrong shape found at {folder_id}, appending NaN...", flush=True)
-                print(f"Shape: {superiteration_values.shape}", flush=True)
+                print(f"{summarise_filename}: Wrong shape found at {folder_id}, appending NaN...", flush=True)
+                print(f"{summarise_filename}: Shape: {superiteration_values.shape}", flush=True)
                 blank_data = np.array([np.nan] * superiteration_count)
                 out_data.append(blank_data)
             else:
                 out_data.append(superiteration_values)
         except (FileNotFoundError, EOFError):
-            print(f"No data file found at {folder_id}, appending NaN...", flush=True)
+            print(f"{summarise_filename}: No data file found at {folder_id}, appending NaN...", flush=True)
             blank_data = np.array([np.nan] * superiteration_count)
             out_data.append(blank_data)
 
@@ -67,17 +68,8 @@ def main():
     if not os.path.exists(summary_directory):
         os.mkdir(summary_directory)
 
-    # Collate individual simulation data into set of comprehensive numpy arrays:
-    com = True
-    if not com:
-        collate_data(args.experiment_folderpath, "meander_ratios.npy", sample_count)
-        collate_data(args.experiment_folderpath, "ann_indices.npy", sample_count)
-        collate_data(args.experiment_folderpath, "coherency_fractions.npy", sample_count)
-    else:
-        collate_data(args.experiment_folderpath, "com_ann_indices.npy", sample_count)
-        collate_data(args.experiment_folderpath, "com_coherency_fractions.npy", sample_count)
-        collate_data(args.experiment_folderpath, "com_meander_ratios.npy", sample_count)
-        collate_data(args.experiment_folderpath, "com_speeds.npy", sample_count)
+    # Collate and save data:
+    collate_data(args.experiment_folderpath, f"{args.collation_target}.npy", sample_count)
 
 
 if __name__ == "__main__":

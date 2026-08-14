@@ -252,7 +252,7 @@ def _(DataLoader, TensorDataset, gpytorch, json, np, os, torch):
                     print(batch_index + 1)
 
         return np.concatenate(predictions_array), np.concatenate(variance_array)
-    return ModelManager, load_gridsearch_data
+    return (ModelManager,)
 
 
 @app.cell(hide_code=True)
@@ -338,39 +338,38 @@ def _(np, torch):
 
 
 @app.cell
-def _(ModelManager, load_gridsearch_data, np):
-    # Load data & gaussian process emulators:
-    parameter_matrix, coherency_fractions, ann_indices, speeds, gridsearch_parameters = load_gridsearch_data(
-        "model_experiments/2025-12-04-collisions_only"
-    )
+def _():
+    # # Load data & gaussian process emulators:
+    # parameter_matrix, coherency_fractions, ann_indices, speeds, gridsearch_parameters = load_gridsearch_data(
+    #     "model_experiments/2025-12-04-collisions_only"
+    # )
 
-    # Get information necessary to transform GP outputs:
-    CF_DIST_MEAN = np.mean(np.mean(coherency_fractions, axis=1))
-    CF_DIST_STD = np.std(np.mean(coherency_fractions, axis=1))
+    # # Get information necessary to transform GP outputs:
+    # CF_DIST_MEAN = np.mean(np.mean(coherency_fractions, axis=1))
+    # CF_DIST_STD = np.std(np.mean(coherency_fractions, axis=1))
 
-    ANNI_DIST_MEAN = np.mean(np.mean(ann_indices, axis=1))
-    ANNI_DIST_STD = np.std(np.mean(ann_indices, axis=1))
+    # ANNI_DIST_MEAN = np.mean(np.mean(ann_indices, axis=1))
+    # ANNI_DIST_STD = np.std(np.mean(ann_indices, axis=1))
 
-    SPEED_DIST_MEAN = np.mean(speeds[:, 0])
-    SPEED_DIST_STD = np.std(speeds[:, 0])
+    # SPEED_DIST_MEAN = np.mean(speeds[:, 0])
+    # SPEED_DIST_STD = np.std(speeds[:, 0])
 
+
+    # # Instantiate then load emulators:
+    # cf_model_manager = ModelManager(inducing_points, 0.003)
+    # cf_model_manager.load("model_experiments/2025-12-04-collisions_only/gaussian_process_models", "coherency_fraction")
+    # anni_model_manager = ModelManager(inducing_points, 0.003)
+    # anni_model_manager.load("model_experiments/2025-12-04-collisions_only/gaussian_process_models", "ann_index")
+    # speed_model_manager = ModelManager(inducing_points, 0.003)
+    # speed_model_manager.load("model_experiments/2025-12-04-collisions_only/gaussian_process_models", "speed")
+    return
+
+
+@app.cell
+def _(np):
     # Dummy inducing points:
     inducing_points = np.ones((10, 10))
-
-    # Instantiate then load emulators:
-    cf_model_manager = ModelManager(inducing_points, 0.003)
-    cf_model_manager.load("model_experiments/2025-12-04-collisions_only/gaussian_process_models", "coherency_fraction")
-    anni_model_manager = ModelManager(inducing_points, 0.003)
-    anni_model_manager.load("model_experiments/2025-12-04-collisions_only/gaussian_process_models", "ann_index")
-    speed_model_manager = ModelManager(inducing_points, 0.003)
-    speed_model_manager.load("model_experiments/2025-12-04-collisions_only/gaussian_process_models", "speed")
-    return (
-        cf_model_manager,
-        coherency_fractions,
-        gridsearch_parameters,
-        inducing_points,
-        parameter_matrix,
-    )
+    return (inducing_points,)
 
 
 @app.cell
@@ -378,6 +377,33 @@ def _(ModelManager, inducing_points):
     model_manager = ModelManager(inducing_points, 0.003)
     model_manager.load("model_experiments/2026-01-26-matrix_collisions/gaussian_process_models", "op17")
     return (model_manager,)
+
+
+@app.cell
+def _(model_manager, torch):
+    def localised_cost_function(parameter_input):
+        row_input = torch.unsqueeze(parameter_input, 0)
+        transformed_input = torch.exp(row_input)
+        prediction = model_manager.likelihood(model_manager.model(transformed_input))
+        prediction_mean = prediction.mean
+        phantom_set_point = prediction_mean.detach()
+        localised_cost = (phantom_set_point - prediction_mean) ** 2
+        return localised_cost
+
+    sample_input = torch.log(torch.ones((64, 11)) * 0.5)
+
+    # Autograd calculation:
+    autograd_hessian = torch.autograd.functional.hessian(localised_cost_function, sample_input[0, :])
+    print(autograd_hessian)
+
+    # # torch.func calculations:
+    # get_hessian = torch.func.hessian(localised_cost_function)
+    # batch_hessian = torch.func.vmap(get_hessian)
+
+    # print(sample_input.shape)
+    # single_hessian = get_hessian(sample_input[0, :])
+    # # sample_hessians = batch_hessian(sample_input)
+    return
 
 
 @app.cell

@@ -201,6 +201,7 @@ private:
 
     // Simulation subfunctions:
     void runTrajectoryDependentCollisionLogic();
+    void runAlternativeTrajectoryDependentCollisionLogic();
     void runStochasticCollisionLogic();
     void runCircularStochasticCollisionLogic();
     void runDeterministicCollisionLogic();
@@ -213,13 +214,16 @@ private:
     );
 
     void runStickSlipLogic();
+    std::tuple<double, double, bool> implicitNextState(
+        double stepSize, double A0, double X0
+    );
     std::tuple<double, bool> implicitNextAdhesion(
         double stepSize, double adhesionFraction, double cellExtension
     );
     std::tuple<double, bool> implicitNextExtension(
         double stepSize, double adhesionFraction, double cellExtension
     );
-
+    void checkJacobianFD(double stepSize, double A, double X);
 
     // Utility functions:
     double angleMod(double angle) const;

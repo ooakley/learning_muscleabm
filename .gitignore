@@ -64,4 +64,6 @@ slurm*
 model_experiments/*
 model_parameter_json/*/*.txt
 model_parameter_json/*/*.csv
+model_parameter_json/*/*.png
 img_tmp/*
+plotting_scripts/*/*/*.npz

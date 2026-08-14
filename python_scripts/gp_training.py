@@ -1,17 +1,20 @@
 import argparse
 import os
+import json
 
 import gpytorch
 import torch
 
 import numpy as np
 
+from scipy.stats import qmc
 from torch.utils.data import TensorDataset, DataLoader
 from dppy.finite_dpps import FiniteDPP
 
 # Need a higher precision for computing double derivatives:
 torch.set_default_dtype(torch.float64)
 
+K_FOLD_COUNT = 8
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Train a deep kernel GP regressor on a given model metric')
@@ -22,19 +25,27 @@ def parse_arguments():
 
 
 def load_gridsearch_data(experiment_dirpath, metric_name):
-    # Load numpy data:
+    # Load parameter data:
     parameter_matrix = np.load(
         os.path.join(experiment_dirpath, "sample_matrix.npy")
     )
-    output_metric = np.load(
-        os.path.join(experiment_dirpath, "summary_data", f"{metric_name}.npy")
-    )
 
-    # # Remove failed simulations:
-    # nan_mask = np.any(np.isnan(output_metric), axis=1)
-    # parameter_matrix = parameter_matrix[~nan_mask, :]
-    # output_metric = output_metric[~nan_mask, :]
-    return parameter_matrix, output_metric
+    # Load metric data:
+    if metric_name == "op65":
+        output_metric = np.load(
+            os.path.join(experiment_dirpath, "summary_data", "matrix_order_parameters.npy")
+        )
+        # Select final estimate of OP scale curve:
+        output_metric = output_metric[:, :, 2]
+    else:
+        output_metric = np.load(
+            os.path.join(experiment_dirpath, "summary_data", f"{metric_name}.npy")
+        )
+
+    # Remove failed simulations:
+    metric_mean = np.nanmean(output_metric, axis=1)
+    nan_mask = np.isnan(metric_mean)
+    return parameter_matrix[~nan_mask, :], metric_mean[~nan_mask]
 
 
 def sample_inducing_points(num_points, parameter_matrix):
@@ -46,7 +57,7 @@ def sample_inducing_points(num_points, parameter_matrix):
     # Set up determinantal point process:
     print("Setting up point process...")
     DPP = FiniteDPP('likelihood', **{'L': likelihood_matrix})
-    DPP.sample_mcmc_k_dpp(size=num_points, random_state=None)
+    DPP.sample_mcmc_k_dpp(size=num_points, random_state=0)
 
     # Get inducing points:
     inducing_indices = DPP.list_of_samples[0][-1]
@@ -55,7 +66,7 @@ def sample_inducing_points(num_points, parameter_matrix):
 
 
 class DeepInputTransformation(torch.nn.Module):
-    def __init__(self, dimension, hidden_layer_neuron_count=16):
+    def __init__(self, dimension, hidden_layer_neuron_count=32):
         # Run general initialisation of the nn.Module base class:
         super().__init__()
 
@@ -156,8 +167,8 @@ class ModelManager:
 
             # Step through optimisers:
             self.optimizer.step()
-            if (batch_index + 1) % 10 == 0:
-                print(batch_index, loss.item(), flush=True)
+            if (batch_index + 1) % 32 == 0:
+                print(batch_index + 1, loss.item(), flush=True)
 
             # Ensure inducing points don't go out of bounds (implicitly
             # imposing constraints with transforms degrades performance):
@@ -166,7 +177,7 @@ class ModelManager:
                 self.model.variational_strategy.inducing_points[inducing_points > 1] = 1
                 self.model.variational_strategy.inducing_points[inducing_points < 0] = 0
 
-            self.loss_history.append(loss.detach())
+            self.loss_history.append(loss.detach().numpy())
 
     def train(self, x, y, batch_size, epochs=1):
         # Convert datasets to pytorch:
@@ -174,7 +185,8 @@ class ModelManager:
         y_tensor = torch.tensor(y)
         dataset = TensorDataset(x_tensor, y_tensor)
 
-        for _ in range(epochs):
+        for epoch_index in range(epochs):
+            print(f"Training epoch {epoch_index + 1}...")
             dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
             self.train_epoch(dataloader, len(y))
 
@@ -204,32 +216,166 @@ class ModelManager:
         self.optimizer = torch.load(os.path.join(id_folderpath, "optimiser.pth"), weights_only=False)
 
 
-def run_inference(model, likelihood, inputs, batch_size=512):
+def run_inference(model_manager, inputs, batch_size=512):
     # Set up dataloading:
     tensor_input = torch.tensor(inputs)
     inference_dataset = TensorDataset(tensor_input)
     inference_loader = DataLoader(inference_dataset, batch_size=batch_size, shuffle=False)
 
     # Shift to eval mode:
-    model.eval()
-    likelihood.eval()
+    model_manager.model.eval()
+    model_manager.likelihood.eval()
 
     # Set up outputs:
     predictions_array = []
-    variance_array = []
+    stddev_array = []
     with torch.no_grad():
         for batch_index, inference_batch in enumerate(inference_loader):
             inference_batch = inference_batch[0]
-            predictions = likelihood(model(inference_batch))
+            predictions = model_manager.likelihood(model_manager.model(inference_batch))
             predictions_array.append(predictions.mean.detach().numpy())
-            variance_array.append(predictions.variance.detach().numpy())
-            if (batch_index + 1) % 100 == 0:
+            stddev_array.append(predictions.stddev.detach().numpy())
+            if (batch_index + 1) % 64 == 0:
                 print(batch_index + 1)
 
-    return np.concatenate(predictions_array), np.concatenate(variance_array)
+    return np.concatenate(predictions_array), np.concatenate(stddev_array)
+
+
+def cross_validation(parameter_matrix, output_metric, inducing_points):
+    # Shuffle datapoints prior to cross-validation (as otherwise there
+    # are weird autocorrelations from the Sobol' sampling):
+    rng = np.random.default_rng(0)
+    dataset_size = parameter_matrix.shape[0]
+
+    # Get permutations:
+    permuted_indices = rng.permutation(dataset_size)
+    permuted_parameters = parameter_matrix[permuted_indices, :]
+    permuted_target = output_metric[permuted_indices]
+
+    # Perform 8-fold cross validation:
+    mae_list = []
+    mse_list = []
+    sll_list = []
+    for k_index in range(K_FOLD_COUNT):
+        # Set up the model and the model's associated training apparatus:
+        print(f"Performing validation with index: {k_index}...", flush=True)
+        model_manager = ModelManager(inducing_points, 0.003)
+
+        # Get test indices:
+        test_indices = np.arange(k_index, dataset_size, K_FOLD_COUNT)
+        test_mask = np.zeros(dataset_size, dtype=bool)
+        test_mask[test_indices] = 1
+        print(f"Test indices: {np.argwhere(test_mask)}")
+
+        # Get training indices:
+        train_mask = np.ones(dataset_size, dtype=bool)
+        train_mask[test_indices] = 0
+
+        # Set up dataset:
+        train_parameters = permuted_parameters[train_mask, :]
+        train_target = permuted_target[train_mask]
+        test_parameters = permuted_parameters[test_mask, :]
+        test_target = permuted_target[test_mask]
+        print(f"Train shape: {train_parameters.shape}")
+        print(f"Train shape: {test_parameters.shape}")
+
+        # Calculate whitening transform:
+        train_mean = np.mean(train_target)
+        train_std = np.std(train_target)
+        whitened_train = (train_target - train_mean) / train_std
+        whitened_test = (test_target - train_mean) / train_std
+
+        # Train and save model:
+        model_manager.train(train_parameters, whitened_train, 512, epochs=15)
+
+        # Run predictions on test set:
+        predictions, stddev = run_inference(model_manager, test_parameters, 512)
+
+        # Get basic metrics:
+        mean_absolute_error = np.mean(np.abs(whitened_test - predictions))
+        mean_squared_error = np.mean((whitened_test - predictions) ** 2)
+        mae_list.append(mean_absolute_error)
+        print(f"MAE: {mean_absolute_error}")
+        mse_list.append(mean_squared_error)
+        print(f"MSE: {mean_squared_error}")
+    
+        # Get standardised log loss:
+        null_mean = np.mean(whitened_train)
+        null_var = np.var(whitened_train)
+        n_prefactor =  0.5 * np.log(2 * np.pi * null_var)
+        n_exponent = ((whitened_test - null_mean) ** 2) / (2 * null_var)
+        null_loss = np.mean(n_prefactor + n_exponent)
+        print(f"Null LL: {null_loss}")
+        model_prefactor = 0.5 * np.log(2 * np.pi * stddev**2)
+        model_exponent = ((whitened_test - predictions)**2) / (2 * stddev**2)
+        model_loss = np.mean(model_prefactor + model_exponent)
+        print(f"Model LL: {model_loss}")
+        standardised_log_loss = model_loss - null_loss
+        print(f"SLL: {standardised_log_loss}")
+        sll_list.append(standardised_log_loss)
+
+    return mae_list, mse_list, sll_list
+
+
+def emulate(manager, x):
+    manager.likelihood.eval()
+    manager.model.eval()
+    tensor_input = torch.tensor(x)
+    if len(tensor_input.shape) == 1:
+        tensor_input = torch.unsqueeze(tensor_input, 0)
+    with torch.no_grad():
+        prediction = manager.likelihood(manager.model(tensor_input))
+        prediction_mean = prediction.mean.detach().numpy()
+        prediction_std = prediction.stddev.detach().numpy()
+    return prediction_mean, prediction_std
+
+
+def get_sobol_indices(dimension, f_A, f_B, f_Ai):
+    Si_list = []
+    STi_list = []
+    for index in range(dimension):
+        f_squared = np.mean(f_A) ** 2
+        S_i = (np.dot(f_A, f_Ai[index]) - f_squared) / (np.dot(f_A, f_A) - f_squared) 
+        S_Ti = 1 - ((np.dot(f_B, f_Ai[index]) - f_squared) / (np.dot(f_A, f_A) - f_squared))
+        Si_list.append(S_i)
+        STi_list.append(S_Ti)
+    return np.array(Si_list), np.array(STi_list)
+
+
+def run_sobol_index_inference(model_manager, parameter_dimension):
+    # Get necessary model evaluations for Sobol' indices:
+    hyperspace_dimension = parameter_dimension * 2
+    sobol_sampler = qmc.Sobol(d=hyperspace_dimension, scramble=True, rng=0)
+    hyperspace_inputs = sobol_sampler.random_base2(m=17)
+
+    # Extract base parameter matrices:
+    parameters_A = hyperspace_inputs[:, :parameter_dimension]
+    parameters_B = hyperspace_inputs[:, parameter_dimension:]
+
+    # Generating the combined parameter matrices:
+    parameter_matrices = []
+    for parameter_index in range(parameter_dimension):
+        parameters_ABi = np.copy(parameters_B)
+        parameters_ABi[:, parameter_index] = parameters_A[:, parameter_index]
+        parameter_matrices.append(parameters_ABi)
+
+    # Estimate model values at these points:
+    f_A, _ = emulate(model_manager, parameters_A)
+    f_B, _ = emulate(model_manager, parameters_B)
+
+    f_Ai = []
+    for i_parameters in parameter_matrices:
+        f_Ai.append(emulate(model_manager, i_parameters)[0])
+
+    # Estimate indices from the evaluations:
+    Si, STi = get_sobol_indices(parameter_dimension, f_A, f_B, f_Ai)
+    return Si, STi
 
 
 def main():
+    # Set seed:
+    torch.manual_seed(0)
+
     # Parse arguments:
     args = parse_arguments()
     print(f"Using gridsearch {args.experiment_dirpath}...")
@@ -241,74 +387,62 @@ def main():
         args.experiment_dirpath, args.metric_name
     )
 
-    # Whitening metric data:
-    # --- Determine data format:
-    if args.metric_name == "matrix_order_parameters":
-        print(output_metric.shape, flush=True)
-        parameter_mean = np.mean(output_metric[:, :, 2], axis=1)
-        metric_mean = np.mean(parameter_mean)
-        metric_std = np.std(parameter_mean)
-        whitened_metric = (parameter_mean - metric_mean) / metric_std
-    elif output_metric.shape[1] == 2:
-        metric_mean = np.mean(output_metric[:, 0])
-        metric_std = np.std(output_metric[:, 0])
-        whitened_metric = (output_metric[:, 0] - metric_mean) / metric_std
-    else:
-        metric_mean = np.mean(np.mean(output_metric, axis=1))
-        metric_std = np.std(np.mean(output_metric, axis=1))
-        whitened_metric = (np.mean(output_metric, axis=1) - metric_mean) / metric_std
-
     # Get inducing points:
     print("Sampling inducing points...")
     inducing_points = sample_inducing_points(512, parameter_matrix)
+
+    # Set up save directories:
+    gp_folderpath = os.path.join(args.experiment_dirpath, "gaussian_process_models")
+    if not os.path.exists(gp_folderpath):
+        os.mkdir(gp_folderpath)
+    id_folderpath = os.path.join(gp_folderpath, args.metric_name)
+    if not os.path.exists(id_folderpath):
+        os.mkdir(id_folderpath)
 
     # Set up the model and the model's associated training apparatus:
     print("Setting up model...")
     model_manager = ModelManager(inducing_points, 0.003)
 
+    # Whiten metric distribution:
+    metric_mean = np.mean(output_metric)
+    metric_std = np.std(output_metric)
+    whitened_metric = (output_metric - metric_mean) / metric_std
+
     # Train the model:
     print("Training model...")
-    model_manager.train(parameter_matrix, whitened_metric, 512, epochs=20)
+    model_manager.train(parameter_matrix, whitened_metric, 512, epochs=15)
     print("Saving model...")
     model_manager.save(args.experiment_dirpath, args.metric_name)
 
-    # # Shuffle datapoints prior to cross-validation (as otherwise there
-    # # are weird autocorrelations from the Sobol' sampling):
-    # rng = np.random.default_rng(0)
-    # dataset_size = inducing_points.shape[0]
-    # permuted_indices = rng.permutation(dataset_size)
-    # permuted_parameters = parameter_matrix[permuted_indices, :]
-    # permuted_target = np.mean(coherency_fractions, axis=1)[permuted_indices]
+    # Save loss history:
+    loss_history = np.array(model_manager.loss_history)
+    np.save(os.path.join(id_folderpath, "loss_history.npy"), loss_history)
 
-    # # Perform 8-fold cross validation:
-    # mae_list = []
-    # for k_index in range(K_FOLD_COUNT):
-    #     # Set up the model and the model's associated training apparatus:
-    #     model_manager = ModelManager(inducing_points, 0.003)
+    # Generate and save predictions:
+    whitened_predictions, whitened_stddev = run_inference(model_manager, parameter_matrix, batch_size=512)
+    predictions = (whitened_predictions * metric_std) + metric_mean
+    stddev = (whitened_stddev * metric_std)
+    np.save(os.path.join(id_folderpath, "parameter_predictions.npy"), np.stack([predictions, stddev], axis=1))
 
-    #     # Get test indices:
-    #     test_indices = np.arange(k_index, dataset_size, K_FOLD_COUNT)
-    #     test_mask = np.zeros(dataset_size)
-    #     test_mask[test_indices] = 1
+    # Perform cross-validation:
+    mae_list, mse_list, sll_list = cross_validation(parameter_matrix, output_metric, inducing_points)
 
-    #     # Get training indices:
-    #     train_mask = np.ones(dataset_size)
-    #     train_mask[test_indices] = 0
+    # Save CV metrics:
+    cv_dict = {
+        "mae": mae_list,
+        "mse": mse_list,
+        "sll": sll_list
+    }
 
-    #     # Set up dataset:
-    #     train_parameters = permuted_parameters[train_mask, :]
-    #     train_target = permuted_target[train_mask]
-    #     test_parameters = permuted_parameters[test_mask, :]
-    #     test_target = permuted_target[test_mask]
+    cv_filepath = os.path.join(id_folderpath, "cv_metrics.json")
+    with open(cv_filepath, 'w') as output:
+        json.dump(cv_dict, output, indent=4)
 
-    #     # Train and save model:
-    #     model_manager.train(train_parameters, train_target, 512, epochs=25)
-    #     # Test model:
-    #     predictions, variance = run_inference(model_manager.model, model_manager.likelihood, test_parameters, 512)
-    #     mean_absolute_error = np.abs(predictions - test_target) / len(predictions)
-    #     mae_list.append(mean_absolute_error)
-
-    #     # Save model:
+    # Get Sobol' indices from GP model:
+    print("Running Sobol' index inferece...", flush=True)
+    Si, STi = run_sobol_index_inference(model_manager, parameter_matrix.shape[1])
+    np.save(os.path.join(id_folderpath, "sobol_i.npy"), Si)
+    np.save(os.path.join(id_folderpath, "sobol_Ti.npy"), STi)
 
 
 if __name__ == "__main__":

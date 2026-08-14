@@ -72,29 +72,42 @@ World::World
 }
 
 // Getters:
+// void World::writePositionsToCSV(std::ofstream& csvFile) {
+//     for (int i = 0; i < numberOfCells; i++) {
+//         csvFile << simulationTime << ",";
+//         csvFile << cellAgentVector[i]->getID() << ",";
+//         csvFile << cellAgentVector[i]->getX() << ",";
+//         csvFile << cellAgentVector[i]->getY() << ",";
+//         csvFile << cellAgentVector[i]->getShapeDirection() << ",";
+//         csvFile << cellAgentVector[i]->getPolarityDirection() << ",";
+//         csvFile << cellAgentVector[i]->getPolarityMagnitude() << ",";
+//         csvFile << cellAgentVector[i]->getDirectionalInfluence() << ",";
+//         csvFile << cellAgentVector[i]->getDirectionalIntensity() << ",";
+//         csvFile << cellAgentVector[i]->getActinFlowDirection() << ",";
+//         csvFile << cellAgentVector[i]->getActinFlowMagnitude() << ",";
+//         csvFile << cellAgentVector[i]->getCollisionNumber() << ",";
+//         csvFile << cellAgentVector[i]->getTotalCILEffectX() << ",";
+//         csvFile << cellAgentVector[i]->getTotalCILEffectY() << ",";
+//         csvFile << cellAgentVector[i]->getMovementDirection() << ",";
+//         csvFile << cellAgentVector[i]->getDirectionalShift() << ",";
+//         csvFile << cellAgentVector[i]->getStadiumX() << ",";
+//         csvFile << cellAgentVector[i]->getStadiumY() << ",";
+//         csvFile << cellAgentVector[i]->getSampledAngle() << "\n";
+//     }
+// }
+
+
 void World::writePositionsToCSV(std::ofstream& csvFile) {
     for (int i = 0; i < numberOfCells; i++) {
         csvFile << simulationTime << ",";
         csvFile << cellAgentVector[i]->getID() << ",";
         csvFile << cellAgentVector[i]->getX() << ",";
         csvFile << cellAgentVector[i]->getY() << ",";
-        csvFile << cellAgentVector[i]->getShapeDirection() << ",";
-        csvFile << cellAgentVector[i]->getPolarityDirection() << ",";
-        csvFile << cellAgentVector[i]->getPolarityMagnitude() << ",";
-        csvFile << cellAgentVector[i]->getDirectionalInfluence() << ",";
-        csvFile << cellAgentVector[i]->getDirectionalIntensity() << ",";
-        csvFile << cellAgentVector[i]->getActinFlowDirection() << ",";
-        csvFile << cellAgentVector[i]->getActinFlowMagnitude() << ",";
-        csvFile << cellAgentVector[i]->getCollisionNumber() << ",";
-        csvFile << cellAgentVector[i]->getTotalCILEffectX() << ",";
-        csvFile << cellAgentVector[i]->getTotalCILEffectY() << ",";
-        csvFile << cellAgentVector[i]->getMovementDirection() << ",";
-        csvFile << cellAgentVector[i]->getDirectionalShift() << ",";
         csvFile << cellAgentVector[i]->getStadiumX() << ",";
-        csvFile << cellAgentVector[i]->getStadiumY() << ",";
-        csvFile << cellAgentVector[i]->getSampledAngle() << "\n";
+        csvFile << cellAgentVector[i]->getStadiumY() << "\n";
     }
 }
+
 
 void World::writeMatrixToCSV(std::ofstream& matrixFile) {
     // for (int i = 0; i < countECMElement; i++) {
@@ -107,24 +120,26 @@ void World::writeMatrixToCSV(std::ofstream& matrixFile) {
     //         matrixFile << ecmField.getMatrixDensity(i, j) << ",";
     //     }
     // }
-    // for (int i = 0; i < countECMElement; i++) {
-    //     for (int j = 0; j < countECMElement; j++) {
-    //         const auto [heading, count, concentration] = ecmField.summariseFibreMatrix(i, j);
-    //         matrixFile << heading << ",";
-    //         matrixFile << count << ",";
-    //         matrixFile << concentration << ",";
-    //     }
-    // }
 
     for (int i = 0; i < countECMElement; i++) {
         for (int j = 0; j < countECMElement; j++) {
-            std::deque<float> fibreDeque{ecmField.getFibreDeque(i, j)};
-            for (float heading : fibreDeque) {
-                matrixFile << heading << ",";
-            }
-            matrixFile << '\n';
+            const auto [heading, count, concentration] = ecmField.summariseFibreMatrix(i, j);
+            matrixFile << heading << ",";
+            matrixFile << count << ",";
+            matrixFile << concentration << ",";
         }
     }
+    matrixFile << '\n';
+
+    // for (int i = 0; i < countECMElement; i++) {
+    //     for (int j = 0; j < countECMElement; j++) {
+    //         std::deque<float> fibreDeque{ecmField.getFibreDeque(i, j)};
+    //         for (float heading : fibreDeque) {
+    //             matrixFile << heading << ",";
+    //         }
+    //         matrixFile << '\n';
+    //     }
+    // }
 
     // for (int i = 0; i < countECMElement; i++) {
     //     for (int j = 0; j < countECMElement; j++) {
@@ -252,19 +267,44 @@ void World::runCellStep(std::shared_ptr<CellAgent> actingCell) {
         }
         else {
             // Randomly sample multiple matrix sites:
-            double averagedDeltaHeading{0};
+            double effectiveSampleCount{0};
+            double averagedDeltaHeadingX{0};
+            double averagedDeltaHeadingY{0};
             for (int i = 0; i < matrixSampleCount; i++) {
+                // Get point to sample:
                 std::vector<double> sampledPoint{attachmentVector[i]};
                 const auto [iECM, jECM] = getECMIndexFromLocation({sampledPoint[0], sampledPoint[1]});
                 const auto [iSafe, jSafe] = rollIndex(iECM, jECM);
                 const auto [ecmHeading, localDensity] = ecmField.sampleFibreMatrix(iSafe, jSafe);
+
+                // Skip accumulation if there are no fibres to sample:
+                if (localDensity == 0) {continue;}
+
+                // Accumulate otherwise:
                 double deltaHeading{calculateCellDeltaTowardsECM(ecmHeading, cellDirection)};
-                averagedDeltaHeading += deltaHeading;
+                averagedDeltaHeadingX += std::cos(deltaHeading);
+                averagedDeltaHeadingY += std::sin(deltaHeading);
+                effectiveSampleCount += 1;
             }
-            averagedDeltaHeading /= matrixSampleCount;
-            actingCell->setDirectionalInfluence(averagedDeltaHeading);
-            actingCell->setDirectionalIntensity(1);
-            actingCell->setLocalECMDensity(1);
+            if (effectiveSampleCount == 0) {
+                actingCell->setDirectionalInfluence(0);
+                actingCell->setDirectionalIntensity(0);
+                actingCell->setLocalECMDensity(0);
+            } else {
+                // Retrieve direction:
+                double deltaHeadingDirection{std::atan2(averagedDeltaHeadingY, averagedDeltaHeadingX)};
+                assert(std::abs(deltaHeadingDirection) < (M_PI/2));
+                actingCell->setDirectionalInfluence(deltaHeadingDirection);
+
+                // Retrieve fractional directional consistency:
+                double deltaNorm{std::sqrt(std::pow(averagedDeltaHeadingX, 2) + std::pow(averagedDeltaHeadingY, 2))};
+                double directionalConsistency{deltaNorm / matrixSampleCount};
+                directionalConsistency -= 1e-3;
+                // std::cout << "directionalConsistency: " << directionalConsistency << std::endl;
+                actingCell->setDirectionalIntensity(directionalConsistency);
+                // actingCell->setDirectionalIntensity(1);
+                actingCell->setLocalECMDensity(1);
+            }
         }
     }
 
@@ -352,7 +392,7 @@ double World::calculateCellDeltaTowardsECM(double ecmHeading, double cellHeading
 
     // Calculating change in theta (ECM is direction agnostic so we have to reverse it):
     double deltaHeading{ecmHeading - cellHeading};
-    // while (deltaHeading <= -M_PI) {deltaHeading += M_PI;}
+    while (deltaHeading <= -M_PI) {deltaHeading += M_PI;}
     while (deltaHeading > M_PI) {deltaHeading -= M_PI;}
 
     double flippedHeading;

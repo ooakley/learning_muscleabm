@@ -83,8 +83,8 @@ CellAgent::CellAgent(
     // Shape parameters:
     , cellStiffness{setCellStiffness}
     , surfaceStickiness{setSurfaceStickiness}
-    , adhesionStiffness{20}
-    , adhesionFragility{5}
+    , adhesionStiffness{1000}
+    , adhesionFragility{250}
 
     // State parameters:
     , x{startX}
@@ -228,9 +228,7 @@ void CellAgent::takeRandomStep() {
     collisionsThisTimepoint = 0;
     // runDeterministicCollisionLogic();
     // runCircularStochasticCollisionLogic();
-    runTrajectoryDependentCollisionLogic();
-    finalCILEffectX = polarityChangeCilX;
-    finalCILEffectY = polarityChangeCilY;
+    // runTrajectoryDependentCollisionLogic();
 
     // Determine advection derived from actin flow:
     double actinAdvectionX{flowMagnitude*std::cos(flowDirection)};
@@ -258,14 +256,28 @@ void CellAgent::takeRandomStep() {
     )};
     double totalAdvectionDirection{std::atan2(totalAdvectionY, totalAdvectionX)};
 
-    // Get solution to cue concetration profile at cell front and cell back:
-    double exponentialTerm{std::exp(-totalAdvectionMagnitude / cueDiffusionRate)};
+    // Zero out CIL effects:
+    polarityChangeCilX = 0.0;
+    polarityChangeCilY = 0.0;
+
+    // Get solution to cue concentration profile at cell front and cell back:
+    // double exponentialTerm{std::exp(-totalAdvectionMagnitude / cueDiffusionRate)};
+    // double cueConcentrationFront{
+    //     totalAdvectionMagnitude / 
+    //     (cueDiffusionRate*(1 - exponentialTerm))
+    // };
+    // double cueConcentrationBack{
+    //     totalAdvectionMagnitude*exponentialTerm / 
+    //     (cueDiffusionRate*(1 - exponentialTerm))
+    // };
+    double scaledAdvectionMagnitude{totalAdvectionMagnitude / (2 * cellBodyRadius)};
+    double exponentialTerm{std::exp(-scaledAdvectionMagnitude / cueDiffusionRate)};
     double cueConcentrationFront{
-        totalAdvectionMagnitude / 
+        scaledAdvectionMagnitude /
         (cueDiffusionRate*(1 - exponentialTerm))
     };
     double cueConcentrationBack{
-        totalAdvectionMagnitude*exponentialTerm / 
+        scaledAdvectionMagnitude*exponentialTerm /
         (cueDiffusionRate*(1 - exponentialTerm))
     };
 
@@ -298,17 +310,26 @@ void CellAgent::takeRandomStep() {
         std::sqrt(fluctuationAmplitude)*standardNormalDistribution(generatorInfluence)
     };
     double angleUpdateDrift{
-        gamma*calculateAngularDistance(totalAdvectionDirection, flowDirection)
+        gamma*std::sin(calculateAngularDistance(totalAdvectionDirection, flowDirection))
     };
     double angleUpdateDiffusion{
         (standardNormalDistribution(generatorProtrusion) * std::sqrt(fluctuationAmplitude)) / flowMagnitude
     };
+
+    // if (angleUpdateDrift >= calculateAngularDistance(totalAdvectionDirection, flowDirection)) {
+    //     std::cout << "Angle update OOB..." << std::endl;
+    //     angleUpdateDrift = calculateAngularDistance(totalAdvectionDirection, flowDirection);
+    // }
 
     // Apply update - in stochastic differential equations, randomly sampled terms are scaled by the
     // square root of dt.
     flowMagnitude += (magnitudeUpdateDrift * dt) + (magnitudeUpdateDiffusion*std::sqrt(dt));
     flowDirection += (angleUpdateDrift * dt) + (angleUpdateDiffusion*std::sqrt(dt));
     flowDirection = angleMod(flowDirection);
+
+    // Update flow direction and magnitude based on collisions:
+    // runAlternativeTrajectoryDependentCollisionLogic();
+    runTrajectoryDependentCollisionLogic();
 
     // Update position:
     double cellDisplacement{flowMagnitude};
@@ -331,10 +352,8 @@ void CellAgent::takeRandomStep() {
 
     // Update stadium positions and run relevant ODEs:
     runStickSlipLogic();
-
-    // Zero out CIL effects:
-    polarityChangeCilX = 0.0;
-    polarityChangeCilY = 0.0;
+    // stadiumX = x;
+    // stadiumY = y;
 
     // // Determine collision with world boundaries:
     // bool xOutOfBounds{x < cellBodyRadius or x > 2048-cellBodyRadius};
@@ -385,7 +404,8 @@ void CellAgent::runStickSlipLogic() {
         std::pow(xCellSpan, 2) + 
         std::pow(yCellSpan, 2)
     )};
-    double cellExtension{std::max(stretchDistance - cellBodyRadius, 0.0) / cellBodyRadius};
+    // double cellExtension{std::max(stretchDistance - cellBodyRadius, 0.0) / cellBodyRadius};
+    double cellExtension{stretchDistance};
     if (std::isnan(cellExtension)) {
         std::cout << "Initial cell extension calculation from position has failed." << std::endl;
         std::cout << "stretchDistance: " << stretchDistance << std::endl;
@@ -394,10 +414,15 @@ void CellAgent::runStickSlipLogic() {
     }
 
     // Calculate change in adhesions with Newton-Raphson:
-    // -- Get adjustment for non-dimensionalisation:
-    double timeScaling{1e-3};
+    double timeScaling{1e-4 * 60}; // In min^-1
     int subdivisionCount{1};
     bool nrConverged{false};
+
+    // Adjust for small adhesions:
+    adhesionFraction = std::max(adhesionFraction, 1e-3);
+
+    // Ensure our paper calculations make sense:
+    // checkJacobianFD(timeScaling * dt, adhesionFraction, cellExtension);
 
     double nextAdhesion;
     double nextExtension;
@@ -410,16 +435,11 @@ void CellAgent::runStickSlipLogic() {
         double stepSize{(timeScaling * dt) / subdivisionCount};
 
         // Iterate through subdivided steps:
-        bool adhesionFailure{false};
-        bool extensionFailure{false};
+        bool convergenceFailure{false};
         for (int i = 0; i < subdivisionCount; i++) {
             // Calculate adhesions:
-            auto [updateAdhesion, adhesionFailure] = implicitNextAdhesion(stepSize, nextAdhesion, nextExtension);
-            if (adhesionFailure) {
-                goto nextSubdivision;
-            }
-            auto [updateExtension, extensionFailure] = implicitNextExtension(stepSize, nextAdhesion, nextExtension);
-            if (extensionFailure) {
+            auto [updateAdhesion, updateExtension, convergenceFailure] = implicitNextState(stepSize, nextAdhesion, nextExtension);
+            if (convergenceFailure) {
                 goto nextSubdivision;
             }
 
@@ -436,10 +456,15 @@ void CellAgent::runStickSlipLogic() {
 
         // We can skip to the next subdivision of the current timestep if the NR fails:
         nextSubdivision:;
-        if (subdivisionCount >= 4096 and not nrConverged) {
-            // std::cout << ">> Convergence not reached with adaptive subdivision of: " << subdivisionCount << std::endl;
-            nextAdhesion = adhesionFraction;
-            nextExtension = cellExtension * 0.9;
+        if (subdivisionCount >= 8192 and not nrConverged) {
+            std::cout << ">> Convergence not reached with adaptive subdivision of: " << subdivisionCount << std::endl;
+            std::cout << "adhesionFraction: " << adhesionFraction << std::endl;
+            std::cout << "cellExtension: " << cellExtension << std::endl;
+
+            // nextAdhesion = adhesionFraction;
+            // nextExtension = cellExtension * 0.9;
+            nextAdhesion = std::max(adhesionFraction, 1e-3);
+            nextExtension = cellExtension * 0.5;
             nrConverged = true;
         }
         subdivisionCount *= 4;
@@ -449,7 +474,8 @@ void CellAgent::runStickSlipLogic() {
     adhesionFraction = nextAdhesion;
 
     // Update cell extension:
-    double nextSpan{(nextExtension  * cellBodyRadius) + cellBodyRadius};
+    // double nextSpan{(nextExtension  * cellBodyRadius) + cellBodyRadius};
+    double nextSpan{nextExtension};
     if (nextSpan > stretchDistance) {
         // We change nothing - no extensive force, only retraction.
     } else {
@@ -470,12 +496,220 @@ void CellAgent::runStickSlipLogic() {
     stadiumY = std::fmod(stadiumY, 2048);
 }
 
+
+std::tuple<double, double, bool> CellAgent::implicitNextState(double stepSize, double A0, double X0) {
+    /*
+    Adhesion fraction is represented by A and the cell extension by X (for clarity).
+    We need to find the Jacobian matrix under our implicit functions F_A and F_X, for which we want
+    to find the root - which we define as follows:
+    F_A = step*dA/dt(A_next, X_next) - A_next + A_current
+    F_X = step*dX/dt(A_next, X_next) - X_next + X_current
+
+    Where the Jacobian is:
+    J = (dF_A/dA, dF_A/dX)
+        (dF_X/dA, dF_X/dX)
+
+    solving for:
+    dx = J^-1 . [F_A, F_X] gives the convergence update for the implicit equation.
+
+    (Useful worked examples in https://utkstair.org/clausius/docs/mse301/pdf/intronumericalrecipes_v01_chapter05_rootfindsys.pdf)
+
+    Finding the Jacobian requires to find all partial derivatives of the functions dA/dt and dX/dT:
+
+    dA/dt = r(1 - A) - A.exp((k.X)/(f.A))
+    dX/dt = -(k.X)/(g.A).exp((k.X)/(f.A))
+
+    let k/f = u, and k/g = v
+
+    d/dA[dA/dt] = exp(u.(X/A)).(u.(X/A) - 1) - r
+    d/dX[dA/dt] = -u.exp(u.(X/A))
+    d/dA[dX/dt] = v.exp(u.(X/A)).(X/A^2 + (u.X^2)/A^3)
+    d/dX[dX/dt] = -exp(u.(X/A)).(v/A + u.v.(X/A^2))
+
+    let phi = exp(u.(X/A)) for ease of calculation:
+
+    d/dA[dA/dt] = phi.(u.(X/A) - 1) - r
+    d/dX[dA/dt] = -u.phi
+    d/dA[dX/dt] = v.phi.(X/A^2 + (u.X^2)/A^3)
+    d/dX[dX/dt] = -phi.(v/A + u.v.(X/A^2))
+
+    (To future readers - you can check these by hand, the
+    calculations aren't too hard & the process is instructive)
+
+    Now we can define the NR Jacobian matrix as follows (where A & X are now the current guess):
+    dF_A/dA = step*d/dA[dA/dt] - 1
+    dF_A/dX = step*d/dX[dA/dt]
+    dF_X/dA = step*d/dA[dX/dt]
+    dF_X/dX = step*d/dX[dX/dt] - 1
+    */
+
+    double A{A0};
+    double X{X0};
+
+    double residualNorm{1};
+    int iterationCount{0};
+
+    double u{cellStiffness/adhesionFragility};
+    double v{cellStiffness/adhesionStiffness};
+    double r{surfaceStickiness};
+
+    while (residualNorm > 1e-4) {
+        // Break if we exceed iteration count:
+        if (iterationCount > 50) {
+            return {0, 0, true};
+        }
+
+        // Calculate phi:
+        double phi{std::exp(u * (X/A))};
+
+        // Get F_A and F_X:
+        // --> dA/dt = r(1 - A) - A.exp((k.X)/(f.A))
+        double Adot{r*(1 - A) - A*phi};
+        double F_A{stepSize*Adot - A + A0};
+        // --> dX/dt = -(k.X)/(g.A).exp((k.X)/(f.A))
+        double Xdot{-v*(X/A)*phi};
+        double F_X{stepSize*Xdot - X + X0};
+
+        // Get dF_A/dA, or J_11:
+        // d/dA[dA/dt] = phi.(u.(X/A) - 1) - r
+        double AdotByA{phi*(u * (X/A) - 1) - r};
+        double J11{stepSize*AdotByA - 1};
+
+        // Get dF_A/dX, or J_12:
+        // d/dX[dA/dt] = -u.phi
+        double AdotByX{-u*phi};
+        double J12{stepSize*AdotByX};
+
+        // Get dF_X/dA, or J_21:
+        // d/dA[dX/dt] = v.phi.(X/A^2 + (u.X^2)/A^3)
+        double XdotByA{v * phi * ((X / std::pow(A, 2)) + (u*std::pow(X, 2) / std::pow(A, 3)))};
+        double J21{stepSize*XdotByA};
+
+        // Get dF_X/dX, or J_22:
+        // d/dX[dX/dt] = -phi.(v/A + u.v.(X/A^2))
+        double XdotByX{-phi * (v / A + (u * v * (X / std::pow(A, 2))))};
+        double J22{stepSize*XdotByX - 1};
+
+        // Solve the 2x2 linear system (invert Jacobian):
+        double det{J11 * J22 - J12 * J21};
+
+        // -- Return failure of convergence if Jacobian is singular:
+        if (std::abs(det) < 1e-14 || !std::isfinite(det)) {
+            return {0, 0, true};
+        }
+
+        // -- Get updates:
+        double deltaA{(-F_A * J22 + F_X * J12) / det};
+        double deltaX{(-F_X * J11 + F_A * J21) / det};
+
+        // We damp the step if it shoots the adhesion fraction below zero:
+        double dampScale{1.0};
+        while ((A + dampScale * deltaA) <= 0.0 && dampScale > 1e-3) {
+            dampScale *= 0.5;
+        }
+
+        A += dampScale * deltaA;
+        X += dampScale * deltaX;
+
+        if (!std::isfinite(A) || !std::isfinite(X)) {
+            return {0, 0, true};
+        }
+
+        residualNorm = std::sqrt(deltaA * deltaA + deltaX * deltaX);
+        iterationCount += 1;
+    }
+
+    return {A, X, false};
+}
+
+
+void CellAgent::checkJacobianFD(double stepSize, double A, double X) {
+    double u{cellStiffness/adhesionFragility};
+    double v{cellStiffness/adhesionStiffness};
+    double r{surfaceStickiness};
+
+    // A0/X0 don't affect the Jacobian (they only shift F_A/F_X by a constant),
+    // so we can use A, X themselves as the "current" values for this check.
+    double A0{A};
+    double X0{X};
+
+    // --- Residual evaluator, matching implicitNextState's F_A/F_X exactly ---
+    auto residuals = [&](double Aval, double Xval) -> std::pair<double, double> {
+        double phi{std::exp(u * (Xval/Aval))};
+        double Adot{r*(1 - Aval) - Aval*phi};
+        double F_A{stepSize*Adot - Aval + A0};
+        double Xdot{-v*(Xval/Aval)*phi};
+        double F_X{stepSize*Xdot - Xval + X0};
+        return {F_A, F_X};
+    };
+
+    // --- Analytic Jacobian 
+    double phi{std::exp(u * (X/A))};
+    double AdotByA{phi*(u * (X/A) - 1) - r};
+    double J11_analytic{stepSize*AdotByA - 1};
+    double AdotByX{-u*phi};
+    double J12_analytic{stepSize*AdotByX};
+    double XdotByA{v * phi * ((X / std::pow(A, 2)) + (u * std::pow(X, 2) / std::pow(A, 3)))};
+    double J21_analytic{stepSize*XdotByA};
+    double XdotByX{-phi * (v / A + (u * v * (X / std::pow(A, 2))))};
+    double J22_analytic{stepSize*XdotByX - 1};
+
+    // --- Numerical Jacobian via central differences ---
+    double h{1e-6 * std::max(1.0, std::abs(A))};   // step for perturbing A
+    double hx{1e-6 * std::max(1.0, std::abs(X))};  // step for perturbing X
+
+    auto [F_A_Aplus, F_X_Aplus] = residuals(A + h, X);
+    auto [F_A_Aminus, F_X_Aminus] = residuals(A - h, X);
+    double J11_numeric{(F_A_Aplus - F_A_Aminus) / (2*h)};
+    double J21_numeric{(F_X_Aplus - F_X_Aminus) / (2*h)};
+
+    auto [F_A_Xplus, F_X_Xplus] = residuals(A, X + hx);
+    auto [F_A_Xminus, F_X_Xminus] = residuals(A, X - hx);
+    double J12_numeric{(F_A_Xplus - F_A_Xminus) / (2*hx)};
+    double J22_numeric{(F_X_Xplus - F_X_Xminus) / (2*hx)};
+
+    // --- Report ---
+    auto relError = [](double analytic, double numeric) {
+        double denom{std::max(1e-12, std::abs(analytic))};
+        return std::abs(analytic - numeric) / denom;
+    };
+
+    std::cout << "Jacobian cross-check at A=" << A << ", X=" << X << ":\n";
+    std::cout << "J11: analytic=" << J11_analytic << " numeric=" << J11_numeric
+               << " relErr=" << relError(J11_analytic, J11_numeric) << "\n";
+    std::cout << "J12: analytic=" << J12_analytic << " numeric=" << J12_numeric
+               << " relErr=" << relError(J12_analytic, J12_numeric) << "\n";
+    std::cout << "J21: analytic=" << J21_analytic << " numeric=" << J21_numeric
+               << " relErr=" << relError(J21_analytic, J21_numeric) << "\n";
+    std::cout << "J22: analytic=" << J22_analytic << " numeric=" << J22_numeric
+               << " relErr=" << relError(J22_analytic, J22_numeric) << "\n";
+
+    for (double err : {relError(J11_analytic, J11_numeric), relError(J12_analytic, J12_numeric),
+                        relError(J21_analytic, J21_numeric), relError(J22_analytic, J22_numeric)}) {
+        if (err > 1e-4) {
+            std::cout << ">> WARNING: Jacobian mismatch exceeds tolerance!\n";
+            break;
+        }
+    }
+}
+
+
 std::tuple<double, bool> CellAgent::implicitNextAdhesion(
     double stepSize, double adhesionFraction, double cellExtension
 ) {
-    // -- Get initial guess from forward Euler (or not, if broken):
+    // -- Get relevant exponential terms:
     double exponentialScale{(cellStiffness * cellExtension) / adhesionFragility};
     double popRate{std::exp(exponentialScale / adhesionFraction)};
+
+    // -- Check if we have guaranteed overflow:
+    if (HUGE_VAL == popRate) {
+        std::cout << "n too small..." << std::endl;
+        std::cout << "exponentialScale: " << exponentialScale << std::endl;
+        std::cout << "popRate: " << popRate << std::endl;
+        assert(false);
+    }
+
+    // -- Get initial guess from forward Euler (or not, if broken):
     double forwardAdhesionUpdate{
         (surfaceStickiness * (1 - adhesionFraction)) - (adhesionFraction * popRate)
     };
@@ -487,7 +721,13 @@ std::tuple<double, bool> CellAgent::implicitNextAdhesion(
     // -- NR Iteration to get backward integration of adhesion occupancy:
     double epsilon{1};
     int iterationCount{0};
-    while (std::abs(epsilon) > 1e-8) {
+    while (std::abs(epsilon) > 1e-4) {
+        // Break if we exceed max iterations:
+        if (iterationCount > 50) {
+            std::cout << "Hello!" << std::endl;
+            return {1, true};
+        };
+    
         // Get NR numerator:
         double nrPopRate{std::exp(exponentialScale / nextAdhesion)};
         double nrAdhesionUpdate{
@@ -512,12 +752,9 @@ std::tuple<double, bool> CellAgent::implicitNextAdhesion(
         if (std::isnan(nextAdhesion)) {
             return {1, true};
         }
-
-        // Break if we exceed max iterations:
+    
+        // Update iteration count:
         iterationCount += 1;
-        if (iterationCount > 10) {
-            return {1, true};
-        };
     }
 
     // Return functional next adhesion value if iteration successful:
@@ -531,6 +768,14 @@ std::tuple<double, bool> CellAgent::implicitNextExtension(
     // -- Get constants:
     double dAlpha{cellStiffness / (adhesionFraction * adhesionStiffness)};
     double dBeta{cellStiffness / (adhesionFraction * adhesionFragility)};
+
+    // -- Check if we have guaranteed overflow:
+    if (HUGE_VAL == std::exp(dBeta * cellExtension)) {
+        std::cout << "n too small..." << std::endl;
+        std::cout << "dAlpha: " << dAlpha << std::endl;
+        std::cout << "dBeta: " << dBeta << std::endl;
+        assert(false);
+    }
 
     // -- Get initial guess with forward Euler:
     double forwardExtensionUpdate{dAlpha * cellExtension * std::exp(dBeta * cellExtension)};
@@ -546,7 +791,14 @@ std::tuple<double, bool> CellAgent::implicitNextExtension(
     // -- Iterate with NR to get implicit Euler estimation of change in extension:
     double epsilon{1};
     double iterationCount{0};
-    while (std::abs(epsilon) > 1e-8) {
+    while (std::abs(epsilon) > 1e-4) {
+        // Break if we exceed max iterations:
+        if (iterationCount > 50) {
+            // std::cout << "Extension NR exceeded max iterations..." << std::endl;
+            // std::cout << "epsilon: " << epsilon << std::endl;
+            return {0, true};
+        };
+
         // Get NR extension numerator:
         double nrExtensionUpdate{
             dAlpha * nextExtension * std::exp(dBeta * nextExtension)
@@ -569,15 +821,13 @@ std::tuple<double, bool> CellAgent::implicitNextExtension(
         if (std::isnan(nextExtension)) {
             std::cout << "Extension NR estimation failed..." << std::endl;
             std::cout << "epsilon: " << epsilon << std::endl;
+            std::cout << "nrNumerator: " << nrNumerator << std::endl;
+            std::cout << "nrDenominator: " << nrDenominator << std::endl;
             return {0, true};
         }
 
-        // Break if we exceed max iterations:
+        // Update iteration count:
         iterationCount += 1;
-        if (iterationCount > 10) {
-            std::cout << "Extension NR exceeded max iterations..." << epsilon << std::endl;
-            return {0, true};
-        };
     }
 
     if (std::isnan(nextExtension)) {
@@ -590,34 +840,184 @@ std::tuple<double, bool> CellAgent::implicitNextExtension(
 }
 
 void CellAgent::runTrajectoryDependentCollisionLogic() {
-    // Useful points:
-    double actingCellX{getX()};
-    double actingCellY{getY()};
+    // Get cell centre:
+    double globalFrameX{getX()};
+    double globalFrameY{getY()};
 
-    // Sampling from random radius in cell area:
-    // lowDiscrepancySample += (std::numbers::phi_v<double> - 1);
-    // lowDiscrepancySample = std::fmod(lowDiscrepancySample, 1);
-    // double divergence{(lowDiscrepancySample * M_PI) - M_PI_2};
-    // divergence
-    // double samplePointDirection{flowDirection};
+    // Loop through local agents and determine collisions:
+    for (auto& localAgent: localAgents) {
+        const auto& [startX, startY, endX, endY] = localAgent->sampleTrajectoryStadium();
 
-    // // Getting point in frame:
-    // double actingFrameX{std::cos(samplePointDirection) * cellBodyRadius};
-    // double actingFrameY{std::sin(samplePointDirection) * cellBodyRadius};
+        // // Find point most relevant for shift across periodic boundary:
+        // double distanceToStart{std::sqrt(
+        //     std::pow(startX - globalFrameX, 2) +
+        //     std::pow(startY - globalFrameY, 2)
+        // )};
+        // double distanceToEnd{std::sqrt(
+        //     std::pow(endX - globalFrameX, 2) +
+        //     std::pow(endY - globalFrameY, 2)
+        // )};
 
-    // // Transforming points from acting frame to global frame:
-    // double globalFrameX{actingCellX + actingFrameX};
-    // double globalFrameY{actingCellY + actingFrameY};
-    // double angleFromActingToSample{std::atan2(actingFrameY, actingFrameX)};
+        // Determine whether any or all of the trajectory points will take the modulus:
+        double correctedStartX{takePeriodicModulus(startX, globalFrameX)};
+        double correctedStartY{takePeriodicModulus(startY, globalFrameY)};
+        double correctedEndX{takePeriodicModulus(endX, globalFrameX)};
+        double correctedEndY{takePeriodicModulus(endY, globalFrameY)};
 
-    // Getting point in frame:
-    double actingFrameX{0};
-    double actingFrameY{0};
+        // // Take modulus of all:
+        // if (distanceToStart > 2048/2 and distanceToEnd > 2048/2) {
+        //     correctedStartX = takePeriodicModulus(startX, globalFrameX);
+        //     correctedStartY = takePeriodicModulus(startY, globalFrameY);
+        //     correctedEndX = takePeriodicModulus(endX, globalFrameX);
+        //     correctedEndY = takePeriodicModulus(endY, globalFrameY);
+        // }
 
-    // Transforming points from acting frame to global frame:
-    double globalFrameX{actingCellX + actingFrameX};
-    double globalFrameY{actingCellY + actingFrameY};
-    double angleFromActingToSample{std::atan2(actingFrameY, actingFrameX)};
+        // // Take modulus of one:
+        // else {
+        //     if (distanceToStart < distanceToEnd) {
+        //         // Take modulus relative to start:
+        //         correctedStartX = startX;
+        //         correctedStartY = startY;
+        //         correctedEndX = takePeriodicModulus(endX, startX);
+        //         correctedEndY = takePeriodicModulus(endY, startY);
+        //     } else {
+        //         // Take modulus relative to end:
+        //         correctedStartX =  takePeriodicModulus(startX, endX);
+        //         correctedStartY = takePeriodicModulus(startY, endY);
+        //         correctedEndX = endX;
+        //         correctedEndY = endY;
+        //     }
+        // }
+
+        // Determine whether collision occurs:
+        const auto [collisionDetected, closestX, closestY, minimumDistance, clampedDotProduct] = isPositionInStadium(
+                globalFrameX, globalFrameY, correctedStartX, correctedStartY, correctedEndX, correctedEndY
+        );
+
+        if (collisionDetected) {
+            // Record collision:
+            collisionsThisTimepoint += 1;
+
+            // Take modulo of position in case interaction is across the periodic boundary:
+            double localCellX{takePeriodicModulus(closestX, globalFrameX)};
+            double localCellY{takePeriodicModulus(closestY, globalFrameY)};
+
+            // Get angle to local cell:
+            double actingToLocalX{localCellX - globalFrameX};
+            double actingToLocalY{localCellY - globalFrameY};
+            double angleActingToLocal{std::atan2(actingToLocalY, actingToLocalX)};
+
+            // Get degree of overlap:
+            double halfDistance{minimumDistance / 2};
+            double centralAngle{2*std::acos(halfDistance/cellBodyRadius)};
+            double overlapArea{std::pow(cellBodyRadius, 2)*(centralAngle - std::sin(centralAngle))};
+            double overlapRatio{overlapArea / (0.5*M_PI*std::pow(cellBodyRadius, 2))};
+            overlapRatio = std::clamp(overlapRatio, 0.0, 1.0);
+
+            // Exert reduction in actin flow for acting cell:
+            double angleOfRestitution{angleActingToLocal - M_PI};
+            double componentOfActingFlowOntoCollision{
+                std::cos(flowDirection - angleOfRestitution)
+            };
+            if (componentOfActingFlowOntoCollision < 0) {
+                // Calculate change in actin flow:
+                double reductionInFlow{
+                    dt * collisionFlowReductionRate * overlapRatio
+                };
+                double cappedReductionInFlow{std::min(reductionInFlow, flowMagnitude * std::abs(componentOfActingFlowOntoCollision))};
+
+                double dxActinFlow{std::cos(angleOfRestitution) * cappedReductionInFlow};
+                double dyActinFlow{std::sin(angleOfRestitution) * cappedReductionInFlow};
+
+                // Update actin flow:
+                double xFlowComponent{std::cos(flowDirection) * flowMagnitude};
+                double yFlowComponent{std::sin(flowDirection) * flowMagnitude};
+                xFlowComponent += dxActinFlow;
+                yFlowComponent += dyActinFlow;
+
+                if (std::isnan(xFlowComponent) or std::isnan(yFlowComponent)) {
+                    std::cout << "--- --- --- ---" << std::endl;
+                    std::cout << "clampedDotProduct: " << clampedDotProduct << std::endl;
+                    std::cout << "minimumDistance: " << minimumDistance << std::endl;
+                    std::cout << "scaledDistance: " << minimumDistance/(1 + clampedDotProduct) << std::endl;
+                    std::cout << "halfDistance: " << halfDistance << std::endl;
+                    std::cout << "overlapArea: " << overlapArea << std::endl;
+                    std::cout << "overlapRatio: " << overlapRatio << std::endl;
+                    std::cout << "xFlowComponent " << xFlowComponent << std::endl;
+                    std::cout << "yFlowComponent " << xFlowComponent << std::endl;
+                }
+
+                // Set acting cell actin flow to new values:
+                flowDirection = std::atan2(yFlowComponent, xFlowComponent);
+                flowMagnitude = std::sqrt(std::pow(xFlowComponent, 2) + std::pow(yFlowComponent, 2));
+            }
+
+            // // Exert reduction in actin flow for local cell:
+            // double localFlowDirection{localAgent->getActinFlowDirection()};
+            // double localFlowMagnitude{localAgent->getActinFlowMagnitude()};
+            // double componentOfLocalFlowOntoCollision{
+            //     std::cos(localFlowDirection - angleActingToLocal)
+            // };
+            // if (componentOfLocalFlowOntoCollision <= 0) {
+            //     // Calculate change in actin flow:
+            //     double reductionInFlow{
+            //         dt * collisionFlowReductionRate * localFlowMagnitude * std::abs(componentOfLocalFlowOntoCollision) * overlapRatio
+            //     };
+            //     double cappedReductionInFlow{std::min(reductionInFlow, localFlowMagnitude * std::abs(componentOfLocalFlowOntoCollision))};
+            //     double dxActinFlow{std::cos(angleActingToLocal) * cappedReductionInFlow};
+            //     double dyActinFlow{std::sin(angleActingToLocal) * cappedReductionInFlow};
+
+            //     // Update actin flow:
+            //     double xFlowComponent{std::cos(localFlowDirection)*localFlowMagnitude};
+            //     double yFlowComponent{std::sin(localFlowDirection)*localFlowMagnitude};
+            //     xFlowComponent += dxActinFlow;
+            //     yFlowComponent += dyActinFlow;
+            //     double updatedLocalFlowDirection{std::atan2(yFlowComponent, xFlowComponent)};
+            //     double updatedLocalFlowMagnitude{std::sqrt(std::pow(xFlowComponent, 2) + std::pow(yFlowComponent, 2))};
+
+            //     // Set local cell actin flow to new values:
+            //     localAgent->setActinState(updatedLocalFlowDirection, updatedLocalFlowMagnitude);
+            // }
+
+            // Calculate CIL effect:
+            double actingRepulsionX{std::cos(angleActingToLocal)};
+            double actingRepulsionY{std::sin(angleActingToLocal)};
+            polarityChangeCilX -= actingRepulsionX;
+            polarityChangeCilY -= actingRepulsionY;
+            // --> Simulate effect of CIL on RhoA redistribution for local cell:
+            localAgent->setCILPolarityChange(actingRepulsionX, actingRepulsionY);
+        }
+
+        // Determine whether adhesion is affected (adhesion collision, or ac):
+        double acCorrectedStartX{takePeriodicModulus(startX, stadiumX)};
+        double acCorrectedStartY{takePeriodicModulus(startY, stadiumY)};
+        double acCorrectedEndX{takePeriodicModulus(endX, stadiumX)};
+        double acCorrectedEndY{takePeriodicModulus(endY, stadiumY)};
+        const auto [acDetected, acClosestX, acClosestY, acMinimumDistance, acClampedDotProduct] = isPositionInStadium(
+            stadiumX, stadiumY, acCorrectedStartX, acCorrectedStartY, acCorrectedEndX, acCorrectedEndY
+        );
+
+        if (acDetected) {
+            // Get degree of overlap:
+            double halfDistance{acMinimumDistance / 2};
+            double centralAngle{2*std::acos(halfDistance/cellBodyRadius)};
+            double overlapArea{std::pow(cellBodyRadius, 2)*(centralAngle - std::sin(centralAngle))};
+            double overlapRatio{overlapArea / (M_PI*std::pow(cellBodyRadius, 2))};
+            // double adhesionDecayRate{0.1};
+            // double adhesionDecay{dt * overlapRatio * adhesionDecayRate};
+            // adhesionDecay = std::min(adhesionDecay, adhesionFraction);
+            overlapRatio = std::clamp(overlapRatio, 0.0, 1.0);
+            double overlapUpdate{adhesionFraction * overlapRatio};
+            adhesionFraction -= dt * overlapUpdate;
+        }
+    }
+}
+
+
+void CellAgent::runAlternativeTrajectoryDependentCollisionLogic() {
+    // Get cell centre:
+    double globalFrameX{getX()};
+    double globalFrameY{getY()};
 
     // Loop through local agents and determine collisions:
     for (auto& localAgent: localAgents) {
@@ -678,81 +1078,9 @@ void CellAgent::runTrajectoryDependentCollisionLogic() {
             double localCellY{takePeriodicModulus(closestY, globalFrameY)};
 
             // Get angle to local cell:
-            double actingToLocalX{localCellX - actingCellX};
-            double actingToLocalY{localCellY - actingCellY};
+            double actingToLocalX{localCellX - globalFrameX};
+            double actingToLocalY{localCellY - globalFrameY};
             double angleActingToLocal{std::atan2(actingToLocalY, actingToLocalX)};
-
-            // Get degree of overlap:
-            double sagitta{cellBodyRadius - (minimumDistance / 2)};
-            double centralAngle{2*std::acos((cellBodyRadius - sagitta)/cellBodyRadius)};
-            double overlapArea{std::pow(cellBodyRadius, 2)*(centralAngle - std::sin(centralAngle))};
-            double overlapRatio{overlapArea / (0.5*M_PI*std::pow(cellBodyRadius, 2))};
-            overlapRatio = std::clamp(overlapRatio, 0.0, 1.0);
-            // overlapRatio = 1;
-
-            // Exert reduction in actin flow for acting cell:
-            double angleOfRestitution{angleActingToLocal - M_PI};
-            double componentOfActingFlowOntoCollision{
-                std::cos(flowDirection - angleOfRestitution)
-            };
-            if (componentOfActingFlowOntoCollision < 0) {
-                // Calculate change in actin flow:
-                double reductionInFlow{
-                    dt * collisionFlowReductionRate * flowMagnitude * std::abs(componentOfActingFlowOntoCollision) * overlapRatio
-                };
-                double cappedReductionInFlow{std::min(reductionInFlow, flowMagnitude * std::abs(componentOfActingFlowOntoCollision))};
-                double dxActinFlow{std::cos(angleOfRestitution) * cappedReductionInFlow};
-                double dyActinFlow{std::sin(angleOfRestitution) * cappedReductionInFlow};
-
-                // Update actin flow:
-                double xFlowComponent{std::cos(flowDirection)*flowMagnitude};
-                double yFlowComponent{std::sin(flowDirection)*flowMagnitude};
-                xFlowComponent += dxActinFlow;
-                yFlowComponent += dyActinFlow;
-
-                if (std::isnan(xFlowComponent) or std::isnan(yFlowComponent)) {
-                    std::cout << "--- --- --- ---" << std::endl;
-                    std::cout << "clampedDotProduct: " << clampedDotProduct << std::endl;
-                    std::cout << "minimumDistance: " << minimumDistance << std::endl;
-                    std::cout << "scaledDistance: " << minimumDistance/(1 + clampedDotProduct) << std::endl;
-                    std::cout << "sagitta: " << sagitta << std::endl;
-                    std::cout << "overlapArea: " << overlapArea << std::endl;
-                    std::cout << "overlapRatio: " << overlapRatio << std::endl;
-                    std::cout << "xFlowComponent " << xFlowComponent << std::endl;
-                    std::cout << "yFlowComponent " << xFlowComponent << std::endl;
-                }
-
-                // Set acting cell actin flow to new values:
-                flowDirection = std::atan2(yFlowComponent, xFlowComponent);
-                flowMagnitude = std::sqrt(std::pow(xFlowComponent, 2) + std::pow(yFlowComponent, 2));
-            }
-
-            // Exert reduction in actin flow for local cell:
-            double localFlowDirection{localAgent->getActinFlowDirection()};
-            double localFlowMagnitude{localAgent->getActinFlowMagnitude()};
-            double componentOfLocalFlowOntoCollision{
-                std::cos(localFlowDirection - angleActingToLocal)
-            };
-            if (componentOfLocalFlowOntoCollision <= 0) {
-                // Calculate change in actin flow:
-                double reductionInFlow{
-                    dt * collisionFlowReductionRate * localFlowMagnitude * std::abs(componentOfLocalFlowOntoCollision) * overlapRatio
-                };
-                double cappedReductionInFlow{std::min(reductionInFlow, localFlowMagnitude * std::abs(componentOfLocalFlowOntoCollision))};
-                double dxActinFlow{std::cos(angleActingToLocal) * reductionInFlow};
-                double dyActinFlow{std::sin(angleActingToLocal) * reductionInFlow};
-
-                // Update actin flow:
-                double xFlowComponent{std::cos(localFlowDirection)*localFlowMagnitude};
-                double yFlowComponent{std::sin(localFlowDirection)*localFlowMagnitude};
-                xFlowComponent += dxActinFlow;
-                yFlowComponent += dyActinFlow;
-                double updatedLocalFlowDirection{std::atan2(yFlowComponent, xFlowComponent)};
-                double updatedLocalFlowMagnitude{std::sqrt(std::pow(xFlowComponent, 2) + std::pow(yFlowComponent, 2))};
-
-                // Set local cell actin flow to new values:
-                localAgent->setActinState(updatedLocalFlowDirection, updatedLocalFlowMagnitude);
-            }
 
             // Calculate CIL effect:
             double actingRepulsionX{std::cos(angleActingToLocal)};
@@ -761,6 +1089,47 @@ void CellAgent::runTrajectoryDependentCollisionLogic() {
             polarityChangeCilY -= actingRepulsionY;
             // --> Simulate effect of CIL on RhoA redistribution for local cell:
             localAgent->setCILPolarityChange(actingRepulsionX, actingRepulsionY);
+
+            // Get degree of overlap:
+            double halfDistance{minimumDistance / 2};
+            double centralAngle{2*std::acos(halfDistance/cellBodyRadius)};
+            double baseOverlapArea{std::pow(cellBodyRadius, 2)*(centralAngle - std::sin(centralAngle))};
+
+            // Calculate amount of overlap in cell front:
+            double collisionActinAngularDistance{angleMod(flowDirection - angleActingToLocal)};
+            // No collision if direction of motion places actin front outside of collision zone:
+            if (std::abs(collisionActinAngularDistance) >= (centralAngle / 2) + M_PI_2) {
+                continue;
+            }
+            double frontAdjustment{(std::cos(collisionActinAngularDistance) + 1) / 2};
+
+            // Get adjusted flow reduction factor:
+            double overlapRatio{baseOverlapArea / (0.5*M_PI*std::pow(cellBodyRadius, 2))};
+            overlapRatio *= frontAdjustment;
+            overlapRatio = std::clamp(overlapRatio, 0.0, 1.0);
+
+            double reductionInFlow{dt * collisionFlowReductionRate * overlapRatio};
+            double cappedReductionInFlow{std::min(reductionInFlow, flowMagnitude)};
+            flowMagnitude -= cappedReductionInFlow;
+        }
+
+        // Determine whether adhesion is affected (adhesion collision, or ac):
+        double acCorrectedStartX{takePeriodicModulus(startX, stadiumX)};
+        double acCorrectedStartY{takePeriodicModulus(startY, stadiumY)};
+        double acCorrectedEndX{takePeriodicModulus(endX, stadiumX)};
+        double acCorrectedEndY{takePeriodicModulus(endY, stadiumY)};
+        const auto [acDetected, acClosestX, acClosestY, acMinimumDistance, acClampedDotProduct] = isPositionInStadium(
+            stadiumX, stadiumY, acCorrectedStartX, acCorrectedStartY, acCorrectedEndX, acCorrectedEndY
+        );
+
+        if (acDetected) {
+            // Get degree of overlap:
+            double halfDistance{acMinimumDistance / 2};
+            double centralAngle{2*std::acos(halfDistance/cellBodyRadius)};
+            double overlapArea{std::pow(cellBodyRadius, 2)*(centralAngle - std::sin(centralAngle))};
+            double overlapRatio{overlapArea / (M_PI*std::pow(cellBodyRadius, 2))};
+            overlapRatio = std::clamp(overlapRatio, 0.0, 0.9);
+            adhesionFraction *= 1 - overlapRatio;
         }
     }
 }
@@ -1350,11 +1719,12 @@ std::vector<double> CellAgent::sampleAttachmentPoint() {
     // double divergence{(lowDiscrepancySample * M_PI) - M_PI_2};
     // double samplePointDirection{flowDirection + divergence};
     double samplePointDirection{angleUniformDistribution(generatorMatrixRadiusSampling)};
+    double samplePointRadius{uniformDistribution(generatorU1) * cellBodyRadius};
 
     // Getting point in frame:
-    double actingFrameX{std::cos(samplePointDirection) * cellBodyRadius};
-    double actingFrameY{std::sin(samplePointDirection) * cellBodyRadius};
-    
+    double actingFrameX{std::cos(samplePointDirection) * samplePointRadius};
+    double actingFrameY{std::sin(samplePointDirection) * samplePointRadius};
+
     // Transforming points from acting frame to global frame:
     double globalFrameX{actingCellX + actingFrameX};
     double globalFrameY{actingCellY + actingFrameY};
@@ -1411,9 +1781,10 @@ std::tuple<bool, double, double, double, double> CellAgent::isPositionInStadium(
     double closestPointY{0};
     double minimumDistance{0};
     bool isColliding{false};
+    bool endCollision{false};
 
     // Check stadium length:
-    double stadiumLength{std::sqrt(std::pow(xStartToEnd, 2) + std::pow(xStartToEnd, 2))};
+    double stadiumLength{std::sqrt(std::pow(xStartToEnd, 2) + std::pow(yStartToEnd, 2))};
     if (stadiumLength < cellBodyRadius) {
         // Colliding with cell body:
         closestPointX = startX;

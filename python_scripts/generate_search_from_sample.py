@@ -39,9 +39,16 @@ class JSONOutputManager:
             argument_json = {}
             for parameter_name in self.constant_parameters.keys():
                 argument_json[parameter_name] = self.constant_parameters[parameter_name]
-            for parameter_index, parameter_name in enumerate(self.gridsearch_parameters.keys()):
-                min_value = self.gridsearch_parameters[parameter_name][0]
-                max_value = self.gridsearch_parameters[parameter_name][1]
+
+            parameter_names = [name for name, _ in self.gridsearch_parameters]
+            parameter_ranges = [p_range for _, p_range in self.gridsearch_parameters]
+            for parameter_index in range(len(self.gridsearch_parameters)):
+                # Get parameter info:
+                parameter_name = parameter_names[parameter_index]
+                min_value = parameter_ranges[parameter_index][0]
+                max_value = parameter_ranges[parameter_index][1]
+
+                # Get relevant numerical value:
                 parameter_value = parameter_matrix[row_index, parameter_index]
                 scaled_value = ((max_value - min_value) * parameter_value) + min_value
                 if parameter_name == "numberOfCells":
@@ -98,13 +105,31 @@ def main():
     if not os.path.exists(experiment_folderpath):
         os.mkdir(experiment_folderpath)
 
-    # Get sample from subset estimation:
+    # Get MLE sample:
     print("Loading samples...")
-    nroy_samples = []
-    for column in range(1, 7):
-        filepath = f"model_experiments/2025-12-04-collisions_only/subset_estimation/folder_{column}/developed_estimate.npy"
-        nroy_samples.append(np.load(filepath)[::5, :])
-    sample_matrix = np.concatenate(nroy_samples, axis=0)
+    THIN_FACTOR = 64
+    wt_chain = np.load("model_experiments/2026-05-31-collisions_shape/mcmc_results/wt_mcmc_chain.npy")
+    rd_chain = np.load("model_experiments/2026-05-31-collisions_shape/mcmc_results/rd_mcmc_chain.npy")
+
+    ctl_likelihoods = np.load("model_experiments/2026-05-31-collisions_shape/mcmc_results/wt_mcmc_likelihoods.npy")
+    rd_likelihoods = np.load("model_experiments/2026-05-31-collisions_shape/mcmc_results/rd_mcmc_likelihoods.npy")
+
+    ctl_mle_idx = np.argsort(ctl_likelihoods[::THIN_FACTOR, :, 0].flatten())[-1024:]
+    rd_mle_idx = np.argsort(rd_likelihoods[::THIN_FACTOR, :, 0].flatten())[-1024:]
+
+    ctl_mle = wt_chain[::THIN_FACTOR, :, 0, :].reshape(-1, 11)[ctl_mle_idx, :]
+    rd_mle = rd_chain[::THIN_FACTOR, :, 0, :].reshape(-1, 11)[rd_mle_idx, :]
+
+    # Apply adjustments:
+    base_intervention = np.load("model_experiments/2026-07-01-intervention-experiment/base_intervention.npz")["intervention"]
+    gee_intervention = np.load("model_experiments/2026-07-01-intervention-experiment/gee_intervention.npz")["intervention"]
+    base_intervention_mle = rd_mle * np.exp(base_intervention)
+    gee_intervention_mle = rd_mle * np.exp(gee_intervention)
+
+    # Format sample matrix:
+    sample_matrix = np.concatenate([base_intervention_mle, gee_intervention_mle], axis=0)
+    additional_parameters = np.ones((sample_matrix.shape[0], 3)) * 0.5
+    sample_matrix = np.concatenate([sample_matrix, additional_parameters], axis=1)
 
     # Save sample matrix:
     sample_matrix_filepath = os.path.join(experiment_folderpath, "sample_matrix.npy")
@@ -119,7 +144,6 @@ def main():
     print("Generating folder structure and writing samples to .json files...")
     output_manager = JSONOutputManager(config_dictionary, experiment_folderpath)
     output_manager.generate_json_configs(sample_matrix)
-
     return None
 
 

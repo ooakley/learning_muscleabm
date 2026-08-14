@@ -199,7 +199,8 @@ def _(
             interaction_values.append(interaction_value)
             coherency_values.append(coherency_value)
 
-        return interaction_values, coherency_values, coherency, trajectory_array, disk_array
+        return interaction_values, coherency_values
+
 
     def analyse_sites(data_directory):
         ROWS = ['A', 'B', 'C']
@@ -485,13 +486,7 @@ def _(all_dataframe, sns):
 
 
 @app.cell
-def _(
-    column_density_dictionary,
-    column_phenotype_dictionary,
-    frame_mask,
-    np,
-    pd,
-):
+def _(column_density_dictionary, column_phenotype_dictionary, np, pd):
     def get_geo_mean_speed(input_dataframe):
         dataframe = []
         # Estimate geometric mean per site:
@@ -506,7 +501,7 @@ def _(
                 for site in range(4):
                     # Get site data:
                     site_mask = column_dataframe["site"] == site
-                    # frame_mask = column_dataframe["frame_length"] > 400
+                    frame_mask = column_dataframe["frame_length"] > 400
                     full_mask = np.logical_and(site_mask, frame_mask)
                     print(np.count_nonzero(full_mask))
                     site_dataframe = column_dataframe.loc[full_mask]
@@ -538,25 +533,25 @@ def _(
                     dataframe.append(pd.DataFrame(partial_dataframe, index=[0]))
 
         return pd.concat(dataframe)
-    return
+    return (get_geo_mean_speed,)
 
 
 @app.cell
-def _(pd):
-    # mean_dataframes = []
-    # for input_dataframe in trajectory_dataframes[:2]:
-    #     mean_dataframe = get_geo_mean_speed(input_dataframe)
-    #     mean_dataframes.append(mean_dataframe)
+def _(get_geo_mean_speed, pd, trajectory_dataframes):
+    mean_dataframes = []
+    for input_dataframe in trajectory_dataframes:
+        mean_dataframe = get_geo_mean_speed(input_dataframe)
+        mean_dataframes.append(mean_dataframe)
 
-    # all_mean_dataframe = pd.concat(mean_dataframes)
+    all_mean_dataframe = pd.concat(mean_dataframes)
 
-    all_mean_dataframe = pd.read_csv("test_collated_dataframe.csv")
+    # all_mean_dataframe = pd.read_csv("test_collated_dataframe.csv")
     return (all_mean_dataframe,)
 
 
 @app.cell
-def _():
-    # all_mean_dataframe.to_csv("test_collated_dataframe.csv")
+def _(all_mean_dataframe):
+    all_mean_dataframe.to_csv("test_collated_dataframe.csv")
     return
 
 

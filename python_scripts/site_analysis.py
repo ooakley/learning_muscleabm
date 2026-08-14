@@ -7,28 +7,26 @@ import skimage
 import numpy as np
 import pandas as pd
 
-ANALYSE_COM = True
+import matplotlib.pyplot as plt
+
 OUTPUT_COLUMN_NAMES = [
-    "frame", "particle", "x", "y",
-    "shapeDirection",
-    "orientation", "polarity_extent",
-    "percept_direction", "percept_intensity",
-    "actin_flow", "actin_mag",
-    "collision_number",
-    "cil_x", "cil_y",
-    "movement_direction",
-    "turning_angle",
-    "stadium_x", "stadium_y",
-    "sampled_angle"
+    "frame",
+    "particle",
+    "x",
+    "y",
+    "stadium_x",
+    "stadium_y",
 ]
 WORLD_SIZE = 1024
-
+PIXEL_SIZE = 0.3469 * 2  # Pixel size in µm, accounting for binning
+TRAVEL_LIMIT = 75
+FRAME_DURATION = 2.5
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Process a folder with a given integer name.')
     parser.add_argument('--run_folderpath', type=str)
     parser.add_argument('--folder_id', type=int)
-    parser.add_argument('--com_analysis', type=bool)
+    parser.add_argument('--com_analysis', action=argparse.BooleanOptionalAction)
     args = parser.parse_args()
     return args
 
@@ -53,6 +51,36 @@ def interpolate_to_wetlab_frames(position_array):
     return interpolated_array
 
 
+def get_window_limits(positions_array):
+    # Find total movement:
+    # --- Array shape: (CELL_NUMBER, TIMESTEPS, (X, Y))
+    x_diff = np.diff(positions_array[:, :, 0], axis=1)
+    y_diff = np.diff(positions_array[:, :, 1], axis=1)
+    # --- Account for periodic boundaries:
+    x_diff[x_diff > WORLD_SIZE / 2] -= WORLD_SIZE
+    x_diff[x_diff < (-WORLD_SIZE / 2)] += WORLD_SIZE
+    y_diff[y_diff > WORLD_SIZE / 2] -= WORLD_SIZE
+    y_diff[y_diff < (-WORLD_SIZE / 2)] += WORLD_SIZE
+    # --- Get total travel:
+    travel_array = np.sqrt(x_diff**2 + y_diff**2)
+    travel_array = np.cumsum(travel_array, axis=1)
+    particle_travel = np.mean(travel_array, axis=0)
+    # -- Get cut-offs for travel control (approx. thirds):
+    window_limits = [0]
+    for i in range(3):
+        upper_limit = TRAVEL_LIMIT * (i + 1)
+        window_limits.append(np.argmax(particle_travel > upper_limit))
+    # -- If final travel window exceeds data length, remove it:
+    print(f"Raw window limits: {window_limits}", flush=True)
+    while window_limits[-1] == 0:
+        window_limits = window_limits[:-1]
+        # Break if list is empty:
+        if not window_limits:
+            break
+    print(f"Processed window limits: {window_limits}", flush=True)
+    return window_limits
+
+
 def find_coherency_fraction(positions_array):
     # Estimate order from trajectories plotted onto image, downsampling by 2:
     line_array = []
@@ -61,7 +89,7 @@ def find_coherency_fraction(positions_array):
         # Create empty array for placing trajectories:
         half_size = int(WORLD_SIZE / 2)
         particle_line_array = np.zeros((half_size, half_size))
-        xy_data = positions_array[cell_index, :, :]
+        xy_data = np.copy(positions_array[cell_index, :, :])
         # !!! Downsample:
         xy_data /= 2
         for frame_index in range(len(xy_data) - 1):
@@ -80,7 +108,7 @@ def find_coherency_fraction(positions_array):
 
         # Get frame of interaction area of trajectory:
         particle_line_array = np.clip(particle_line_array, 0, 1)
-        particle_disk_array = skimage.morphology.isotropic_dilation(np.bool(particle_line_array), 8)
+        particle_disk_array = skimage.morphology.isotropic_dilation(np.bool(particle_line_array), 16)
         line_array.append(particle_line_array)
         disk_array.append(particle_disk_array)
 
@@ -91,7 +119,7 @@ def find_coherency_fraction(positions_array):
 
     # Find orientations of lines:
     structure_tensor = skimage.feature.structure_tensor(
-        trajectory_array, sigma=8,
+        trajectory_array, sigma=16,
         mode='constant', cval=0,
         order='rc'
     )
@@ -107,8 +135,8 @@ def find_coherency_fraction(positions_array):
     filtered_coherency = np.copy(coherency)
     filtered_coherency[np.isnan(coherency)] = 0
     # -- Iterate through particle frames:
-    interaction_values = []
     coherency_values = []
+    interaction_values = []
     disk_sum = np.sum(disk_array, axis=0)
     for particle_index in range(disk_array.shape[0]):
         indexed_path = disk_array[particle_index, :, :]
@@ -118,9 +146,9 @@ def find_coherency_fraction(positions_array):
         interaction_values.append(interaction_value)
         coherency_values.append(coherency_value)
     # -- Concatenate to arrays:
-    interaction_values = np.stack(interaction_values)
     coherency_values = np.stack(coherency_values)
-    return np.mean(interaction_values), np.mean(coherency_values)
+    interaction_values = np.stack(interaction_values)
+    return np.mean(coherency_values), np.mean(interaction_values)
 
 
 def find_anni(frame_positions):
@@ -138,7 +166,7 @@ def find_anni(frame_positions):
     minimum_distances = np.min(distance_matrix, axis=1)
 
     # Get ratio of mean NN distance to expected distance:
-    expected_minimum = 0.5 / np.sqrt(len(minimum_distances) / (WORLD_SIZE * WORLD_SIZE))
+    expected_minimum = 0.5 * np.sqrt((WORLD_SIZE * WORLD_SIZE) / len(minimum_distances))
     anni = np.mean(minimum_distances) / expected_minimum
     return anni
 
@@ -156,7 +184,10 @@ def find_motion_metrics(position_array):
 
         # Get full trajectory length:
         step_lengths = np.sqrt(np.sum(step_differences ** 2, axis=1))
-        average_speed = np.sum(step_lengths) / 1440  # Divide by number of minutes to get pixels per minute.
+        average_speed = np.mean(step_lengths)  # Get mean pixels per frame.
+        average_speed *= PIXEL_SIZE  # Multiply by µm per pixel to get µm per frame.
+        average_speed /= FRAME_DURATION  # Divide by 2.5 minutes to get µm per minute.
+        average_speeds.append(average_speed)
 
         # Get meander ratio:
         path_length = np.sum(step_lengths)
@@ -164,15 +195,128 @@ def find_motion_metrics(position_array):
             continue
         total_displacement = np.sqrt(np.sum(np.sum(step_differences, axis=0) ** 2))
         meander_ratio = total_displacement / path_length
-
-        # Record cell metrics:
-        average_speeds.append(average_speed)
         meander_ratios.append(meander_ratio)
 
     # We want a per-site geometric mean of the particle speed distribution:
     site_average_speed = np.exp(np.mean(np.log(average_speeds)))
-
     return np.mean(meander_ratios), site_average_speed
+
+
+def get_mean_length(trajectory_dataframe):
+    # Get final frame:
+    final_frame = np.max(trajectory_dataframe["frame"])
+    final_frame_mask = trajectory_dataframe["frame"] == final_frame
+    stadia_array = np.array(trajectory_dataframe.loc[final_frame_mask, ("x", "y", "stadium_x", "stadium_y")])
+
+    # Plot stadia:
+    cell_lengths = []
+    for cell_index in range(stadia_array.shape[0]):
+        # Get positions:
+        base_x = stadia_array[cell_index, 0]
+        base_y = stadia_array[cell_index, 1]
+        stad_x = stadia_array[cell_index, 2]
+        stad_y = stadia_array[cell_index, 3]
+
+        # Roll positions:
+        x_diff = base_x - stad_x
+        y_diff = base_y - stad_y
+        if x_diff > 1024:
+            stad_x += 2048
+        if x_diff < -1024:
+            stad_x -= 2048
+        if y_diff > 1024:
+            stad_y += 2048
+        if y_diff < -1024:
+            stad_y -= 2048
+
+        cell_length = np.sqrt((base_x - stad_x)**2 + (base_y - stad_y)**2)
+        cell_lengths.append(cell_length)
+
+    return np.mean(cell_lengths)
+
+
+def plot_trajectory(cell_trajectory, ax, c, alpha=0.75):
+    # Separate trajectories under crossing of torus boundary:
+    movement = np.sqrt(np.sum(np.diff(cell_trajectory, axis=0) ** 2, axis=1))
+    rollover_mask = movement > 512
+
+    # Plot trajectory as normal:
+    if np.count_nonzero(rollover_mask) == 0:
+        ax.plot(
+            cell_trajectory[:, 0],
+            cell_trajectory[:, 1],
+            c=c, alpha=alpha
+        )
+    else:
+        rollover_indices = np.argwhere(rollover_mask)
+        prev_index = 0
+        for rollover_index in rollover_indices:
+            rollover_index = rollover_index[0]
+            ax.plot(
+                cell_trajectory[prev_index:rollover_index + 1, 0],
+                cell_trajectory[prev_index:rollover_index + 1, 1],
+                c=c, alpha=alpha
+            )
+            prev_index = rollover_index + 1
+
+
+def plot_csv(position_array, filepath):
+    fig, ax = plt.subplots(figsize=(3, 3))
+    for cell_index in range(position_array.shape[0]):
+        cell_trajectory = position_array[cell_index, :, :]
+        plot_trajectory(cell_trajectory, ax, 'k')
+
+    ax.set_xlim(0, 1024)
+    ax.set_ylim(0, 1024)
+    ax.set_aspect("equal")
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+    fig.subplots_adjust(left=0.01, bottom=0.01, right=0.99, top=0.99)
+    plt.savefig(filepath, pad_inches=0.0, dpi=200)
+
+
+def plot_stadia(trajectory_dataframe, filepath):
+    # Get final frame:
+    final_frame = np.max(trajectory_dataframe["frame"])
+    final_frame_mask = trajectory_dataframe["frame"] == final_frame
+    stadia_array = np.array(trajectory_dataframe.loc[final_frame_mask, ("x", "y", "stadium_x", "stadium_y")])
+
+    # Plot stadia:
+    fig, ax = plt.subplots(figsize=(3, 3))
+    for cell_index in range(stadia_array.shape[0]):
+        # Get positions:
+        base_x = stadia_array[cell_index, 0]
+        base_y = stadia_array[cell_index, 1]
+        stad_x = stadia_array[cell_index, 2]
+        stad_y = stadia_array[cell_index, 3]
+
+        # Roll positions:
+        x_diff = base_x - stad_x
+        y_diff = base_y - stad_y
+        if x_diff > 1024:
+            stad_x += 2048
+        if x_diff < -1024:
+            stad_x -= 2048
+        if y_diff > 1024:
+            stad_y += 2048
+        if y_diff < -1024:
+            stad_y -= 2048
+
+        # Plot stadium line:
+        ax.plot([base_x, stad_x], [base_y, stad_y], c='k')
+        ax.scatter(base_x, base_y, c='k', s=10)
+
+    # Format axes:
+    ax.set_xlim(0, 2048)
+    ax.set_ylim(0, 2048)
+    ax.set_aspect("equal")
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+    # Save plots:
+    fig.subplots_adjust(left=0.01, bottom=0.01, right=0.99, top=0.99)
+    plt.savefig(filepath, pad_inches=0.0, dpi=200)
 
 
 def main():
@@ -181,6 +325,10 @@ def main():
     args = parse_arguments()
     run_folderpath = args.run_folderpath
     folder_id = args.folder_id
+    if args.com_analysis:
+        print(f"Carrying out CoM analysis...", flush=True)
+    else:
+        print(f"Carrying out cell front analysis...", flush=True)
 
     # Get arguments to simulation:
     json_filepath = os.path.join(run_folderpath, f"{folder_id}_arguments.json")
@@ -198,6 +346,10 @@ def main():
     ann_indices = []
     meander_ratios = []
     speeds = []
+    order_parameters = []
+    mean_directions = []
+    if args.com_analysis:
+        cell_lengths = []
     for seed in range(superiteration_number):
         # Read dataframe into memory:
         print(f"Reading subiteration {seed} for site analysis...")
@@ -211,7 +363,8 @@ def main():
         if not args.com_analysis:
             positions = trajectory_dataframe.sort_values(['particle', 'frame']).loc[:, ('x', 'y')]
             position_array = np.array(positions).reshape(cell_number, timesteps, 2)
-            position_array = position_array[:, 1440:, :]
+            # Restrict to final day of simulated culture:
+            position_array = position_array[:, -1440:, :]
         else:
             # Get cell front position data:
             front_positions = trajectory_dataframe.sort_values(['particle', 'frame']).loc[:, ('x', 'y')]
@@ -231,52 +384,102 @@ def main():
             position_array[position_array > 2048] -= 2048
             position_array[position_array < 0] += 2048
 
-            # Restrict to second day of simulated culture:
-            position_array = position_array[:, 1440:, :]
+            # Restrict to final day of simulated culture:
+            position_array = position_array[:, -1440:, :]
 
         # Interpolate to match 2.5 minute timestep of wetlab data:
         interpolated_array = interpolate_to_wetlab_frames(position_array)
 
         # Get coherency fraction for site:
-        site_interaction, site_coherency = find_coherency_fraction(interpolated_array)
+        window_limits = get_window_limits(interpolated_array)
+        if not window_limits:
+            site_coherency = np.nan
+            site_interaction = np.nan
+        else:
+            windowed_coherencies = []
+            windowed_interactions = []
+            for window_index in range(len(window_limits) - 1):
+                start_frame = window_limits[window_index]
+                end_frame = window_limits[window_index+1]
+                coherency, interaction = find_coherency_fraction(interpolated_array[:, start_frame:end_frame, :])
+                windowed_coherencies.append(np.copy(coherency))
+                windowed_interactions.append(np.copy(interaction))
+            site_coherency = np.mean(windowed_coherencies)
+            site_interaction = np.mean(windowed_interactions)
 
         # Loop through frames to get average ANNI:
         anni_timeseries = []
-        for timepoint in range(position_array.shape[1]):
-            anni_timeseries.append(find_anni(position_array[:, timepoint, :]))
+        for timepoint in range(interpolated_array.shape[1]):
+            anni_timeseries.append(find_anni(interpolated_array[:, timepoint, :]))
         site_anni = np.mean(anni_timeseries)
 
         # Get average meander ratio across cells:
         meander_ratio, mean_speed = find_motion_metrics(interpolated_array)
 
+        # Get estimated order parameter from positional data:
+        x_diff = np.diff(interpolated_array[:, :, 0], axis=1)
+        y_diff = np.diff(interpolated_array[:, :, 1], axis=1)
+        particle_velocities = np.sqrt(x_diff**2 + y_diff**2)
+        # -- Calculate x and y components of order parameter, averaging across cells:
+        x_op_component = np.nanmean(x_diff / particle_velocities, axis=0)
+        y_op_component = np.nanmean(y_diff / particle_velocities, axis=0)
+        op_timeseries = np.sqrt(x_op_component**2 + y_op_component**2)
+        order_parameter = np.mean(op_timeseries)
+        # -- Get mean direction:
+        mean_direction = np.arctan2(np.mean(y_op_component), np.mean(x_op_component))
+
+        # Plot if first seed:
+        if seed == 0:
+            if args.com_analysis:
+                plot_filepath = os.path.join(run_folderpath, "com_trajectory.png")
+                plot_csv(interpolated_array, plot_filepath)
+                stadia_filepath = os.path.join(run_folderpath, "stadia.png")
+                plot_stadia(trajectory_dataframe, stadia_filepath)
+            else:
+                plot_filepath = os.path.join(run_folderpath, "trajectory.png")
+                plot_csv(interpolated_array, plot_filepath)
+
         # Accumulate to lists:
-        interaction_array.append(site_interaction)
         coherency_array.append(site_coherency)
+        interaction_array.append(site_interaction)
         ann_indices.append(site_anni)
         meander_ratios.append(meander_ratio)
         speeds.append(mean_speed)
+        order_parameters.append(order_parameter)
+        mean_directions.append(mean_direction)
+        if args.com_analysis:
+            cell_lengths.append(get_mean_length(trajectory_dataframe) / 2)
 
-    # if not args.com_analysis:
-    #     coherency_fractions = np.array(coherency_fractions)
-    #     np.save(os.path.join(run_folderpath, "coherency_fractions.npy"), coherency_fractions)
-    #     ann_indices = np.array(ann_indices)
-    #     np.save(os.path.join(run_folderpath, "ann_indices.npy"), ann_indices)
-    #     meander_ratios = np.array(meander_ratios)
-    #     np.save(os.path.join(run_folderpath, "meander_ratios.npy"), meander_ratios)
-    #     speeds = np.array(speeds)
-    #     np.save(os.path.join(run_folderpath, "speeds.npy"), speeds)
-    # else:
 
-    interaction_array = np.array(interaction_array)
-    np.save(os.path.join(run_folderpath, "com_interaction.npy"), interaction_array)
-    coherency_array = np.array(coherency_array)
-    np.save(os.path.join(run_folderpath, "com_coherency.npy"), coherency_array)
-    ann_indices = np.array(ann_indices)
-    np.save(os.path.join(run_folderpath, "com_ann_indices.npy"), ann_indices)
-    meander_ratios = np.array(meander_ratios)
-    np.save(os.path.join(run_folderpath, "com_meander_ratios.npy"), meander_ratios)
-    speeds = np.array(speeds)
-    np.save(os.path.join(run_folderpath, "com_speeds.npy"), speeds)
+    if not args.com_analysis:
+        interaction_array = np.array(interaction_array)
+        np.save(os.path.join(run_folderpath, "interaction.npy"), interaction_array)
+        coherency_array = np.array(coherency_array)
+        np.save(os.path.join(run_folderpath, "coherency.npy"), coherency_array)
+        ann_indices = np.array(ann_indices)
+        np.save(os.path.join(run_folderpath, "ann_indices.npy"), ann_indices)
+        meander_ratios = np.array(meander_ratios)
+        np.save(os.path.join(run_folderpath, "meander_ratios.npy"), meander_ratios)
+        speeds = np.array(speeds)
+        np.save(os.path.join(run_folderpath, "speeds.npy"), speeds)
+        # Classical measures of organisation:
+        np.save(os.path.join(run_folderpath, "order_parameters.npy"), np.array(order_parameters))
+        np.save(os.path.join(run_folderpath, "mean_directions.npy"), np.array(mean_directions))
+    else:
+        interaction_array = np.array(interaction_array)
+        np.save(os.path.join(run_folderpath, "com_interaction.npy"), interaction_array)
+        coherency_array = np.array(coherency_array)
+        np.save(os.path.join(run_folderpath, "com_coherency.npy"), coherency_array)
+        ann_indices = np.array(ann_indices)
+        np.save(os.path.join(run_folderpath, "com_ann_indices.npy"), ann_indices)
+        meander_ratios = np.array(meander_ratios)
+        np.save(os.path.join(run_folderpath, "com_meander_ratios.npy"), meander_ratios)
+        speeds = np.array(speeds)
+        np.save(os.path.join(run_folderpath, "com_speeds.npy"), speeds)
+        # Classical measures of organisation:
+        np.save(os.path.join(run_folderpath, "com_order_parameters.npy"), np.array(order_parameters))
+        np.save(os.path.join(run_folderpath, "com_mean_directions.npy"), np.array(mean_directions))
+        np.save(os.path.join(run_folderpath, "cell_lengths.npy"), np.array(cell_lengths))
 
 
 if __name__ == "__main__":

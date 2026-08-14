@@ -201,14 +201,15 @@ int main(int argc, char** argv) {
         for (int i = 0; i < timeStepsToRun; ++i) {
             mainWorld.runSimulationStep();
             mainWorld.writePositionsToCSV(csvFile);
+            // mainWorld.writeMatrixToCSV(matrixFile);
         }
-        
+
         // Write final matrix to file:
-        // std::cout << "Writing matrix to file..." << std::endl;
+        std::cout << "Writing matrix to file..." << std::endl;
         mainWorld.writeMatrixToCSV(matrixFile);
 
         // We need to close files to flush remaining outputs to buffer.
-        // std::cout << "Closing files..." << std::endl;
+        std::cout << "Closing files..." << std::endl;
         csvFile.close();
         matrixFile.close();
     }

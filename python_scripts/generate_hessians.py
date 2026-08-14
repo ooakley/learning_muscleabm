@@ -1,10 +1,7 @@
 import os
-# import functools
-import subprocess
+import time
+import argparse
 
-import torch.multiprocessing as multiprocessing
-
-import psutil
 import torch
 import gpytorch
 
@@ -12,55 +9,24 @@ import numpy as np
 
 from scipy.stats import qmc
 from torch.utils.data import TensorDataset, DataLoader
-from threadpoolctl import threadpool_limits
 
-# Torch config management:
+EXPERIMENT_DIRPATH = "model_experiments/2026-06-03-matrix_shape"
+PARAMETER_DIMENSION = 14
+EXPONENT = 16
+
+# Need a higher precision for computing double derivatives:
 torch.set_default_dtype(torch.float64)
-print(f"Initial pytorch thread assignment: {torch.get_num_threads()}")
-print(f"Initial pytorch interop thread assignment: {torch.get_num_interop_threads()}")
-torch.set_num_threads(1)
-torch.set_num_interop_threads(1)
-print(f"Current pytorch thread assignment: {torch.get_num_threads()}")
-print(f"Current pytorch interop thread assignment: {torch.get_num_interop_threads()}")
 
-
-NUM_WORKERS = 60
-PARAMETER_DIMENSION = 11
-
-
-def get_global_cpu_affinity():
-    # Retrieve current CPU affinity:
-    taskset_output = subprocess.check_output(f"taskset -p {os.getpid()}", shell=True).decode("utf-8")
-
-    # Truncate newline character, split, and retrieve hex string:
-    hex_string = taskset_output[:-1].split(" ")[-1]
-
-    # Convert hexadecimal to an integer
-    hexademical_integer = int(hex_string, 16)
-    bitmask = format(hexademical_integer, '0256b')
-
-    # We have to reverse the bit mask so the numpy nonzero gives the right
-    # indexing:
-    global CPU_IDS
-    CPU_IDS = np.nonzero(np.array(list(bitmask)[::-1], dtype=int))[0]
-    print("Assigned CPU IDs:", flush=True)
-    print(CPU_IDS, flush=True)
-
-
-def initialise_worker():
-    # Set affinity with pool worker ID:
-    worker_name = multiprocessing.current_process().name
-    pool_worker_id = int(worker_name.split("-")[-1]) - 1
-    pool_worker_id = pool_worker_id % NUM_WORKERS
-
-    # Use psutil to set affinity:
-    psutil_process_interface = psutil.Process()
-    psutil_process_interface.cpu_affinity([CPU_IDS[pool_worker_id]])
-    print(f"Setting worker {pool_worker_id} affinity...", flush=True)
+def parse_arguments():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--metric", required=True)
+    parser.add_argument("--world_size", type=int, required=True)
+    parser.add_argument("--task_id", type=int, required=True)
+    return parser.parse_args()
 
 
 class DeepInputTransformation(torch.nn.Module):
-    def __init__(self, dimension, hidden_layer_neuron_count=64):
+    def __init__(self, dimension, hidden_layer_neuron_count=16):
         # Run general initialisation of the nn.Module base class:
         super().__init__()
 
@@ -71,10 +37,10 @@ class DeepInputTransformation(torch.nn.Module):
         # Set up layers:
         self.mlp = torch.nn.Sequential(
             torch.nn.Linear(dimension, self.hl_neuron_count),
-            torch.nn.ReLU(),
+            torch.nn.SiLU(),
             torch.nn.Linear(self.hl_neuron_count, self.hl_neuron_count),
-            torch.nn.ReLU(),
-            torch.nn.Linear(self.hl_neuron_count, 10)
+            torch.nn.SiLU(),
+            torch.nn.Linear(self.hl_neuron_count, dimension)
         )
 
         # Initialise weights:
@@ -87,35 +53,32 @@ class DeepInputTransformation(torch.nn.Module):
     def initialise(self, m):
         if isinstance(m, torch.nn.Linear):
             torch.nn.init.xavier_normal_(m.weight)
-            # diagonal_index_object = range(min(m.weight.size()))
-            # m.weight[diagonal_index_object, diagonal_index_object] = 1
 
 
 class SparseGPModel(gpytorch.models.ApproximateGP):
     def __init__(self, inducing_points, dimensions):
         # Set up distribution:
-        variational_distribution = \
-            gpytorch.variational.CholeskyVariationalDistribution(
-                inducing_points.size(0)
-            )
+        variational_distribution = gpytorch.variational.CholeskyVariationalDistribution(
+            inducing_points.size(0)
+        )
 
         # Set up variational strategy:
-        variational_strategy = \
-            gpytorch.variational.VariationalStrategy(
-                self, inducing_points, variational_distribution,
-                learn_inducing_locations=True
-            )
+        variational_strategy = gpytorch.variational.VariationalStrategy(
+            self, inducing_points, variational_distribution,
+            learn_inducing_locations=True
+        )
 
         # Inherit rest of init logic from approximate GP:
         super().__init__(variational_strategy)
 
         # Instantiate input transform:
+        # print(f"Using dimensions: {dimensions}")
         self.input_transform = DeepInputTransformation(dimensions)
 
         # Define mean and additive covariance functions:
         self.mean_module = gpytorch.means.ConstantMean()
         self.covar_module = gpytorch.kernels.ScaleKernel(
-            gpytorch.kernels.RBFKernel(ard_num_dims=10)
+            gpytorch.kernels.RBFKernel(ard_num_dims=dimensions)
         )
 
     def forward(self, x):
@@ -132,16 +95,15 @@ class ModelManager:
 
     def __init__(self, inducing_points, learning_rate):
         # Set up model:
-        inducing_points = torch.tensor(
-            inducing_points, dtype=torch.float64
-        )
+        inducing_points = torch.tensor(inducing_points)
         self.likelihood = gpytorch.likelihoods.GaussianLikelihood()
         self.model = SparseGPModel(inducing_points, inducing_points.shape[1])
 
-        # The default noise constraint is too high, more permissive constraint of positivity:
+        # The default noise constraint sets the minimum too high,
+        # we need the more permissive constraint of positivity:
         self.likelihood.noise_covar.register_constraint("raw_noise", gpytorch.constraints.Positive())
 
-        # Set up optimisation:
+        # Set up optimisation - Adam seems to work best (need to properly test this):
         self.optimizer = torch.optim.Adam([
             {'params': self.model.parameters()},
             {'params': self.likelihood.parameters()},
@@ -166,10 +128,11 @@ class ModelManager:
 
             # Step through optimisers:
             self.optimizer.step()
-            if (batch_index + 1) % 64 == 0:
-                print(batch_index, loss.item())
+            if (batch_index + 1) % 10 == 0:
+                print(batch_index, loss.item(), flush=True)
 
-            # Ensure inducing points don't go out of bounds:
+            # Ensure inducing points don't go out of bounds (implicitly
+            # imposing constraints with transforms degrades performance):
             with torch.no_grad():
                 inducing_points = self.model.variational_strategy.inducing_points.detach()
                 self.model.variational_strategy.inducing_points[inducing_points > 1] = 1
@@ -179,107 +142,202 @@ class ModelManager:
 
     def train(self, x, y, batch_size, epochs=1):
         # Convert datasets to pytorch:
-        x_tensor = torch.tensor(x, dtype=torch.float64)
-        y_tensor = torch.tensor(y, dtype=torch.float64)
+        x_tensor = torch.tensor(x)
+        y_tensor = torch.tensor(y)
         dataset = TensorDataset(x_tensor, y_tensor)
 
         for _ in range(epochs):
-            print(f"---> Epoch {_ + 1}...")
             dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
             self.train_epoch(dataloader, len(y))
 
-    def save(self, dirpath, id):
-        # Generate save folder:
-        id_folderpath = os.path.join(dirpath, id)
-        if not os.path.exists(id_folderpath):
-            os.mkdir(id_folderpath)
+    def save(self, experiment_dirpath, metric_name):
+        # Generate GP model folder if not present:
+        model_dirpath = os.path.join(experiment_dirpath, "gaussian_process_models")
+        if not os.path.exists(model_dirpath):
+            os.mkdir(model_dirpath)
+
+        # Generate folder for given metric:
+        metric_folderpath = os.path.join(model_dirpath, metric_name)
+        if not os.path.exists(metric_folderpath):
+            os.mkdir(metric_folderpath)
 
         # Save model components:
-        model_filepath = os.path.join(id_folderpath, "model.pth")
+        model_filepath = os.path.join(metric_folderpath, "model.pth")
         torch.save(self.model, model_filepath)
-        likelihood_filepath = os.path.join(id_folderpath, "likelihood.pth")
+        likelihood_filepath = os.path.join(metric_folderpath, "likelihood.pth")
         torch.save(self.likelihood, likelihood_filepath)
-        optimiser_filepath = os.path.join(id_folderpath, "optimiser.pth")
+        optimiser_filepath = os.path.join(metric_folderpath, "optimiser.pth")
         torch.save(self.optimizer, optimiser_filepath)
 
-    def load(self, dirpath, id):
-        id_folderpath = os.path.join(dirpath, id)
+    def load(self, experiment_dirpath, metric_name):
+        id_folderpath = os.path.join(experiment_dirpath, "gaussian_process_models", metric_name)
         self.model = torch.load(os.path.join(id_folderpath, "model.pth"), weights_only=False)
         self.likelihood = torch.load(os.path.join(id_folderpath, "likelihood.pth"), weights_only=False)
         self.optimizer = torch.load(os.path.join(id_folderpath, "optimiser.pth"), weights_only=False)
 
 
-def get_hessians(inputs, cost_function):
-    # Generate numpy tensor input data - torch tensors really don't play well being placed into imap:
-    global numpy_inputs
-    numpy_inputs = [np.expand_dims(numpy_data, axis=0) for numpy_data in np.unstack(inputs, axis=0)]
-
-    # Generate partial Hessian calculation so we can pass to multiprocessing pool:
-    global partial_hessian_function
-
-    def partial_hessian_function(index):
-        torch_input = torch.from_numpy(numpy_inputs[index])
-        torch_hessian = torch.autograd.functional.hessian(cost_function, torch_input)
-        return torch_hessian.detach().numpy()
-
-    with threadpool_limits(limits=1, user_api='blas'):
-        print("Initialising workers...", flush=True)
-        with multiprocessing.Pool(processes=NUM_WORKERS, initializer=initialise_worker) as pool:
-            print("Calculating Hessians...", flush=True)
-            hessians = []
-            for index, hessian in enumerate(pool.imap(partial_hessian_function, range(len(numpy_inputs)), 1)):
-                if (index + 1) % 500 == 0:
-                    print(index + 1, flush=True)
-                hessians.append(hessian)
-
-    # Convert to numpy and remove batch dimensions:
-    hessians = [np.squeeze(hessian) for hessian in hessians]
-    return np.stack(hessians, axis=0)
-
-
-def main():
-    print("Managing CPU affinity...")
-    get_global_cpu_affinity()
-
-    # Load Gaussian Process model:
-    print("Loading model...", flush=True)
-    global cf_model_manager
-    cf_model_manager = ModelManager(np.ones((10, PARAMETER_DIMENSION)), 0.003)
-    cf_model_manager.load("model_experiments/2026-01-26-matrix_collisions/gaussian_process_models", "op17")
-
-    # Generate Sobol sequence for (relatively) even coverage of input space:
-    print("Generating samples...", flush=True)
+def generate_sobol_samples():
+    # Set up sampler:
     sobol_sampler = qmc.Sobol(d=PARAMETER_DIMENSION, scramble=True, rng=0)
-    sampled_inputs = sobol_sampler.random_base2(14)  # 32768 samples across dimensions.
+    sampled_inputs = sobol_sampler.random_base2(EXPONENT)
 
     # Exclude edges of parameter space (Hessian estimation begins to break down):
     trim_factor = 0.02
     sampled_inputs *= 1 - (trim_factor * 2)
     sampled_inputs += trim_factor
+    return sampled_inputs
+
+
+def retrieve_posterior_samples():
+    wt_chain = np.load("model_experiments/2026-05-31-collisions_shape/mcmc_results/wt_mcmc_chain.npy")
+    rd_chain = np.load("model_experiments/2026-05-31-collisions_shape/mcmc_results/rd_mcmc_chain.npy")
+    wt_posterior = wt_chain[16384::256, :, 0, :].reshape(-1, 11)
+    rd_posterior = rd_chain[16384::256, :, 0, :].reshape(-1, 11)
+    sampled_inputs = np.concatenate([wt_posterior, rd_posterior], axis=0)
+    sampled_inputs = np.concatenate([sampled_inputs, np.ones((sampled_inputs.shape[0], 3)) * 0.5], axis=1)
+    return sampled_inputs
+
+
+def retrieve_mle_samples():
+    ctl_chain = np.load("model_experiments/2026-05-31-collisions_shape/mcmc_results/wt_mcmc_chain.npy")
+    rd_chain = np.load("model_experiments/2026-05-31-collisions_shape/mcmc_results/rd_mcmc_chain.npy")
+    ctl_likelihoods = np.load("model_experiments/2026-05-31-collisions_shape/mcmc_results/wt_mcmc_likelihoods.npy")
+    rd_likelihoods = np.load("model_experiments/2026-05-31-collisions_shape/mcmc_results/rd_mcmc_likelihoods.npy")
+
+    THIN_FACTOR = 64
+    ctl_mle_idx = np.argsort(ctl_likelihoods[::THIN_FACTOR, :, 0].flatten())[-1024:]
+    rd_mle_idx = np.argsort(rd_likelihoods[::THIN_FACTOR, :, 0].flatten())[-1024:]
+    ctl_mle = ctl_chain[::THIN_FACTOR, :, 0, :].reshape(-1, 11)[ctl_mle_idx, :]
+    rd_mle = rd_chain[::THIN_FACTOR, :, 0, :].reshape(-1, 11)[rd_mle_idx, :]
+    sampled_inputs = np.concatenate([ctl_mle, rd_mle], axis=0)
+    sampled_inputs = np.concatenate([sampled_inputs, np.ones((sampled_inputs.shape[0], 3)) * 0.5], axis=1)
+    return sampled_inputs
+
+
+def retrieve_sobol_samples():
+    sobol_matrix = np.load(os.path.join(EXPERIMENT_DIRPATH, "sample_matrix.npy"))
+    low_mask = sobol_matrix < 0.02
+    high_mask = sobol_matrix > 0.98
+    exclude_mask = np.logical_or(np.any(low_mask, axis=1), np.any(high_mask, axis=1))
+    return sobol_matrix[~exclude_mask, :]
+
+
+def main():
+    args = parse_arguments()
+    analysis_type = "SOBOL"
+
+    # Generate outputs folder:
+    if args.task_id == 0:
+        print("Generating samples...", flush=True)
+    if analysis_type == "FULL_GRID":
+        dir_path = os.path.join(EXPERIMENT_DIRPATH, "gaussian_process_models", args.metric)
+        sampled_inputs = generate_sobol_samples()
+    elif analysis_type == "MLE":
+        fit_source = "model_experiments/2026-05-31-collisions_shape"
+        dir_path = os.path.join(fit_source, "mcmc_results", "mle_hessians")
+        if not os.path.exists(dir_path):
+            os.mkdir(dir_path)
+        sampled_inputs = retrieve_mle_samples()
+    elif analysis_type == "SOBOL":
+        dir_path = os.path.join(EXPERIMENT_DIRPATH, f"sobol_{args.metric}_hessian")
+        if not os.path.exists(dir_path):
+            os.mkdir(dir_path)
+        sampled_inputs = retrieve_sobol_samples()
+
+    # Load Gaussian Process model:
+    if args.task_id == 0:
+        print("Loading model...", flush=True)
+    model_manager = ModelManager(np.ones((10, PARAMETER_DIMENSION)), 0.003)
+    model_manager.load(EXPERIMENT_DIRPATH, args.metric)
+
+    # Get subsample of inputs to run in this instance:
+    chunk_size = sampled_inputs.shape[0] // args.world_size
+    start_index = args.task_id * chunk_size
+    end_index = (args.task_id + 1) * chunk_size
+    if args.task_id == (args.world_size - 1):
+        chunk_inputs = np.copy(sampled_inputs[start_index:, :])
+        print(f"Final chunk shape: {chunk_inputs.shape}", flush=True)
+    else:
+        chunk_inputs = np.copy(sampled_inputs[start_index:end_index, :])
+        if args.task_id == 0:
+            print(f"Initial chunk shape: {chunk_inputs.shape}", flush=True)
+
+    # Convert to torch tensor:
+    tensor_inputs = torch.from_numpy(chunk_inputs)
 
     # Take natural log to get log curvature:
-    sampled_inputs = np.log(sampled_inputs)
+    log_inputs = torch.log(tensor_inputs)
 
-    # Globalise for multiprocessing:
-    global localised_cost_function
-
-    # Define function to get the Hessian of:
+    # Define the function for which we want to retrieve the hessian:
     def localised_cost_function(parameter_input):
-        transformed_input = torch.exp(parameter_input)
-        prediction = cf_model_manager.likelihood(cf_model_manager.model(transformed_input))
+        row_input = torch.unsqueeze(parameter_input, 0)
+        transformed_input = torch.exp(row_input)
+        prediction = model_manager.likelihood(model_manager.model(transformed_input))
         prediction_mean = prediction.mean
         phantom_set_point = prediction_mean.detach()
         localised_cost = (phantom_set_point - prediction_mean) ** 2
         return localised_cost
 
-    # Double backprop for Hessians:
-    hessians = get_hessians(sampled_inputs, localised_cost_function)
+    # Loop over inputs to retrieve the data:
+    if args.task_id == 0:
+        print("Estimating hessians...", flush=True)
+    hessians = []
+    for i in range(log_inputs.shape[0]):
+        # Print progress:
+        if args.task_id == 0:
+            if (i + 1) % 32 == 0 :
+                print(f"Processing index: {i + 1}", flush=True)
+        # Estimate hessian:
+        torch_hessian = torch.autograd.functional.hessian(
+            localised_cost_function, log_inputs[i, :]
+        )
+        hessians.append(torch_hessian.detach().numpy())
+    hessians = np.stack(hessians, axis=0)
+    if args.task_id == 0:
+        print(f"Chunked hessian shape: {hessians.shape}")
 
     # Save inputs and Hessians:
-    print("Saving outputs...", flush=True)
-    dir_path = "model_experiments/2026-01-26-matrix_collisions/gaussian_process_models/op17"
-    np.save(os.path.join(dir_path, "log_hessian_dataset.npy"), hessians)
-    np.save(os.path.join(dir_path, "hessian_inputs.npy"), np.exp(sampled_inputs))
+    if args.task_id == 0:
+        print("Saving Hessian matrices...", flush=True)
+    if args.task_id == 0:
+        np.save(os.path.join(dir_path, "hessian_inputs.npy"), sampled_inputs)
+    np.save(os.path.join(dir_path, f"hessian_{args.task_id}.npy"), hessians)
+
+    # Estimate outputs of sampled inputs:
+    if args.task_id == 0:
+        print("Running predictions of input samples...", flush=True)
+        full_inputs = torch.from_numpy(sampled_inputs)
+        sample_predictions = model_manager.likelihood(model_manager.model(full_inputs))
+        sample_predictions = sample_predictions.mean.detach().numpy()
+        np.save(os.path.join(dir_path, "hessian_outputs.npy"), sample_predictions)
+
+    # Collate Hessians if master process:
+    if args.task_id == 0:
+        # Wait while other processes finish:
+        filename_list = [f"hessian_{task_id}.npy" for task_id in range(args.world_size)]
+        filepath_list = [os.path.join(dir_path, filename) for filename in filename_list]
+        subprocesses_completing = True
+        while subprocesses_completing:
+            print("Checking subprocesses...", flush=True)
+            completion_list = [os.path.exists(filepath) for filepath in filepath_list]
+            if all(completion_list):
+                subprocesses_completing = False
+                continue
+            time.sleep(15)
+
+        # Collate the Hessians from all processes:
+        print("Subprocesses complete!", flush=True)
+        time.sleep(30)  # Ensure all files are fully written to disk:
+        hessians = [np.load(filepath) for filepath in filepath_list]
+        hessians_array = np.concatenate(hessians, axis=0)
+
+        # Save full array:
+        print(f"Final Hessians shape: {hessians_array.shape}")
+        print("Saving full array...", flush=True)
+        np.save(os.path.join(dir_path, "hessian_estimate.npy"), hessians_array)
+
+        # Remove sharded arrays:
+        [os.remove(filepath) for filepath in filepath_list]
 
 
 if __name__ == "__main__":

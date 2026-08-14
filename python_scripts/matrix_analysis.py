@@ -5,8 +5,11 @@ import json
 import scipy
 
 import numpy as np
+import colorcet as cc
 
-NEIGHBOURHOOD_SIZES = [3, 17, 31]
+import matplotlib.pyplot as plt
+
+NEIGHBOURHOOD_SIZES = [3, 33, 65]
 
 
 def parse_arguments():
@@ -22,7 +25,8 @@ def read_matrix_into_list(filepath):
     with open(filepath, "r") as f:
         for line in f:
             heading_string = str(line.rstrip())
-            fibre_list.append(np.fromstring(heading_string, sep=","))
+            headings = heading_string.split(",")[:-1]
+            fibre_list.append(np.asarray(headings, dtype=float))
     return fibre_list
 
 
@@ -36,8 +40,8 @@ def format_fibre_list(fibre_list):
     for index, heading_array in enumerate(fibre_list):
         fibre_count[index] = len(heading_array)
         if len(heading_array) == 0:
-            angular_variance[index] = 1
-            average_heading[index] = 0
+            angular_variance[index] = np.nan
+            average_heading[index] = np.nan
             continue
         x_component = np.cos(heading_array * 2)
         y_component = np.sin(heading_array * 2)
@@ -117,6 +121,33 @@ def generate_order_parameter_scale_curve(matrix):
     return np.array(order_parameters)
 
 
+def plot_matrix_heading(average_heading, filepath):
+    fig, ax = plt.subplots(figsize=(2.5, 2.5))
+    cmap = cc.m_CET_CBC1
+    cmap.set_bad("#FFC0CB", 1.)  # Plot NaNs as color outside of colorbar.
+    ax.imshow(average_heading, vmin=-np.pi/2, vmax=np.pi/2, cmap=cmap, origin="lower")
+    ax.set_axis_off()
+    fig.subplots_adjust(left=0.01, bottom=0.01, right=0.99, top=0.99)
+    plt.savefig(filepath, pad_inches=0.0, dpi=200)
+
+
+def plot_matrix_density(fibre_count, filepath):
+    fig, ax = plt.subplots(figsize=(2.5, 2.5))
+    ax.imshow(fibre_count, vmin=0, cmap=cc.m_CET_L20, origin="lower")
+    ax.text(1, 1, f"{int(np.max(fibre_count))}", c="w")
+    ax.set_axis_off()
+    fig.subplots_adjust(left=0.01, bottom=0.01, right=0.99, top=0.99)
+    plt.savefig(filepath, pad_inches=0.0, dpi=200)
+
+
+def plot_matrix_variance(angular_variance, filepath):
+    fig, ax = plt.subplots(figsize=(2.5, 2.5))
+    ax.imshow(angular_variance, vmin=0, vmax=1, cmap=cc.m_CET_L1, origin="lower")
+    ax.set_axis_off()
+    fig.subplots_adjust(left=0.01, bottom=0.01, right=0.99, top=0.99)
+    plt.savefig(filepath, pad_inches=0.0, dpi=200)
+
+
 def main():
     """Run basic script logic."""
     # Parse arguments:
@@ -146,9 +177,6 @@ def main():
         fibre_list = read_matrix_into_list(filepath)
         average_heading, fibre_count, angular_variance = format_fibre_list(fibre_list)
 
-        # Mask out orientations where there are no fibers:
-        average_heading[fibre_count == 0] = np.nan
-
         # Get order parameter across neighbourhood sizes:
         order_parameters.append(generate_order_parameter_scale_curve(average_heading))
 
@@ -157,6 +185,12 @@ def main():
         density_distribution = spatial_average_fc.flatten()
         interdecile_range = np.quantile(density_distribution, 0.9) - np.quantile(density_distribution, 0.1)
         density_idr.append(interdecile_range)
+
+        # Plot example matrix:
+        if seed == 0:
+            plot_matrix_heading(average_heading, os.path.join(run_folderpath, "matrix_heading.png"))
+            plot_matrix_density(fibre_count, os.path.join(run_folderpath, "matrix_density.png"))
+            plot_matrix_variance(angular_variance, os.path.join(run_folderpath, "angular_variance.png"))
 
     # Save to .npy files as (SUPERITERATIONS) arrays:
     order_parameters = np.stack(order_parameters, axis=0)
