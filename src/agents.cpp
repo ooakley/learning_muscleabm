@@ -514,11 +514,13 @@ void CellAgent::runTrajectoryDependentCollisionLogic() {
         const auto& [startX, startY, endX, endY] = localAgent->sampleTrajectoryStadium();
         double localEffectiveRadius = localAgent->getEffectiveRadius();
  
-        // Determine whether any or all of the trajectory points will take the modulus:
+        // Take the images of the local cell's centre and stadium point nearest this cell, then
+        // the image of the stadium point nearest the centre, so that the segment cannot wrap
+        // around the world when the local cell is about half the world away:
         double correctedStartX{takePeriodicModulus(startX, globalFrameX)};
         double correctedStartY{takePeriodicModulus(startY, globalFrameY)};
-        double correctedEndX{takePeriodicModulus(endX, globalFrameX)};
-        double correctedEndY{takePeriodicModulus(endY, globalFrameY)};
+        double correctedEndX{takePeriodicModulus(takePeriodicModulus(endX, globalFrameX), correctedStartX)};
+        double correctedEndY{takePeriodicModulus(takePeriodicModulus(endY, globalFrameY), correctedStartY)};
  
         // Determine whether collision occurs:
         const auto [collisionDetected, closestX, closestY, minimumDistance, clampedDotProduct] = isPositionInStadium(
@@ -609,8 +611,8 @@ void CellAgent::runTrajectoryDependentCollisionLogic() {
         // Determine whether adhesion is affected (adhesion collision, or ac):
         double acCorrectedStartX{takePeriodicModulus(startX, stadiumX)};
         double acCorrectedStartY{takePeriodicModulus(startY, stadiumY)};
-        double acCorrectedEndX{takePeriodicModulus(endX, stadiumX)};
-        double acCorrectedEndY{takePeriodicModulus(endY, stadiumY)};
+        double acCorrectedEndX{takePeriodicModulus(takePeriodicModulus(endX, stadiumX), acCorrectedStartX)};
+        double acCorrectedEndY{takePeriodicModulus(takePeriodicModulus(endY, stadiumY), acCorrectedStartY)};
         const auto [acDetected, acClosestX, acClosestY, acMinimumDistance, acClampedDotProduct] = isPositionInStadium(
             stadiumX, stadiumY,
             acCorrectedStartX, acCorrectedStartY,
