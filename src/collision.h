@@ -1,6 +1,10 @@
 #pragma once
 #include "agents.h"
 
+#include <memory>
+#include <unordered_map>
+#include <vector>
+
 using AgentPointer = std::shared_ptr<CellAgent>;
 using GridUnit = std::unordered_map<int, AgentPointer>;
 using CollisionRow = std::vector<GridUnit>;

@@ -5,6 +5,7 @@
     "gridSize": 128,
     "dt": 1,
     "patternSigma": 0,
+    "patternFibreCount": 0,
     "aspectRatio": 1,
     "cueDiffusionRate": 0.005,
     "cueKa": 0.7405004108739852,

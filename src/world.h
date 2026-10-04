@@ -1,5 +1,11 @@
 #pragma once
+#include <array>
+#include <fstream>
+#include <memory>
 #include <random>
+#include <tuple>
+#include <vector>
+
 #include "agents.h"
 #include "ecm.h"
 #include "collision.h"
@@ -41,14 +47,15 @@ public:
         int setNumberOfCells,
         double setMatrixSampleRate,
         double setPatternSigma,
+        int setPatternFibreCount,
         CellParameters setCellParameters
     );
 
     // Getters:
     void writePositionsToCSV(std::ofstream& csvFile);
+    void writeVerbosePositionsToCSV(std::ofstream& csvFile);
     void writeMatrixToCSV(std::ofstream& matrixFile);
-
-    // Setters:
+    void writeSummarisedMatrixToCSV(std::ofstream& matrixFile);
 
     // Public simulation functions:
     void runSimulationStep();
@@ -62,9 +69,9 @@ private:
     // ECM Information:
     int countECMElement;
     double lengthECMElement;
-    bool thereIsMatrixInteraction;
     double matrixSampleRate;
     double patternSigma;
+    int patternFibreCount;
 
     // Complex objects from our libraries:
     std::vector<std::shared_ptr<CellAgent>> cellAgentVector;
@@ -87,15 +94,12 @@ private:
     std::mt19937 xPositionGenerator;
     std::mt19937 yPositionGenerator;
     std::mt19937 headingGenerator;
-    std::mt19937 contactInhibitionGenerator;
 
-    std::mt19937 kernelSamplingGenerator;
     std::mt19937 matrixSamplingGenerator;
 
     // Distributions for seeding position and initial heading:
     std::uniform_real_distribution<double> positionDistribution;
     std::uniform_real_distribution<double> headingDistribution;
-    std::uniform_real_distribution<double> contactInhibitionDistribution;
 
     // Private member functions:
     // Initialisation Functions:
@@ -104,22 +108,14 @@ private:
 
     // Simulation functions:
     void runCellStep(std::shared_ptr<CellAgent> actingCell);
-    void depositAtAttachment(
-        std::vector<double> attachmentPoint,
-        double heading, double polarity, double weighting
-    );
 
     // Calculating percepts for cells:
-    std::tuple<double, double> getPerceptAtAttachment(
-        std::vector<double> attachmentPoint, double cellPolarity
-    );
     double calculateCellDeltaTowardsECM(double ecmHeading, double cellHeading);
 
     // World utility functions:
     std::array<int, 2> getECMIndexFromLocation(std::tuple<double, double> position);
 
     // Basic utility functions:
-    int sign(double value);
     std::tuple<double, double> rollPosition(std::tuple<double, double> position);
     std::tuple<int, int> rollIndex(int i, int j);
 };

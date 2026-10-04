@@ -9,7 +9,8 @@
         "gridSize": 128,
         "dt": 1,
         "aspectRatio": 1,
-        "patternSigma": 0
+        "patternSigma": 0,
+        "patternFibreCount": 0
     },
     "gridsearch_parameters": [
         ["cueDiffusionRate", [0.0001, 0.02]],

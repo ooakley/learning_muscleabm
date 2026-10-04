@@ -8,6 +8,7 @@
     "dt": 1,
     "matrixSampleRate": 0,
     "patternSigma": 0,
+    "patternFibreCount": 0,
     "aspectRatio": 1,
     "matrixCoupling": 0,
     "cueDiffusionRate": 0.008065250761620698,
@@ -22,5 +23,8 @@
     "adhesionReductionRate": 0,
     "collisionAdvectionRate": 0.11022941954433918,
     "cellStiffness": 0.005,
-    "surfaceStickiness": 15
+    "surfaceStickiness": 15,
+    "verbosePositionOutput": false,
+    "summariseMatrixOutput": false,
+    "writeMatrixTimeseries": false
 }
