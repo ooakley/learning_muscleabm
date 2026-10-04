@@ -8,7 +8,7 @@
 #SBATCH --array=0-1
 #SBATCH --cpus-per-task=64
 #SBATCH --mem-per-cpu=2G
-#SBATCH --output=logs/%x_%A_%a.out
+#SBATCH --output=logs/inference/%x_%A_%a.out
 
 # Samples the posterior of one history matching wave against the wet lab data, one array
 # task per phenotype. 16 threads per worker group, 4 worker groups, 64 threads in total.

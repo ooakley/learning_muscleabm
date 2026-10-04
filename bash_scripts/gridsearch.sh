@@ -6,7 +6,7 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --mem-per-cpu=2G
 #SBATCH --array=1-512%100
-#SBATCH --output=logs/%x_%A_%a.out
+#SBATCH --output=logs/simulation/%x_%A_%a.out
 
 # Runs the simulations of one history matching wave. Usage, from the repository root:
 #

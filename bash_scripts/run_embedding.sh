@@ -6,7 +6,7 @@
 #SBATCH --cpus-per-task=32
 #SBATCH --mem-per-cpu=8G
 #SBATCH --hint=nomultithread
-#SBATCH --output=logs/%x_%j.out
+#SBATCH --output=logs/sensitivity/%x_%j.out
 
 # Embeds the op65 Fisher information matrices of an experiment. Usage, from the repository
 # root:

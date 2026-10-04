@@ -6,7 +6,7 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --mem-per-cpu=8G
 #SBATCH --array=0-11
-#SBATCH --output=logs/%x_%A_%a.out
+#SBATCH --output=logs/emulation/%x_%A_%a.out
 
 # Trains a GP of the log standard error of each model metric (one array task per metric)
 # on the sample matrix and summary data of an experiment folder. Usage, from the

@@ -5,7 +5,7 @@
 #SBATCH --ntasks=24
 #SBATCH --cpus-per-task=1
 #SBATCH --mem-per-cpu=1G
-#SBATCH --output=logs/%x_%j.out
+#SBATCH --output=logs/collation/%x_%j.out
 
 # Collates the per-simulation outputs of one history matching wave into its summary_data
 # folder. Usage, from the repository root:

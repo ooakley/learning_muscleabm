@@ -4,7 +4,7 @@
 #SBATCH --partition=ncpu
 #SBATCH --time=24:00:00
 #SBATCH --mem=16G
-#SBATCH --output=logs/%x_%j.out
+#SBATCH --output=logs/wetlab/%x_%j.out
 
 # Analyses the tracked wet lab trajectories into wetlab_data/site_dataframe.csv and
 # wetlab_data/particle_dataframe.csv. Usage, from the repository root:

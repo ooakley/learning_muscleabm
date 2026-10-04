@@ -6,7 +6,7 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --mem-per-cpu=4G
 #SBATCH --array=0-3
-#SBATCH --output=logs/%x_%A_%a.out
+#SBATCH --output=logs/emulation/%x_%A_%a.out
 
 # Trains the GP emulator of each model metric (one array task per metric) on the global
 # dataset of an experiment. Usage, from the repository root:

@@ -6,7 +6,7 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --mem-per-cpu=18G
 #SBATCH --array=1-128
-#SBATCH --output=logs/%x_%A_%a.out
+#SBATCH --output=logs/sensitivity/%x_%A_%a.out
 
 # Global eigenparameter estimation from the op65 Hessians of an experiment, split over the
 # array tasks. Usage, from the repository root:

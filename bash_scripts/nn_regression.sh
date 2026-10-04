@@ -6,7 +6,7 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --mem-per-cpu=4G
 #SBATCH --array=0-3
-#SBATCH --output=logs/%x_%A_%a.out
+#SBATCH --output=logs/emulation/%x_%A_%a.out
 
 # Cross-validates the baseline neural network regressor on each model metric (one array
 # task per metric). Usage, from the repository root:

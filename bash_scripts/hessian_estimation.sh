@@ -6,7 +6,7 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --mem-per-cpu=8G
 #SBATCH --hint=nomultithread
-#SBATCH --output=logs/%x_%j.out
+#SBATCH --output=logs/sensitivity/%x_%j.out
 
 # Estimates op65 Hessians across parameter space for an experiment, split over 512
 # processes. Usage, from the repository root:
