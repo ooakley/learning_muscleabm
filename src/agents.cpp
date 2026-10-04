@@ -153,7 +153,7 @@ void CellAgent::setDirectionalIntensity(double setDirectiontalIntensity) {
     directionalIntensity = setDirectiontalIntensity;
 };
 
-void CellAgent::setLocalCellList(std::vector<std::shared_ptr<CellAgent>> setLocalAgents) {
+void CellAgent::setLocalCellList(const std::vector<CellAgent*>& setLocalAgents) {
     localAgents = setLocalAgents;
 }
 
@@ -631,7 +631,7 @@ void CellAgent::runTrajectoryDependentCollisionLogic() {
 }
 
 
-std::vector<double> CellAgent::sampleAttachmentPoint() {
+std::array<double, 2> CellAgent::sampleAttachmentPoint() {
     // Getting current position:
     double actingCellX{getX()};
     double actingCellY{getY()};

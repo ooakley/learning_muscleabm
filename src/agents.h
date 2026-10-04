@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <memory>
 #include <random>
 #include <tuple>
@@ -38,7 +39,7 @@ public:
     );
 
     // Actual simulations that the cell runs:
-    std::vector<double> sampleAttachmentPoint();
+    std::array<double, 2> sampleAttachmentPoint();
     std::tuple<double, double, double, double> sampleTrajectoryStadium();
 
     // Getters:
@@ -77,7 +78,7 @@ public:
     // Setters for simulating cell perception (e.g. updating cell percepts):
     void setDirectionalInfluence(double setDirectionalInfluence);
     void setDirectionalIntensity(double setDirectiontalIntensity);
-    void setLocalCellList(std::vector<std::shared_ptr<CellAgent>> setLocalAgents);
+    void setLocalCellList(const std::vector<CellAgent*>& setLocalAgents);
 
     // Simulation code:
     void takeRandomStep();
@@ -135,7 +136,7 @@ private:
     // Matrix percept state variables:
     double directionalInfluence; // -pi <= theta < pi
     double directionalIntensity; // 0 <= I < 1
-    std::vector<std::shared_ptr<CellAgent>> localAgents;
+    std::vector<CellAgent*> localAgents;
 
     // History variables for analysis:
     int collisionsThisTimepoint;

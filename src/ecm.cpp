@@ -75,31 +75,16 @@ std::tuple<double, double, double> ECMField::summariseFibreMatrix(int i, int j) 
         return {fibreMatrix[i][j][0], 1, 1};
     }
 
-    // Double headings:
-    std::vector<double> doubleHeadings{};
-    std::transform(
-        fibreMatrix[i][j].cbegin(), fibreMatrix[i][j].cend(),
-        std::back_inserter(doubleHeadings),
-        [](double nematicAngle) -> double {return 2.0*nematicAngle;}
-    );
-
-    // Get cartesian components:
-    std::vector<double> cosHeadings{};
-    std::vector<double> sinHeadings{};
-    std::transform(
-        doubleHeadings.cbegin(), doubleHeadings.cend(),
-        std::back_inserter(cosHeadings),
-        [](double heading) -> double {return std::cos(heading);}
-    );
-    std::transform(
-        doubleHeadings.cbegin(), doubleHeadings.cend(),
-        std::back_inserter(sinHeadings),
-        [](double heading) -> double {return std::sin(heading);}
-    );
-
-    // Accumulate and get relevant data:
-    double meanCosine{std::accumulate(cosHeadings.begin(), cosHeadings.end(), 0.0) / fibreCount};
-    double meanSine{std::accumulate(sinHeadings.begin(), sinHeadings.end(), 0.0) / fibreCount};
+    // Accumulate cartesian components of the doubled (nematic) headings:
+    double cosineSum{0.0};
+    double sineSum{0.0};
+    for (double nematicAngle : fibreMatrix[i][j]) {
+        const double doubleHeading{2.0*nematicAngle};
+        cosineSum += std::cos(doubleHeading);
+        sineSum += std::sin(doubleHeading);
+    }
+    double meanCosine{cosineSum / fibreCount};
+    double meanSine{sineSum / fibreCount};
 
     double averagedHeading{std::atan2(meanSine, meanCosine) / 2};
     double concentration{std::sqrt(std::pow(meanCosine, 2) + std::pow(meanSine, 2))};
@@ -107,7 +92,7 @@ std::tuple<double, double, double> ECMField::summariseFibreMatrix(int i, int j) 
     return {averagedHeading, concentration, fibreCount};
 };
 
-std::deque<float> ECMField::getFibreDeque(int i, int j) const {
+const std::deque<float>& ECMField::getFibreDeque(int i, int j) const {
     return fibreMatrix[i][j];
 };
 

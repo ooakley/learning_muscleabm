@@ -1,11 +1,11 @@
 #pragma once
 #include "agents.h"
 
-#include <memory>
+#include <array>
 #include <unordered_map>
 #include <vector>
 
-using AgentPointer = std::shared_ptr<CellAgent>;
+using AgentPointer = CellAgent*;
 using GridUnit = std::unordered_map<int, AgentPointer>;
 using CollisionRow = std::vector<GridUnit>;
 using CollisionMatrix = std::vector<CollisionRow>;
@@ -27,9 +27,9 @@ public:
     // Setter functions:
     void addToCollisionMatrix(double x, double y, AgentPointer agentPointer);
     void removeFromCollisionMatrix(double x, double y, AgentPointer agentPointer);
-    std::vector<AgentPointer> getLocalAgents(double x, double y);
+    void getLocalAgents(double x, double y, std::vector<AgentPointer>& localAgents);
 
     // Utility functions:
     int rollOverIndex(int index) const;
-    std::vector<int> getIndexFromLocation(double positionX, double positionY);
+    std::array<int, 2> getIndexFromLocation(double positionX, double positionY);
 };
