@@ -1,11 +1,11 @@
 import os
+import argparse
 
 import scipy
 
 import numpy as np
 
 N_COMPONENTS = 20
-EXPERIMENT_DIRPATH = "model_experiments/2026-09-19-matrix_shape"
 METRICS_TO_LOAD = [
     "speeds",
     "meander_ratios",
@@ -22,19 +22,19 @@ LOG_DICT = {
 }
 
 
-def load_metrics():
+def load_metrics(experiment_dirpath):
     metric_arrays = []
     for metric_name in METRICS_TO_LOAD:
         if metric_name == "op65":
             # Get order parameter:
-            metric_array = np.load(os.path.join(EXPERIMENT_DIRPATH, "summary_data", "matrix_order_parameters.npy"))
+            metric_array = np.load(os.path.join(experiment_dirpath, "summary_data", "matrix_order_parameters.npy"))
             if LOG_DICT[metric_name]:
                 metric_arrays.append(np.log(metric_array[:, :, 2]))
             else:
                 metric_arrays.append(metric_array[:, :, 2])
         else:
             metric_array = np.load(os.path.join(
-                EXPERIMENT_DIRPATH, "summary_data", f"{metric_name}.npy"
+                experiment_dirpath, "summary_data", f"{metric_name}.npy"
             ))
             if LOG_DICT[metric_name]:
                 metric_arrays.append(np.log(metric_array))
@@ -94,9 +94,20 @@ def bg_vectorised(metric_set, global_correlation=None):
     return distance_matrix + distance_matrix.T
 
 
+def parse_arguments():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--experiment_dirpath", required=True,
+        help="Experiment containing summary_data, e.g. model_experiments/2026-09-19-matrix_shape."
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_arguments()
+
     # Load output metrics:
-    metric_array = load_metrics()
+    metric_array = load_metrics(args.experiment_dirpath)
 
     # Filter dataset for nan:
     filtered_indices = np.arange(metric_array.shape[0])
@@ -139,7 +150,7 @@ def main():
     coordinates = (eigenvectors * np.sqrt(np.abs(eigenvalues)))[:, :N_COMPONENTS]
 
     # Make directory:
-    dirpath = os.path.join(EXPERIMENT_DIRPATH, "inpca")
+    dirpath = os.path.join(args.experiment_dirpath, "inpca")
     if not os.path.exists(dirpath):
         os.mkdir(dirpath)
 

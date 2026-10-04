@@ -2,19 +2,20 @@ import argparse
 import os
 import json
 
-import gpytorch
 import torch
 
 import numpy as np
 
-from torch.utils.data import TensorDataset, DataLoader
 from dppy.finite_dpps import FiniteDPP
+
+from muscleabm.emulators import ModelManager, get_experiment_model_folderpath, run_inference
 
 # Need a higher precision for computing double derivatives:
 torch.set_default_dtype(torch.float64)
 
 K_FOLD_COUNT = 8
 EPOCHS = 15
+
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Train a deep kernel GP regressor on a given model metric')
@@ -55,182 +56,6 @@ def sample_inducing_points(num_points, parameter_matrix):
     inducing_indices = DPP.list_of_samples[0][-1]
     inducing_points = parameter_matrix[::7, :][inducing_indices, :]
     return inducing_points
-
-
-class DeepInputTransformation(torch.nn.Module):
-    def __init__(self, dimension, hidden_layer_neuron_count=16):
-        # Run general initialisation of the nn.Module base class:
-        super().__init__()
-
-        # Record parameters:
-        self.dimension = dimension
-        self.hl_neuron_count = hidden_layer_neuron_count
-
-        # Set up layers:
-        self.mlp = torch.nn.Sequential(
-            torch.nn.Linear(dimension, self.hl_neuron_count),
-            torch.nn.SiLU(),
-            torch.nn.Linear(self.hl_neuron_count, self.hl_neuron_count),
-            torch.nn.SiLU(),
-            torch.nn.Linear(self.hl_neuron_count, dimension)
-        )
-
-        # Initialise weights:
-        with torch.no_grad():
-            self.apply(self.initialise)
-
-    def forward(self, x):
-        return self.mlp.forward(x)
-
-    def initialise(self, m):
-        if isinstance(m, torch.nn.Linear):
-            torch.nn.init.xavier_normal_(m.weight)
-
-
-class SparseGPModel(gpytorch.models.ApproximateGP):
-    def __init__(self, inducing_points, dimensions):
-        # Set up distribution:
-        variational_distribution = gpytorch.variational.CholeskyVariationalDistribution(
-            inducing_points.size(0)
-        )
-
-        # Set up variational strategy:
-        variational_strategy = gpytorch.variational.VariationalStrategy(
-            self, inducing_points, variational_distribution,
-            learn_inducing_locations=True
-        )
-
-        # Inherit rest of init logic from approximate GP:
-        super().__init__(variational_strategy)
-
-        # Instantiate input transform:
-        self.input_transform = DeepInputTransformation(dimensions)
-
-        # Define mean and additive covariance functions:
-        self.mean_module = gpytorch.means.ConstantMean()
-        self.covar_module = gpytorch.kernels.ScaleKernel(
-            gpytorch.kernels.RBFKernel(ard_num_dims=dimensions)
-        )
-
-    def forward(self, x):
-        # Warp input:
-        warped_x = self.input_transform(x)
-
-        # Calculate mean of input:
-        mean_x = self.mean_module(warped_x)
-        covar_x = self.covar_module(warped_x)
-        return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
-
-
-class ModelManager:
-
-    def __init__(self, inducing_points, learning_rate):
-        # Set up model:
-        inducing_points = torch.tensor(inducing_points)
-        self.likelihood = gpytorch.likelihoods.GaussianLikelihood()
-        self.model = SparseGPModel(inducing_points, inducing_points.shape[1])
-
-        # The default noise constraint sets the minimum too high,
-        # we need the more permissive constraint of positivity:
-        self.likelihood.noise_covar.register_constraint("raw_noise", gpytorch.constraints.Positive())
-
-        # Set up optimisation - Adam seems to work best (need to properly test this):
-        self.optimizer = torch.optim.Adam([
-            {'params': self.model.parameters()},
-            {'params': self.likelihood.parameters()},
-        ], lr=learning_rate)
-
-        self.loss_history = []
-
-    def train_epoch(self, dataloader, num_data):
-        # Ensure parameters are trainable:
-        self.model.train()
-        self.likelihood.train()
-
-        # Set up loss:
-        mll = gpytorch.mlls.PredictiveLogLikelihood(self.likelihood, self.model, num_data=num_data)
-
-        # Run through entire dataset:
-        for batch_index, (x_batch, y_batch) in enumerate(dataloader):
-            self.optimizer.zero_grad()
-            output_distribution = self.model(x_batch)
-            loss = -mll(output_distribution, y_batch)
-            loss.backward()
-
-            # Step through optimisers:
-            self.optimizer.step()
-            if (batch_index + 1) % 32 == 0:
-                print(batch_index + 1, loss.item(), flush=True)
-
-            # Ensure inducing points don't go out of bounds (implicitly
-            # imposing constraints with transforms degrades performance):
-            with torch.no_grad():
-                inducing_points = self.model.variational_strategy.inducing_points.detach()
-                self.model.variational_strategy.inducing_points[inducing_points > 1] = 1
-                self.model.variational_strategy.inducing_points[inducing_points < 0] = 0
-
-            self.loss_history.append(loss.detach().numpy())
-
-    def train(self, x, y, batch_size, epochs=1):
-        # Convert datasets to pytorch:
-        x_tensor = torch.tensor(x)
-        y_tensor = torch.tensor(y)
-        dataset = TensorDataset(x_tensor, y_tensor)
-
-        for epoch_index in range(epochs):
-            print(f"Training epoch {epoch_index + 1}...")
-            dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-            self.train_epoch(dataloader, len(y))
-
-    def save(self, experiment_dirpath, metric_name):
-        # Generate GP model folder if not present:
-        model_dirpath = os.path.join(experiment_dirpath, "gaussian_process_models")
-        if not os.path.exists(model_dirpath):
-            os.mkdir(model_dirpath)
-
-        # Generate folder for given metric:
-        metric_folderpath = os.path.join(model_dirpath, metric_name)
-        if not os.path.exists(metric_folderpath):
-            os.mkdir(metric_folderpath)
-
-        # Save model components:
-        model_filepath = os.path.join(metric_folderpath, "model.pth")
-        torch.save(self.model, model_filepath)
-        likelihood_filepath = os.path.join(metric_folderpath, "likelihood.pth")
-        torch.save(self.likelihood, likelihood_filepath)
-        optimiser_filepath = os.path.join(metric_folderpath, "optimiser.pth")
-        torch.save(self.optimizer, optimiser_filepath)
-
-    def load(self, experiment_dirpath, metric_name):
-        id_folderpath = os.path.join(experiment_dirpath, "gaussian_process_models", metric_name)
-        self.model = torch.load(os.path.join(id_folderpath, "model.pth"), weights_only=False)
-        self.likelihood = torch.load(os.path.join(id_folderpath, "likelihood.pth"), weights_only=False)
-        self.optimizer = torch.load(os.path.join(id_folderpath, "optimiser.pth"), weights_only=False)
-
-
-def run_inference(model_manager, inputs, batch_size=512):
-    # Set up dataloading:
-    tensor_input = torch.tensor(inputs)
-    inference_dataset = TensorDataset(tensor_input)
-    inference_loader = DataLoader(inference_dataset, batch_size=batch_size, shuffle=False)
-
-    # Shift to eval mode:
-    model_manager.model.eval()
-    model_manager.likelihood.eval()
-
-    # Set up outputs:
-    predictions_array = []
-    variance_array = []
-    with torch.no_grad():
-        for batch_index, inference_batch in enumerate(inference_loader):
-            inference_batch = inference_batch[0]
-            predictions = model_manager.likelihood(model_manager.model(inference_batch))
-            predictions_array.append(predictions.mean.detach().numpy())
-            variance_array.append(predictions.variance.detach().numpy())
-            if (batch_index + 1) % 64 == 0:
-                print(batch_index + 1)
-
-    return np.concatenate(predictions_array), np.concatenate(variance_array)
 
 
 def cross_validation(parameter_matrix, output_metric, inducing_points):
@@ -281,7 +106,7 @@ def cross_validation(parameter_matrix, output_metric, inducing_points):
         model_manager.train(train_parameters, whitened_train, 512, epochs=EPOCHS)
 
         # Run predictions on test set:
-        predictions, variance = run_inference(model_manager, test_parameters, 512)
+        predictions, _, variance = run_inference(model_manager.model, model_manager.likelihood, test_parameters, 512)
 
         # Get basic metrics:
         mean_absolute_error = np.mean(np.abs(whitened_test - predictions))
@@ -337,12 +162,8 @@ def main():
         "mse": mse_list,
         "sll": sll_list
     }
-    gp_folderpath = os.path.join(args.experiment_dirpath, "gaussian_process_models")
-    if not os.path.exists(gp_folderpath):
-        os.mkdir(gp_folderpath)
-    id_folderpath = os.path.join(gp_folderpath, f"{args.metric_name}_noise")
-    if not os.path.exists(id_folderpath):
-        os.mkdir(id_folderpath)
+    id_folderpath = get_experiment_model_folderpath(args.experiment_dirpath, f"{args.metric_name}_noise")
+    os.makedirs(id_folderpath, exist_ok=True)
     cv_filepath = os.path.join(id_folderpath, "cv_metrics.json")
     with open(cv_filepath, 'w') as output:
         json.dump(cv_dict, output, indent=4)
@@ -360,14 +181,16 @@ def main():
     print("Training model...")
     model_manager.train(parameter_matrix, whitened_sem, 512, epochs=EPOCHS)
     print("Saving model...")
-    model_manager.save(args.experiment_dirpath, f"{args.metric_name}_noise")
+    model_manager.save(id_folderpath)
 
     # Save loss history:
     loss_history = np.array(model_manager.loss_history)
     np.save(os.path.join(id_folderpath, "loss_history.npy"), loss_history)
 
     # Generate and save predictions:
-    whitened_predictions, whitened_variance = run_inference(model_manager, parameter_matrix, batch_size=512)
+    whitened_predictions, _, whitened_variance = run_inference(
+        model_manager.model, model_manager.likelihood, parameter_matrix, batch_size=512
+    )
     predictions = (whitened_predictions * sem_std) + sem_mean
     variance = (whitened_variance * sem_std)
     np.save(os.path.join(id_folderpath, "parameter_predictions.npy"), np.stack([predictions, variance], axis=1))

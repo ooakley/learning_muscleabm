@@ -1,4 +1,5 @@
 import os
+import argparse
 import skimage
 
 import numpy as np
@@ -312,11 +313,11 @@ def analyse_site(site_csv, column, experiment):
     return site_data, particle_dataframe
 
 
-def analyse_experiment(experiment_folder):
+def analyse_experiment(analysed_data_dirpath, experiment_folder):
     # Set up necessary paths:
     print(f"--- --- {experiment_folder} --- ---")
     exclusion_list = SITE_EXCLUSION[experiment_folder]
-    data_directory = f"/camp/home/eloaklo/home/shared/eloaklo/analysed_data/{experiment_folder}"
+    data_directory = os.path.join(analysed_data_dirpath, experiment_folder)
     ROWS = ['A', 'B', 'C']
     COLUMNS = [1, 2, 3, 4, 5, 6]
 
@@ -343,11 +344,21 @@ def analyse_experiment(experiment_folder):
     return pd.DataFrame(site_data_dictionaries), pd.concat(particle_data_dataframes)
 
 
+def parse_arguments():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--analysed_data_dirpath", required=True,
+        help="Folder containing one folder of tracked trajectories per wet lab experiment."
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_arguments()
     site_dataframes = []
     particle_dataframes = []
     for experiment_folder in EXPERIMENT_FOLDERS:
-        site_dataframe, particle_dataframe = analyse_experiment(experiment_folder)
+        site_dataframe, particle_dataframe = analyse_experiment(args.analysed_data_dirpath, experiment_folder)
         site_dataframes.append(site_dataframe)
         particle_dataframes.append(particle_dataframe)
 

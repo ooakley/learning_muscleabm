@@ -8,7 +8,7 @@ gridsearch_data/
 wetlab_data/
 sr_outputs/
 wetlab_data/
-*/__pycache__/
+__pycache__/
 */__marimo__/
 */layouts/
 fileOut*

@@ -63,13 +63,13 @@ simulate () {
     fi
 
     # Run simulations with given parameter set:
-    uv run python3 ./python_scripts/call_json_parameters.py \
+    uv run python3 ./python_scripts/simulation/call_json_parameters.py \
         --path_to_config "$arguments_filepath"
 
     # Analyse simulation:
-    uv run python3 ./python_scripts/site_analysis.py --run_folderpath "$run_folderpath" --folder_id "$simulation_id"
-    # uv run python3 ./python_scripts/site_analysis.py --run_folderpath "$run_folderpath" --folder_id "$simulation_id" --com_analysis
-    # uv run python3 ./python_scripts/matrix_analysis.py --run_folderpath "$run_folderpath" --folder_id "$simulation_id"
+    uv run python3 ./python_scripts/simulation/site_analysis.py --run_folderpath "$run_folderpath" --folder_id "$simulation_id"
+    # uv run python3 ./python_scripts/simulation/site_analysis.py --run_folderpath "$run_folderpath" --folder_id "$simulation_id" --com_analysis
+    # uv run python3 ./python_scripts/simulation/matrix_analysis.py --run_folderpath "$run_folderpath" --folder_id "$simulation_id"
 
     remove_intermediate_outputs "$run_folderpath"
 }

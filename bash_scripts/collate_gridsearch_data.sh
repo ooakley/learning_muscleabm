@@ -15,7 +15,7 @@ ml load uv
 
 collate () {
     local collation_target=$1
-    uv run python python_scripts/collate_site_analyses.py \
+    uv run python python_scripts/collation/collate_site_analyses.py \
         --experiment_folderpath "$experiment_dirpath" \
         --hm_wave_id "$hm_wave_id" \
         --collation_target "$collation_target"
@@ -50,7 +50,7 @@ for collation_target in "${collation_targets[@]}"; do
     fi
 done
 
-# uv run python python_scripts/collate_matrix_analyses.py \
+# uv run python python_scripts/collation/collate_matrix_analyses.py \
 #     --experiment_folderpath $experiment_dirpath &
 # process_ids+=($!)
 

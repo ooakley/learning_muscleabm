@@ -8,4 +8,4 @@
 # Required lmod modules:
 # ml purge (for some reason)
 
-python3 ./python_scripts/run_symbolic_regression.py
+python3 ./python_scripts/legacy_scripts/run_symbolic_regression.py

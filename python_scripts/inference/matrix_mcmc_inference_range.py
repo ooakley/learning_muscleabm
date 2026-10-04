@@ -1,8 +1,8 @@
 import os
 import json
+import argparse
 
 import torch
-import gpytorch
 
 import scipy.stats
 
@@ -13,165 +13,30 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from scipy.stats import qmc
-from torch.utils.data import TensorDataset, DataLoader
 from statsmodels.regression import mixed_linear_model
+
+from muscleabm.emulators import ModelManager, get_experiment_model_folderpath
 
 torch.set_default_dtype(torch.float64)
 
-MCMC_DIRPATH = "model_experiments/2026-09-16-collisions_shape"
 MCMC_PARAM_DIMS = 12
-MATRIX_DIRPATH = "model_experiments/2026-09-25-matrix_shape"
 MATRIX_PARAM_DIMS = 15
 
-class DeepInputTransformation(torch.nn.Module):
-    def __init__(self, dimension, hidden_layer_neuron_count=16):
-        # Run general initialisation of the nn.Module base class:
-        super().__init__()
 
-        # Record parameters:
-        self.dimension = dimension
-        self.hl_neuron_count = hidden_layer_neuron_count
-
-        # Set up layers:
-        self.mlp = torch.nn.Sequential(
-            torch.nn.Linear(dimension, self.hl_neuron_count),
-            torch.nn.SiLU(),
-            torch.nn.Linear(self.hl_neuron_count, self.hl_neuron_count),
-            torch.nn.SiLU(),
-            torch.nn.Linear(self.hl_neuron_count, dimension)
-        )
-
-        # Initialise weights:
-        with torch.no_grad():
-            self.apply(self.initialise)
-
-    def forward(self, x):
-        return self.mlp.forward(x)
-
-    def initialise(self, m):
-        if isinstance(m, torch.nn.Linear):
-            torch.nn.init.xavier_normal_(m.weight)
-
-
-class SparseGPModel(gpytorch.models.ApproximateGP):
-    def __init__(self, inducing_points, dimensions):
-        # Set up distribution:
-        variational_distribution = gpytorch.variational.CholeskyVariationalDistribution(
-            inducing_points.size(0)
-        )
-
-        # Set up variational strategy:
-        variational_strategy = gpytorch.variational.VariationalStrategy(
-            self, inducing_points, variational_distribution,
-            learn_inducing_locations=True
-        )
-
-        # Inherit rest of init logic from approximate GP:
-        super().__init__(variational_strategy)
-
-        # Instantiate input transform:
-        print(f"Using dimensions: {dimensions}")
-        self.input_transform = DeepInputTransformation(dimensions)
-
-        # Define mean and additive covariance functions:
-        self.mean_module = gpytorch.means.ConstantMean()
-        self.covar_module = gpytorch.kernels.ScaleKernel(
-            gpytorch.kernels.RBFKernel(ard_num_dims=dimensions)
-        )
-
-    def forward(self, x):
-        # Warp input:
-        warped_x = self.input_transform(x)
-
-        # Calculate mean of input:
-        mean_x = self.mean_module(warped_x)
-        covar_x = self.covar_module(warped_x)
-        return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
-
-
-class ModelManager:
-
-    def __init__(self, inducing_points, learning_rate):
-        # Set up model:
-        inducing_points = torch.tensor(inducing_points)
-        self.likelihood = gpytorch.likelihoods.GaussianLikelihood()
-        self.model = SparseGPModel(inducing_points, inducing_points.shape[1])
-
-        # The default noise constraint sets the minimum too high,
-        # we need the more permissive constraint of positivity:
-        self.likelihood.noise_covar.register_constraint("raw_noise", gpytorch.constraints.Positive())
-
-        # Set up optimisation - Adam seems to work best (need to properly test this):
-        self.optimizer = torch.optim.Adam([
-            {'params': self.model.parameters()},
-            {'params': self.likelihood.parameters()},
-        ], lr=learning_rate)
-
-        self.loss_history = []
-
-    def train_epoch(self, dataloader, num_data):
-        # Ensure parameters are trainable:
-        self.model.train()
-        self.likelihood.train()
-
-        # Set up loss:
-        mll = gpytorch.mlls.PredictiveLogLikelihood(self.likelihood, self.model, num_data=num_data)
-
-        # Run through entire dataset:
-        for batch_index, (x_batch, y_batch) in enumerate(dataloader):
-            self.optimizer.zero_grad()
-            output_distribution = self.model(x_batch)
-            loss = -mll(output_distribution, y_batch)
-            loss.backward()
-
-            # Step through optimisers:
-            self.optimizer.step()
-            if (batch_index + 1) % 10 == 0:
-                print(batch_index, loss.item(), flush=True)
-
-            # Ensure inducing points don't go out of bounds (implicitly
-            # imposing constraints with transforms degrades performance):
-            with torch.no_grad():
-                inducing_points = self.model.variational_strategy.inducing_points.detach()
-                self.model.variational_strategy.inducing_points[inducing_points > 1] = 1
-                self.model.variational_strategy.inducing_points[inducing_points < 0] = 0
-
-            self.loss_history.append(loss.detach())
-
-    def train(self, x, y, batch_size, epochs=1):
-        # Convert datasets to pytorch:
-        x_tensor = torch.tensor(x)
-        y_tensor = torch.tensor(y)
-        dataset = TensorDataset(x_tensor, y_tensor)
-
-        for _ in range(epochs):
-            dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-            self.train_epoch(dataloader, len(y))
-
-    def save(self, experiment_dirpath, metric_name):
-        # Generate GP model folder if not present:
-        model_dirpath = os.path.join(experiment_dirpath, "gaussian_process_models")
-        if not os.path.exists(model_dirpath):
-            os.mkdir(model_dirpath)
-
-        # Generate folder for given metric:
-        metric_folderpath = os.path.join(model_dirpath, metric_name)
-        if not os.path.exists(metric_folderpath):
-            os.mkdir(metric_folderpath)
-
-        # Save model components:
-        model_filepath = os.path.join(metric_folderpath, "model.pth")
-        torch.save(self.model, model_filepath)
-        likelihood_filepath = os.path.join(metric_folderpath, "likelihood.pth")
-        torch.save(self.likelihood, likelihood_filepath)
-        optimiser_filepath = os.path.join(metric_folderpath, "optimiser.pth")
-        torch.save(self.optimizer, optimiser_filepath)
-
-    def load(self, experiment_dirpath, metric_name):
-        id_folderpath = os.path.join(experiment_dirpath, "gaussian_process_models", metric_name)
-        self.model = torch.load(os.path.join(id_folderpath, "model.pth"), weights_only=False)
-        self.likelihood = torch.load(os.path.join(id_folderpath, "likelihood.pth"), weights_only=False)
-        self.optimizer = torch.load(os.path.join(id_folderpath, "optimiser.pth"), weights_only=False)
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='Predict matrix organisation over the MCMC posteriors')
+    parser.add_argument(
+        '--mcmc_dirpath', type=str, required=True,
+        help='Folder containing the WT and RD MCMC chains and likelihoods, e.g. '
+             'model_experiments/2026-09-16-collisions_shape/disc_cov_mcmc_results.'
+    )
+    parser.add_argument(
+        '--matrix_experiment_dirpath', type=str, required=True,
+        help='Matrix gridsearch experiment containing config.json, summary_data and the op65 GP model, '
+             'e.g. model_experiments/2026-09-25-matrix_shape.'
+    )
+    args = parser.parse_args()
+    return args
 
 
 class ScalingManager:
@@ -239,17 +104,17 @@ class ScalingManager:
 
 
 def main():
-    MCMC_SUBPATH = 'disc_cov_mcmc_results'
+    args = parse_arguments()
 
     # Establish save path:
-    matrix_inference_dirpath = os.path.join(MCMC_DIRPATH, MCMC_SUBPATH, "matrix_inference")
+    matrix_inference_dirpath = os.path.join(args.mcmc_dirpath, "matrix_inference")
     if not os.path.exists(matrix_inference_dirpath):
         os.mkdir(matrix_inference_dirpath)
 
     # Load posterior distribution:
     print("Loading posterior distributions...", flush=True)
-    wt_chain = np.load(os.path.join(MCMC_DIRPATH, MCMC_SUBPATH, "wt_mcmc_chain.npy"))
-    rd_chain = np.load(os.path.join(MCMC_DIRPATH, MCMC_SUBPATH, "rd_mcmc_chain.npy"))
+    wt_chain = np.load(os.path.join(args.mcmc_dirpath, "wt_mcmc_chain.npy"))
+    rd_chain = np.load(os.path.join(args.mcmc_dirpath, "rd_mcmc_chain.npy"))
 
     # Subsampled posterior:
     chain_length = wt_chain.shape[0]
@@ -259,8 +124,8 @@ def main():
     print(f"Size of posteriors: {wt_posterior.shape}")
 
     # Get subsampled likelihoods:
-    ctl_likelihoods = np.load(os.path.join(MCMC_DIRPATH, MCMC_SUBPATH, "wt_mcmc_likelihoods.npy"))
-    rd_likelihoods = np.load(os.path.join(MCMC_DIRPATH, MCMC_SUBPATH, "rd_mcmc_likelihoods.npy"))
+    ctl_likelihoods = np.load(os.path.join(args.mcmc_dirpath, "wt_mcmc_likelihoods.npy"))
+    rd_likelihoods = np.load(os.path.join(args.mcmc_dirpath, "rd_mcmc_likelihoods.npy"))
     ctl_ss_likelihoods = ctl_likelihoods[half_index::256, :, 0].flatten()
     rd_ss_likelihoods = rd_likelihoods[half_index::256, :, 0].flatten()
 
@@ -280,7 +145,7 @@ def main():
     # Load GP model for matrix organisation:
     dummy_inducing_points = np.ones((16, MATRIX_PARAM_DIMS))
     op65_manager = ModelManager(dummy_inducing_points, 0.003)
-    op65_manager.load(MATRIX_DIRPATH, "op65")
+    op65_manager.load(get_experiment_model_folderpath(args.matrix_experiment_dirpath, "op65"))
 
     # # Generate Sobol sequence for (relatively) even coverage of input space (for mesh plotting):
     # sobol_sampler = qmc.Sobol(d=14, scramble=True, rng=0)
@@ -292,10 +157,10 @@ def main():
     # np.save(os.path.join(matrix_inference_dirpath, "meshgrid_predictions.npy"), predictions)
 
     # Get relevant scaling information:
-    with open(os.path.join(MATRIX_DIRPATH, "config.json")) as json_file:
+    with open(os.path.join(args.matrix_experiment_dirpath, "config.json")) as json_file:
         matrix_config_dictionary = json.load(json_file)
     matrix_parameters = matrix_config_dictionary["gridsearch_parameters"]
-    order_parameters = np.load(os.path.join(MATRIX_DIRPATH, "summary_data", "matrix_order_parameters.npy"))
+    order_parameters = np.load(os.path.join(args.matrix_experiment_dirpath, "summary_data", "matrix_order_parameters.npy"))
     scaling_manager = ScalingManager(matrix_parameters, order_parameters, op65_manager)
 
     # Set up gridsearch over advection rate, sample rate and cell number:
@@ -333,7 +198,7 @@ def main():
     wt_posterior_array = np.array(wt_posterior_array).reshape(CC_SAMPLE_COUNT, SR_SAMPLE_COUNT, MC_SAMPLE_COUNT, -1)
     rd_posterior_array = np.array(rd_posterior_array).reshape(CC_SAMPLE_COUNT, SR_SAMPLE_COUNT, MC_SAMPLE_COUNT, -1)
 
-    matrix_inference_dirpath = os.path.join(MCMC_DIRPATH, MCMC_SUBPATH, "matrix_inference")
+    matrix_inference_dirpath = os.path.join(args.mcmc_dirpath, "matrix_inference")
     if not os.path.exists(matrix_inference_dirpath):
         os.mkdir(matrix_inference_dirpath)
 

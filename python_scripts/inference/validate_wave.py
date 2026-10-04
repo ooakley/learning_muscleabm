@@ -10,40 +10,20 @@ import os
 import json
 import warnings
 
-import gpytorch
 import torch
 
 import numpy as np
 
 from scipy.optimize import minimize_scalar
 
+from muscleabm.datasets import DISCREPANCY_FRACTIONS, MODEL_METRICS, WETLAB_METRICS
+from muscleabm.emulators import load_torch_object, run_inference
+
 # Match the precision used to train the GP models:
 torch.set_default_dtype(torch.float64)
 
-WETLAB_METRICS = [
-    "mean_speed",
-    "mean_mr",
-    "anni",
-    "coherency_fraction"
-]
-MODEL_METRICS = [
-    "speeds",
-    "meander_ratios",
-    "ann_indices",
-    "coherency"
-]
-
 # Wet lab condition of each phenotype label used by the wave generation scripts:
 PHENOTYPE_CONDITIONS = {"WT": "CTL", "RD": "RD"}
-
-# Structural uncertainty added to the experimental covariance by the MCMC script, as a
-# fraction of the range of each wet lab curve. Keep in line with mcmc_inference.py:
-DISCREPANCY_FRACTIONS = {
-    "mean_speed": 0.05,
-    "mean_mr": 0.05,
-    "anni": 0.05,
-    "coherency_fraction": 0.05
-}
 
 BATCH_SIZE = 512
 
@@ -68,24 +48,6 @@ def parse_arguments():
     )
     args = parser.parse_args()
     return args
-
-
-# The models are saved whole, so classes with these names need to exist here for them to
-# load. Their layers and parameters come from the saved model, not from these definitions:
-class DeepInputTransformation(torch.nn.Module):
-    def forward(self, x):
-        return self.mlp.forward(x)
-
-
-class SparseGPModel(gpytorch.models.ApproximateGP):
-    def forward(self, x):
-        # Warp input:
-        warped_x = self.input_transform(x)
-
-        # Calculate mean of input:
-        mean_x = self.mean_module(warped_x)
-        covar_x = self.covar_module(warped_x)
-        return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
 
 
 def load_wave_data(wave_dirpath, metric_name):
@@ -133,24 +95,6 @@ def get_design_count_number(wave_dirpath, row_count):
     if row_count % design_count_number != 0:
         raise ValueError(f"{row_count} rows cannot be split into curves of {design_count_number} design counts.")
     return design_count_number
-
-
-def run_inference(model, likelihood, inputs, batch_size=512):
-    """Whitened predictive mean, and latent and total variance, of the GP at each input."""
-    tensor_input = torch.tensor(inputs)
-    model.eval()
-    likelihood.eval()
-    mean_array = []
-    latent_variance_array = []
-    total_variance_array = []
-    with torch.no_grad():
-        for batch_start in range(0, tensor_input.shape[0], batch_size):
-            latent_preds = model(tensor_input[batch_start:batch_start + batch_size])
-            preds = likelihood(latent_preds)
-            mean_array.append(latent_preds.mean.detach().numpy())
-            latent_variance_array.append(latent_preds.variance.detach().numpy())
-            total_variance_array.append(preds.variance.detach().numpy())
-    return np.concatenate(mean_array), np.concatenate(latent_variance_array), np.concatenate(total_variance_array)
 
 
 def get_experimental_variances(wetlab_metric):
@@ -293,8 +237,8 @@ def main():
         print(f"Using {np.count_nonzero(valid_mask)} of {parameter_matrix.shape[0]} simulations...")
 
         # Load model and its whitening transform:
-        model = torch.load(os.path.join(id_folderpath, "model.pth"), weights_only=False)
-        likelihood = torch.load(os.path.join(id_folderpath, "likelihood.pth"), weights_only=False)
+        model = load_torch_object(os.path.join(id_folderpath, "model.pth"))
+        likelihood = load_torch_object(os.path.join(id_folderpath, "likelihood.pth"))
         whiten_mean = float(np.load(os.path.join(id_folderpath, "whiten_mean.npy")))
         whiten_std = float(np.load(os.path.join(id_folderpath, "whiten_std.npy")))
 

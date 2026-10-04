@@ -1,4 +1,5 @@
 import os
+import argparse
 import ot
 import json
 import skimage
@@ -18,7 +19,6 @@ import matplotlib.pyplot as plt
 from torch.utils.data import TensorDataset, DataLoader
 from scipy.stats import qmc
 
-DATA_DIRECTORY = "./wetlab_data/OEO20241206"
 ROWS = ["A", "B", "C"]
 COLUMNS = ["1", "2", "3", "4", "5", "6"]
 
@@ -317,9 +317,20 @@ def run_inference(model, likelihood, inputs):
     return np.concatenate(predictions)
 
 
+def parse_arguments():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--data_dirpath", required=True,
+        help="Wet lab experiment folder containing fitting_dataset.csv and trajectories, e.g. wetlab_data/OEO20241206."
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_arguments()
+
     # Get previously processed wet lab data:
-    processed_dataset_filepath = os.path.join(DATA_DIRECTORY, "fitting_dataset.csv")
+    processed_dataset_filepath = os.path.join(args.data_dirpath, "fitting_dataset.csv")
     experiment_dataframe = pd.read_csv(processed_dataset_filepath, index_col=0)
 
     # Summarise speeds:
@@ -330,7 +341,7 @@ def main():
 
     # Get wet lab trajectory data:
     print("Loading and processing wet lab trajectory data...")
-    trajectory_folderpath = os.path.join(DATA_DIRECTORY, "trajectories")
+    trajectory_folderpath = os.path.join(args.data_dirpath, "trajectories")
     trajectory_dictionary = {column: [] for column in COLUMNS}
 
     # Each different cell type is contained in different columns of 3 wells,

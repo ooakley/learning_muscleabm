@@ -35,16 +35,22 @@ dry_run=${DRY_RUN:-false}
 
 # --- Stage scripts ---
 # Each is called as: sbatch <script> <experiment_dirpath> <hm_wave_id>
-# (the MCMC script also gets the GP models folder as a third argument).
+# (the training script also gets the GP models folder name as a third argument, and the
+# MCMC script the GP models folder).
 simulate_script="bash_scripts/gridsearch.sh"
 collate_script="bash_scripts/collate_gridsearch_data.sh"
 train_script="bash_scripts/gp_regression.sh"
 mcmc_script="bash_scripts/mcmc_fit.sh"
 # Generic script for the light Python steps (generate, collate_hm, validate):
 python_stage_script="bash_scripts/run_python_stage.sh"
+# Python scripts run by the generic script:
+generate_python_script="python_scripts/search/generate_hm_sweep.py"
+collate_hm_python_script="python_scripts/collation/collate_hm.py"
+validate_python_script="python_scripts/inference/validate_wave.py"
 
 # --- Settings ---
-# Folder name written by gp_training.py, which depends on the constants at the top of it:
+# Folder the GP models are saved to inside each wave folder. It is passed to the training
+# script, so it does not change with the training settings at the top of gp_training.py:
 gp_folder_name="pll_gp_models_e15_ip512_l2_n32"
 # Folder name written by the MCMC script, inside each wave folder:
 mcmc_dirname="disc_cov_mcmc_results"
@@ -84,7 +90,8 @@ if [ ! -f "${experiment_dirpath}/config.json" ]; then
     echo "No config.json found in ${experiment_dirpath}, exiting..."
     exit 1
 fi
-for stage_script in "$simulate_script" "$collate_script" "$train_script" "$mcmc_script" "$python_stage_script"; do
+for stage_script in "$simulate_script" "$collate_script" "$train_script" "$mcmc_script" "$python_stage_script" \
+        "$generate_python_script" "$collate_hm_python_script" "$validate_python_script"; do
     if [ ! -f "$stage_script" ]; then
         echo "Stage script ${stage_script} not found: run this from the repository root, exiting..."
         exit 1
@@ -128,6 +135,21 @@ fi
 
 # SLURM does not create log folders, and a job whose log folder is missing fails at once:
 mkdir -p slurm_out logs
+
+# The training and MCMC jobs run with uv's --no-sync, so install the environment (including
+# the shared muscleabm package that the Python scripts import) before anything is queued:
+if [ "$dry_run" = true ]; then
+    echo "Would run: uv sync"
+else
+    if ! command -v uv > /dev/null && command -v ml > /dev/null; then
+        ml load uv
+    fi
+    if ! command -v uv > /dev/null; then
+        echo "uv not found: load it first (ml load uv), exiting..."
+        exit 1
+    fi
+    uv sync
+fi
 
 # --- Helpers ---
 # Submit a job and print its ID. Usage: submit <label> <sbatch arguments...>
@@ -213,7 +235,7 @@ for wave in $(seq "$first_wave_id" $(( wave_count - 1 ))); do
         if [ ! -d "${wave_dirpath}/run_data" ]; then
             set_dependency afterok "$mcmc"
             generate=$(submit "generate" ${dependency[@]+"${dependency[@]}"} --job-name="hm${wave}_generate" \
-                "$python_stage_script" ./python_scripts/generate_hm_sweep.py \
+                "$python_stage_script" "$generate_python_script" \
                 --experiment_dirpath "$experiment_dirpath" --hm_wave_id $(( wave - 1 )) \
                 --mcmc_dirname "$mcmc_dirname" --sample_count "$hm_sample_count" \
                 --burn_in_fraction "$burn_in_fraction")
@@ -246,7 +268,7 @@ for wave in $(seq "$first_wave_id" $(( wave_count - 1 ))); do
         # 4. Rebuild the global dataset, stopping the chain if too much of the wave failed:
         set_dependency afterok "$collate"
         collate_hm=$(submit "collate_hm" "${dependency[@]}" --job-name="hm${wave}_collate_hm" \
-            "$python_stage_script" ./python_scripts/collate_hm.py \
+            "$python_stage_script" "$collate_hm_python_script" \
             --experiment_dirpath "$experiment_dirpath" --max_failed_fraction "$max_failed_fraction" \
             --required_hm_wave_id "$wave")
         submitted_job_ids+=("$collate_hm")
@@ -254,7 +276,7 @@ for wave in $(seq "$first_wave_id" $(( wave_count - 1 ))); do
         # 5. Test the previous wave's GP models against this wave's simulations (nothing waits on this):
         if [ "$run_validation" = true ] && [ "$wave" -gt 0 ]; then
             validate=$(submit "validate" "${dependency[@]}" --job-name="hm${wave}_validate" \
-                "$python_stage_script" ./python_scripts/validate_wave.py \
+                "$python_stage_script" "$validate_python_script" \
                 --experiment_dirpath "$experiment_dirpath" --hm_wave_id $(( wave - 1 )) \
                 --gp_models_dirpath "${experiment_dirpath}/hm$(( wave - 1 ))/${gp_folder_name}")
             submitted_job_ids+=("$validate")
@@ -265,7 +287,7 @@ for wave in $(seq "$first_wave_id" $(( wave_count - 1 ))); do
     if [ "$start_index" -le 3 ]; then
         set_dependency afterok "$collate_hm"
         train=$(submit "train" ${dependency[@]+"${dependency[@]}"} --job-name="hm${wave}_train" \
-            "$train_script" "$experiment_dirpath" "$wave")
+            "$train_script" "$experiment_dirpath" "$wave" "$gp_folder_name")
         submitted_job_ids+=("$train")
     fi
 

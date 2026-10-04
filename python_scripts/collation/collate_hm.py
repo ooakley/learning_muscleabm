@@ -11,13 +11,7 @@ import json
 
 import numpy as np
 
-GLOBAL_DATASET_FOLDER = "global_dataset"
-MODEL_METRICS = [
-    "speeds",
-    "meander_ratios",
-    "ann_indices",
-    "coherency"
-]
+from muscleabm.datasets import GLOBAL_DATASET_FOLDER, MODEL_METRICS
 
 
 def parse_arguments():
