@@ -5,17 +5,26 @@
 #SBATCH --ntasks=24
 #SBATCH --cpus-per-task=1
 #SBATCH --mem-per-cpu=1G
+#SBATCH --output=logs/%x_%j.out
 
-# Script inputs:
-usage="Usage: sbatch collate_gridsearch_data.sh <experiment_dirpath> <hm_wave_id>"
+# Collates the per-simulation outputs of one history matching wave into its summary_data
+# folder. Usage, from the repository root:
+#
+#     sbatch bash_scripts/collate_gridsearch_data.sh <experiment_dirpath> <hm_wave_id>
+set -eo pipefail
+
+# --- Arguments ---
+usage="Usage: sbatch bash_scripts/collate_gridsearch_data.sh <experiment_dirpath> <hm_wave_id>"
 experiment_dirpath=${1:?$usage}
 hm_wave_id=${2:?$usage}
 
 ml load uv
+# Lmod is not guaranteed to work with unset variables treated as errors, so only from here:
+set -u
 
 collate () {
     local collation_target=$1
-    uv run python python_scripts/collation/collate_site_analyses.py \
+    uv run --no-sync python python_scripts/collation/collate_site_analyses.py \
         --experiment_folderpath "$experiment_dirpath" \
         --hm_wave_id "$hm_wave_id" \
         --collation_target "$collation_target"
@@ -44,14 +53,10 @@ process_ids=()
 for collation_target in "${collation_targets[@]}"; do
     collate "$collation_target" &
     process_ids+=($!)
-    # Give the first collation a head start before launching the rest:
-    if [ "${#process_ids[@]}" -eq 1 ]; then
-        sleep 30
-    fi
 done
 
-# uv run python python_scripts/collation/collate_matrix_analyses.py \
-#     --experiment_folderpath $experiment_dirpath &
+# uv run --no-sync python python_scripts/collation/collate_matrix_analyses.py \
+#     --experiment_folderpath "$experiment_dirpath" &
 # process_ids+=($!)
 
 # A bare `wait` always succeeds, so wait for each collation in turn. The job fails if any

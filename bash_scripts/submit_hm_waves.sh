@@ -134,15 +134,18 @@ if [ "$first_stage_index" -le 3 ]; then
 fi
 
 # SLURM does not create log folders, and a job whose log folder is missing fails at once:
-mkdir -p slurm_out logs
+mkdir -p logs
 
-# The training and MCMC jobs run with uv's --no-sync, so install the environment (including
-# the shared muscleabm package that the Python scripts import) before anything is queued:
+# The job scripts run with uv's --no-sync, so install the environment (including the
+# shared muscleabm package that the Python scripts import) before anything is queued:
 if [ "$dry_run" = true ]; then
     echo "Would run: uv sync"
 else
     if ! command -v uv > /dev/null && command -v ml > /dev/null; then
+        # Lmod is not guaranteed to work with unset variables treated as errors:
+        set +u
         ml load uv
+        set -u
     fi
     if ! command -v uv > /dev/null; then
         echo "uv not found: load it first (ml load uv), exiting..."

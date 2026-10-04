@@ -67,4 +67,6 @@ model_parameter_json/*/*.csv
 model_parameter_json/*/*.png
 img_tmp/*
 plotting_scripts/*/*/*.npz
-logs
+# SLURM logs, keeping the folder itself as SLURM does not create it:
+logs/*
+!logs/.gitkeep

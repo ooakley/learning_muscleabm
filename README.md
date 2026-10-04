@@ -18,4 +18,9 @@ Scripts are run from the repository root, and are grouped in `python_scripts/` b
 | `sensitivity/` | Hessians, Fisher information, eigenparameters and interventions |
 | `wetlab/` | Analysing the wet lab trajectories |
 
-`bash_scripts/submit_hm_waves.sh` submits the history matching pipeline as a chain of SLURM jobs; see the comment at its top.
+## Job scripts
+
+`bash_scripts/` holds the SLURM job scripts, submitted from the repository root with `sbatch bash_scripts/<script> <arguments>`; each describes its arguments at its top. `bash_scripts/submit_hm_waves.sh` submits the history matching pipeline as a chain of these jobs.
+
+- Logs are written to `logs/`.
+- The jobs run Python with `uv run --no-sync`, so that array tasks do not all try to update the environment at once. Run `uv sync` before submitting after the dependencies change (`submit_hm_waves.sh` does this itself).
