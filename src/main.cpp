@@ -18,7 +18,7 @@ namespace po = boost::program_options;
 /*
 Hello! There are a lot of command line arguments - it's much easier to play around with the config file,
 and run the simulation with this handy python script (after compiling the code):
-python3 ./python_scripts/call_json_parameters.py --path_to_config ./example_config.json
+python3 ./python_scripts/simulation/call_json_parameters.py --path_to_config ./example_config.json
 */
 
 int main(int argc, char** argv) {
@@ -31,11 +31,14 @@ int main(int argc, char** argv) {
     int numberOfCells;
     int worldSize;
     int gridSize;
-    bool thereIsMatrixInteraction;
-    double matrixAdditionRate;
-    double matrixTurnoverRate;
     double matrixSampleRate;
     double patternSigma;
+    int patternFibreCount;
+
+    // Output options:
+    bool verbosePositionOutput;
+    bool summariseMatrixOutput;
+    bool writeMatrixTimeseries;
 
     // Cell behaviour parameters:
     CellParameters cellParams;
@@ -70,6 +73,11 @@ int main(int argc, char** argv) {
         // Repatterning parameters:
         ("patternSigma", po::value<double>(&patternSigma)->required(),
             "The standard deviation of the angular distribution of fibres in the existing pattern."
+        )
+        ("patternFibreCount", po::value<int>(&patternFibreCount)->default_value(0),
+            "Number of background fibres placed at each ECM site before the simulation starts, "
+            "with headings drawn from a normal distribution of standard deviation patternSigma. "
+            "Set to 0 to start with an empty matrix."
         )
         // Cell movement parameters:
         ("dt", po::value<double>(&cellParams.dt)->required(),
@@ -118,6 +126,17 @@ int main(int argc, char** argv) {
         )
         ("surfaceStickiness", po::value<double>(&cellParams.surfaceStickiness)->required(),
             "The Kon rate for stick-slip adhesions at the end of the cell."
+        )
+        // Output options:
+        ("verbosePositionOutput", po::value<bool>(&verbosePositionOutput)->default_value(false),
+            "Write internal cell state (polarity, actin flow, percepts etc.) alongside positions."
+        )
+        ("summariseMatrixOutput", po::value<bool>(&summariseMatrixOutput)->default_value(false),
+            "Write the average heading, concentration and fibre count of each ECM site on a single "
+            "line, instead of the heading of every fibre on one line per site."
+        )
+        ("writeMatrixTimeseries", po::value<bool>(&writeMatrixTimeseries)->default_value(false),
+            "Write the matrix after every timestep, instead of only at the end of the simulation."
         )
     ;
 
@@ -177,20 +196,37 @@ int main(int argc, char** argv) {
                 numberOfCells,
                 matrixSampleRate,
                 patternSigma,
+                patternFibreCount,
                 cellParams
             )
+        };
+
+        auto writeMatrix = [&]() {
+            if (summariseMatrixOutput) {
+                mainWorld.writeSummarisedMatrixToCSV(matrixFile);
+            } else {
+                mainWorld.writeMatrixToCSV(matrixFile);
+            }
         };
 
         std::cout << "Running simulation..." << std::endl;
         for (int i = 0; i < timeStepsToRun; ++i) {
             mainWorld.runSimulationStep();
-            mainWorld.writePositionsToCSV(csvFile);
-            // mainWorld.writeMatrixToCSV(matrixFile);
+            if (verbosePositionOutput) {
+                mainWorld.writeVerbosePositionsToCSV(csvFile);
+            } else {
+                mainWorld.writePositionsToCSV(csvFile);
+            }
+            if (writeMatrixTimeseries) {
+                writeMatrix();
+            }
         }
 
         // Write final matrix to file:
-        std::cout << "Writing matrix to file..." << std::endl;
-        mainWorld.writeMatrixToCSV(matrixFile);
+        if (!writeMatrixTimeseries) {
+            std::cout << "Writing matrix to file..." << std::endl;
+            writeMatrix();
+        }
 
         // We need to close files to flush remaining outputs to buffer.
         std::cout << "Closing files..." << std::endl;

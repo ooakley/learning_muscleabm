@@ -1,11 +1,8 @@
 #pragma once
+#include <memory>
 #include <random>
-#include <deque>
-#include <utility>
-#include <list>
-#include <boost/numeric/ublas/matrix.hpp>
-#include <boost/math/distributions/normal.hpp>
-namespace boostMatrix = boost::numeric::ublas;
+#include <tuple>
+#include <vector>
 
 class CellAgent {
 public:
@@ -62,7 +59,6 @@ public:
     // Instantaneous variable getters: (these variables are updated each timestep,
     // and represent the cell's percepts/actions)
     double getMovementDirection() const;
-    double getScaledActinFlowMagnitude() const;
     double getDirectionalInfluence() const;
     double getDirectionalIntensity() const;
     double getDirectionalShift() const;
@@ -78,17 +74,14 @@ public:
     // Setters for simulation (moving cells around etc.):
     void setPosition(std::tuple<double, double> newPosition);
     void setCILPolarityChange(double changeX, double changeY);
-    void setActinState(double setFlowDirection, double setFlowMagnitude);
 
     // Setters for simulating cell perception (e.g. updating cell percepts):
     void setDirectionalInfluence(double setDirectionalInfluence);
     void setDirectionalIntensity(double setDirectiontalIntensity);
-    void setLocalECMDensity(double setLocalDensity);
     void setLocalCellList(std::vector<std::shared_ptr<CellAgent>> setLocalAgents);
 
     // Simulation code:
     void takeRandomStep();
-    double sampleMovementHistory();
 
 private:
     // Randomness and seeding:
@@ -97,36 +90,6 @@ private:
     double dt;
     std::mt19937 seedGenerator;
     std::uniform_int_distribution<unsigned int> seedDistribution;
-
-    // Whether to simulate matrix interactions:
-    bool thereIsMatrixInteraction;
-
-    // State variables:
-    double x;
-    double y;
-    std::list<std::vector<double>> actinHistory;
-    std::deque<double> xMovementHistory;
-    std::deque<double> yMovementHistory;
-    std::deque<double> xPositionHistory;
-    std::deque<double> yPositionHistory;
-    double polarityX;
-    double polarityY;
-    double polarityDirection;
-    double polarityMagnitude;
-    double flowDirection;
-    double flowMagnitude;
-    double scaledFlowMagnitude;
-    double shapeDirection;
-
-    double stadiumX;
-    double stadiumY;
-    double adhesionFraction;
-    double effectiveRadius;
-
-    // History variables for analysis:
-    int collisionsThisTimepoint;
-    double finalCILEffectX;
-    double finalCILEffectY;
 
     // Movement parameters:
     double cueDiffusionRate;
@@ -137,6 +100,12 @@ private:
     double collisionAdvectionRate;
     double maximumSteadyStateActinFlow;
 
+    // Collision parameters:
+    double cellBodyRadius;
+    double cellAspectRatio; // Not used by the current collision model.
+    double collisionFlowReductionRate;
+    double adhesionReductionRate;
+
     // Shape parameters:
     double cellStiffness;
     double surfaceStickiness;
@@ -146,16 +115,20 @@ private:
     // Matrix parameters:
     double matrixCoupling;
 
-    // Collision parameters:
-    double cellBodyRadius;
-    double cellAspectRatio;
-    double majorAxisScaling;
-    double minorAxisScaling;
-    double collisionFlowReductionRate;
-    double adhesionReductionRate;
+    // State variables:
+    double x;
+    double y;
+    double stadiumX;
+    double stadiumY;
+    double polarityDirection;
+    double polarityMagnitude;
+    double flowDirection;
+    double flowMagnitude;
+    double shapeDirection;
+    double adhesionFraction;
+    double effectiveRadius;
 
     // Contact inhibition state variables:
-    double lowDiscrepancySample;
     double polarityChangeCilX;
     double polarityChangeCilY;
 
@@ -167,54 +140,28 @@ private:
     // Matrix percept state variables:
     double directionalInfluence; // -pi <= theta < pi
     double directionalIntensity; // 0 <= I < 1
-    double localECMDensity; // 0 <= D < 1
     std::vector<std::shared_ptr<CellAgent>> localAgents;
 
-    // Poisson sampling for step size:
+    // History variables for analysis:
+    int collisionsThisTimepoint;
+    double finalCILEffectX;
+    double finalCILEffectY;
+
+    // Generators for sampling noise in actin flow:
+    std::mt19937 generatorInfluence;
     std::mt19937 generatorProtrusion;
-    double poissonLambda;
+
+    // Generators for sampling matrix attachment points:
+    std::mt19937 generatorU1;
+    std::mt19937 generatorMatrixRadiusSampling;
 
     // General distributions:
     std::uniform_real_distribution<double> uniformDistribution;
     std::uniform_real_distribution<double> angleUniformDistribution;
-    std::bernoulli_distribution bernoulliDistribution;
     std::normal_distribution<double> standardNormalDistribution;
-
-    // We need to use a special distribution (von Mises) to sample from a random
-    // direction over a circle - unfortunately not included in std library:
-
-    // --> Member variables for von Mises sampling for directional step size:
-    std::mt19937 generatorU1, generatorU2, generatorB;
-
-    // --> Member functions for von Mises sampling:
-    double sampleVonMises(double kappa);
-
-    // Generators for collision shape sampling:
-    std::mt19937 generatorCollisionRadiusSampling;
-    std::mt19937 generatorCollisionAngleSampling;
-
-    // Generators for matrix shape sampling:
-    std::mt19937 generatorMatrixRadiusSampling;
-    std::mt19937 generatorMatrixAngleSampling;
-
-    // Generators for movement history sampling (orientation for fibre):
-    std::mt19937 generatorMovementSampling;
-
-    // Generator for selecting for environmental influence:
-    std::mt19937 generatorInfluence;
-
-    // Generator for finding random angle after loss of movement polarisation:
-    std::mt19937 generatorRandomRepolarisation;
-    std::mt19937 randomDeltaSample;
 
     // Simulation subfunctions:
     void runTrajectoryDependentCollisionLogic();
-    // void runAlternativeTrajectoryDependentCollisionLogic();
-    void runStochasticCollisionLogic();
-    void runCircularStochasticCollisionLogic();
-    void runDeterministicCollisionLogic();
-    std::tuple<int, double, double> samplePositionHistory();
-    // void collideWithCell(CellAgent localCell);
     std::tuple<bool, double, double, double, double> isPositionInStadium(
         double samplePointX, double samplePointY,
         double startX, double startY,
@@ -226,37 +173,10 @@ private:
     std::tuple<double, double, bool> implicitNextState(
         double stepSize, double A0, double X0
     );
-    std::tuple<double, bool> implicitNextAdhesion(
-        double stepSize, double adhesionFraction, double cellExtension
-    );
-    std::tuple<double, bool> implicitNextExtension(
-        double stepSize, double adhesionFraction, double cellExtension
-    );
-    void checkJacobianFD(double stepSize, double A, double X);
 
     // Utility functions:
     double angleMod(double angle) const;
     double nematicAngleMod(double angle) const;
-    double calculateMinimumAngularDistance(double headingA, double headingB) const;
-    double calculateShapeDeltaTowardsActin(double shapeHeading, double actinHeading) const;
     double calculateAngularDistance(double headingA, double headingB) const;
-    double findTotalActinFlowDirection() const;
-    double findTotalActinFlowMagnitude() const;
-    std::vector<double> findTotalActinFlowComponents() const;
-
-    void addToActinHistory(double actinFlowX, double actinFlowY);
-    void addToPositionHistory(double positionX, double positionY);
-    void ageActinHistory();
-
-    void addToMovementHistory(double movementX, double movementY);
-    double findDirectionalConcentration();
     double takePeriodicModulus(double queryPosition, double localPosition);
-    // double findShapeDirection();
-
-    std::vector<double> crossProduct(
-        std::vector<double> const a, std::vector<double> const b
-    );
-
-    // Function to prevent 0 polarisation:
-    // void safeZeroPolarisation();
 };

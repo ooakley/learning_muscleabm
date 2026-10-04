@@ -11,7 +11,8 @@
         "aspectRatio": 1,
         "matrixCoupling": 0,
         "matrixSampleRate": 0,
-        "patternSigma": 0
+        "patternSigma": 0,
+        "patternFibreCount": 0
     },
     "gridsearch_parameters": [
         ["cueDiffusionRate", [0.0001, 0.02]],

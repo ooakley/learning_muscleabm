@@ -6,11 +6,7 @@
     "worldSize": 2048,
     "gridSize": 64,
     "dt": 1,
-    "thereIsMatrixInteraction": 1,
     "aspectRatio": 1,
-    "matrixTurnoverRate": 0.00,
-    "matrixAdditionRate": 0.00,
-    "matrixAdvectionRate": 0,
     "cueDiffusionRate": 0.008065250761620698,
     "cueKa": 0.7440216590342112,
     "fluctuationAmplitude": 0.00023617812267504634,
@@ -21,6 +17,14 @@
     "cellBodyRadius": 28.455544114112854,
     "collisionFlowReductionRate": 0.3188132382929325,
     "collisionAdvectionRate": 0.11022941954433918,
-    "stretchFactor": 0.6981688137166202,
-    "slipFactor": 0.03531462272619829
+    "adhesionReductionRate": 0.5,
+    "cellStiffness": 0.1,
+    "surfaceStickiness": 10,
+    "matrixCoupling": 0,
+    "matrixSampleRate": 0,
+    "patternSigma": 0,
+    "patternFibreCount": 0,
+    "verbosePositionOutput": false,
+    "summariseMatrixOutput": false,
+    "writeMatrixTimeseries": false
 }

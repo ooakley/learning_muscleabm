@@ -57,7 +57,7 @@ TEST_F(CellAgentTest, RandomWalkAtZero) {
         EXPECT_NE(previousX, cellAgent->getX());
         EXPECT_NE(previousY, cellAgent->getY());
 
-        // // Update the start position:
+        // Update the start position:
         previousX = cellAgent->getX();
         previousY = cellAgent->getY();
     }

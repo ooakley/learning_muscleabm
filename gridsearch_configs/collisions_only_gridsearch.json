@@ -14,7 +14,8 @@
         "adhesionReductionRate": 1,
         "matrixCoupling": 0,
         "matrixSampleRate": 0, 
-        "patternSigma": 3
+        "patternSigma": 3,
+        "patternFibreCount": 0
     },
     "gridsearch_parameters": [
         ["cueDiffusionRate", [0.0001, 0.02]],
