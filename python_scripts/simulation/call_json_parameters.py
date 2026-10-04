@@ -5,6 +5,7 @@ import time
 import argparse
 import os
 import json
+import subprocess
 
 
 def parse_arguments():
@@ -21,13 +22,13 @@ def main():
     with open(args.path_to_config, 'r') as file:
         parameter_dictionary = json.load(file)
 
-    full_command = "./build/src/main "
+    command = ["./build/src/main"]
     for key, value in parameter_dictionary.items():
-        argument_string = f"--{key} {value} "
-        full_command += argument_string
+        command += [f"--{key}", f"{value}"]
 
-    print(full_command)
-    os.system(full_command)
+    print(" ".join(command), flush=True)
+    # Raise an error if the simulation fails, so that the job running it can tell:
+    subprocess.run(command, check=True)
 
     text_filepath = os.path.join(os.path.dirname(args.path_to_config), "sim_time.txt")
     with open(text_filepath, 'w') as output:
