@@ -82,9 +82,6 @@ def main():
     if args.task_id == 0:
         print("Generating samples...", flush=True)
 
-    # Initialise rng:
-    generator = np.random.default_rng(args.task_id)
-
     # Generate parameter samples:
     analysis_type = args.analysis_type
     if args.task_id == 0:

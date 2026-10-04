@@ -81,7 +81,7 @@ def bures_wasserstein_distance_matrix(input_matrices):
             # -- Symmetrise (if floating-point error introduces off-diagonals):
             inner = 0.5 * (inner + inner.T) 
             trace_term = np.trace(sqrt_matrix(inner))
-            sq_dist = np.trace(A) + traces[j] - (2 * trace_term)
+            sq_dist = trace_A + traces[j] - (2 * trace_term)
             sq_dist = max(sq_dist, 0.0)
             dist = np.sqrt(sq_dist)
             out[i, j] = dist
@@ -141,7 +141,6 @@ def main():
     # Load fims:
     fim_dirpath = os.path.join(args.experiment_dirpath, "op65_fullrank_FIM")
     sample_fims = np.load(os.path.join(fim_dirpath, "fim_estimate.npy"))
-    sample_inputs = np.load(os.path.join(fim_dirpath, "fim_inputs.npy"))
 
     embeddings_dirpath = os.path.join(args.experiment_dirpath, "embeddings")
     if not os.path.exists(embeddings_dirpath):

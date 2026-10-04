@@ -1,20 +1,11 @@
 import os
 import argparse
-import ot
-import json
 import skimage
 import torch
 import gpytorch
 
-import scipy.stats
-import scipy.spatial
-
 import numpy as np
 import pandas as pd
-import seaborn as sns
-import colorcet as cc
-
-import matplotlib.pyplot as plt
 
 from torch.utils.data import TensorDataset, DataLoader
 from scipy.stats import qmc
@@ -155,7 +146,6 @@ def get_gridsearch_data(folder_name):
 
     # Discard failed simulations:
     nan_mask = np.any(np.isnan(distances), axis=(1, 2))
-    nan_parameters = parameters[nan_mask, :]
 
     # Temporary nan mask for overconfluent simulations:
     cell_number = parameters[:, 5]
@@ -245,9 +235,9 @@ def train_model(model, likelihood, x_dataset, y_dataset, epochs=50):
     train_x = torch.tensor(x_dataset, dtype=torch.float32)
     train_y = torch.tensor(y_dataset, dtype=torch.float32)
 
-    # Initialise dataloaders:
+    # Initialise dataloaders (for the commented-out minibatch loop below):
     train_dataset = TensorDataset(train_x, train_y)
-    train_loader = DataLoader(train_dataset, batch_size=512, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=512, shuffle=True)  # noqa: F841
 
     # Set up training process:
     model.train()

@@ -1,8 +1,6 @@
 import os
 import argparse
 
-import scipy
-
 import numpy as np
 
 N_COMPONENTS = 20

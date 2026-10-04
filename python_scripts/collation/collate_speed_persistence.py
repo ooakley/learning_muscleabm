@@ -54,7 +54,7 @@ def collate_data(experiment_folderpath, summarise_filename, sample_count):
             overall_mean = np.mean(stationary_mean, axis=0)
             overall_std = np.std(stationary_mean, axis=0)
             out_data.append([overall_mean, overall_std])
-        except:
+        except Exception:
             print(f"Empty or incorrect data encountered at {folder_id}, skipping...")
             out_data.append([np.nan, np.nan])
 

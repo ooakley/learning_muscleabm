@@ -326,9 +326,9 @@ def main():
     run_folderpath = args.run_folderpath
     folder_id = args.folder_id
     if args.com_analysis:
-        print(f"Carrying out CoM analysis...", flush=True)
+        print("Carrying out CoM analysis...", flush=True)
     else:
-        print(f"Carrying out cell front analysis...", flush=True)
+        print("Carrying out cell front analysis...", flush=True)
 
     # Get arguments to simulation:
     json_filepath = os.path.join(run_folderpath, f"{folder_id}_arguments.json")

@@ -1,16 +1,10 @@
 import os
-import json
 import argparse
 
 import torch
 
-import scipy.stats
-
-import colorcet as cc
 import pandas as pd
 import numpy as np
-
-import matplotlib.pyplot as plt
 
 from statsmodels.regression import mixed_linear_model
 
@@ -180,9 +174,9 @@ def get_proposal(x, rng):
 def ll_calculation(metric_data, mu, sigma):
     t_mean = metric_data["target"]
     t_se = metric_data["se"]
-    l = np.abs(t_mean - mu)
+    absolute_error = np.abs(t_mean - mu)
     scale = 1 / np.sqrt(2 * np.pi * (t_se**2 + sigma**2))
-    exponent = - l**2 / (2 * (t_se**2 + sigma**2))
+    exponent = - absolute_error**2 / (2 * (t_se**2 + sigma**2))
     return np.log(scale) + exponent
 
 
