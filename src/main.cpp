@@ -111,9 +111,6 @@ int main(int argc, char** argv) {
         ("cellBodyRadius", po::value<double>(&cellParams.cellBodyRadius)->required(),
             "Radius of the cell body for collision calculations."
         )
-        ("aspectRatio", po::value<double>(&cellParams.aspectRatio)->required(),
-            "Degree of polarisation at which cell angular concentration reaches half its saturation value."
-        )
         ("collisionFlowReductionRate", po::value<double>(&cellParams.collisionFlowReductionRate)->required(),
             "Rate at which actin flow in the direction of a collision is reduced by a collision."
         )
