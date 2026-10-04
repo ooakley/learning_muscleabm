@@ -3,7 +3,12 @@
 #
 # Run from the repository root, on a login node (with bash, not sbatch):
 #
-#     bash bash_scripts/submit_hm_waves.sh <experiment_dirpath> <wave_count> [first_wave_id] [first_stage]
+#     bash bash_scripts/submit_hm_waves.sh <experiment_dirpath> <hm_config_path> [first_wave_id] [first_stage]
+#
+# The history matching config (see configs/history_matching_configs/default.json, and
+# muscleabm/history_matching.py for what each setting means) sets the number of waves, the
+# size of each wave after the first, the MCMC temperature its samples are drawn from, and
+# the architecture and training settings of the GP emulators.
 #
 # This runs waves first_wave_id (default 0) up to wave_count - 1. For each wave it submits:
 #
@@ -17,17 +22,18 @@
 # To pick a chain back up after a failure, give the wave and the stage to restart from
 # (generate, simulate, collate, train or mcmc). first_stage only applies to the first wave:
 #
-#     bash bash_scripts/submit_hm_waves.sh model_experiments/2026-10-02-collisions_shape 4 2 train
+#     bash bash_scripts/submit_hm_waves.sh model_experiments/2026-10-02-collisions_shape \
+#         configs/history_matching_configs/default.json 2 train
 #
 # To print the sbatch commands without submitting anything:
 #
-#     DRY_RUN=true bash bash_scripts/submit_hm_waves.sh <experiment_dirpath> <wave_count>
+#     DRY_RUN=true bash bash_scripts/submit_hm_waves.sh <experiment_dirpath> <hm_config_path>
 set -euo pipefail
 
 # --- Arguments ---
-usage="Usage: bash submit_hm_waves.sh <experiment_dirpath> <wave_count> [first_wave_id] [first_stage]"
+usage="Usage: bash submit_hm_waves.sh <experiment_dirpath> <hm_config_path> [first_wave_id] [first_stage]"
 experiment_dirpath=${1:?$usage}
-wave_count=${2:?$usage}
+hm_config_path=${2:?$usage}
 first_wave_id=${3:-0}
 first_stage=${4:-generate}
 experiment_dirpath=${experiment_dirpath%/}
@@ -35,7 +41,7 @@ dry_run=${DRY_RUN:-false}
 
 # --- Stage scripts ---
 # Each is called as: sbatch <script> <experiment_dirpath> <hm_wave_id>
-# (the training script also gets the GP models folder name as a third argument, and the
+# (the training script also gets the GP models folder name and the GP settings, and the
 # MCMC script the GP models folder).
 simulate_script="bash_scripts/gridsearch.sh"
 collate_script="bash_scripts/collate_gridsearch_data.sh"
@@ -48,14 +54,36 @@ generate_python_script="python_scripts/search/generate_hm_sweep.py"
 collate_hm_python_script="python_scripts/collation/collate_hm.py"
 validate_python_script="python_scripts/inference/validate_wave.py"
 
+# --- History matching config ---
+# Read and checked by muscleabm/history_matching.py, so that a mistake stops the submission.
+# It prints, one per line: wave_count, wave_size, samples_per_phenotype (half of wave_size),
+# temperature_index, gp_folder_name (the folder the GP models are saved to inside each wave
+# folder, named after the GP settings) and gp_training_arguments (the GP settings, as
+# arguments of gp_training.py):
+if [ ! -f "$hm_config_path" ]; then
+    echo "No history matching config found at ${hm_config_path}, exiting..."
+    exit 1
+fi
+if [ ! -f muscleabm/history_matching.py ]; then
+    echo "muscleabm/history_matching.py not found: run this from the repository root, exiting..."
+    exit 1
+fi
+hm_settings=$(python3 -m muscleabm.history_matching "$hm_config_path")
+{
+    read -r wave_count
+    read -r wave_size
+    read -r samples_per_phenotype
+    read -r temperature_index
+    read -r gp_folder_name
+    read -r -a gp_training_arguments
+} <<< "$hm_settings"
+echo "History matching config ${hm_config_path}: ${wave_count} waves of ${wave_size} simulations" \
+    "(${samples_per_phenotype} per phenotype, after wave 0), drawn from temperature ${temperature_index}," \
+    "GP models in ${gp_folder_name}"
+
 # --- Settings ---
-# Folder the GP models are saved to inside each wave folder. It is passed to the training
-# script, so it does not change with the training settings at the top of gp_training.py:
-gp_folder_name="pll_gp_models_e15_ip512_l2_n32"
 # Folder name written by the MCMC script, inside each wave folder:
 mcmc_dirname="disc_cov_mcmc_results"
-# Posterior samples drawn per phenotype for each wave after the first:
-hm_sample_count=16384
 # Must match the burn-in fraction used by the MCMC stage script:
 burn_in_fraction=0.25
 # Simulations run by each array task of the simulation script, and tasks allowed at once:
@@ -78,12 +106,12 @@ if [ "$first_stage_index" -lt 0 ]; then
     echo "first_stage must be one of: ${stage_names[*]} (got ${first_stage}), exiting..."
     exit 1
 fi
-if ! [[ "$wave_count" =~ ^[0-9]+$ && "$first_wave_id" =~ ^[0-9]+$ ]]; then
-    echo "wave_count and first_wave_id must be whole numbers, exiting..."
+if ! [[ "$first_wave_id" =~ ^[0-9]+$ ]]; then
+    echo "first_wave_id must be a whole number, exiting..."
     exit 1
 fi
 if [ "$first_wave_id" -ge "$wave_count" ]; then
-    echo "first_wave_id (${first_wave_id}) must be below wave_count (${wave_count}), exiting..."
+    echo "first_wave_id (${first_wave_id}) must be below the config's wave_count (${wave_count}), exiting..."
     exit 1
 fi
 if [ ! -f "${experiment_dirpath}/config.json" ]; then
@@ -222,7 +250,7 @@ get_simulation_count () {
         python3 -c "import json, sys; c = json.load(open(sys.argv[1])); print(c['sample_count'] * len(c['phenotypes']))" \
             "$hm_config_filepath"
     else
-        echo $(( 2 * hm_sample_count ))
+        echo "$wave_size"
     fi
 }
 
@@ -247,8 +275,8 @@ for wave in $(seq "$first_wave_id" $(( wave_count - 1 ))); do
             generate=$(submit "generate" ${dependency[@]+"${dependency[@]}"} --job-name="hm${wave}_generate" \
                 "$(log_argument "$generate_python_script")" "$python_stage_script" "$generate_python_script" \
                 --experiment_dirpath "$experiment_dirpath" --hm_wave_id $(( wave - 1 )) \
-                --mcmc_dirname "$mcmc_dirname" --sample_count "$hm_sample_count" \
-                --burn_in_fraction "$burn_in_fraction")
+                --mcmc_dirname "$mcmc_dirname" --sample_count "$samples_per_phenotype" \
+                --burn_in_fraction "$burn_in_fraction" --temperature_index "$temperature_index")
             submitted_job_ids+=("$generate")
         else
             echo "    generate: ${wave_dirpath} already exists, skipping"
@@ -283,12 +311,21 @@ for wave in $(seq "$first_wave_id" $(( wave_count - 1 ))); do
             --required_hm_wave_id "$wave")
         submitted_job_ids+=("$collate_hm")
 
-        # 5. Test the previous wave's GP models against this wave's simulations (nothing waits on this):
-        if [ "$run_validation" = true ] && [ "$wave" -gt 0 ]; then
+        # 5. Test the previous wave's GP models against this wave's simulations (nothing waits on this).
+        #    In the first wave submitted, those models were trained by an earlier submission,
+        #    perhaps with other GP settings, so check they are where these settings put them:
+        previous_gp_models_dirpath="${experiment_dirpath}/hm$(( wave - 1 ))/${gp_folder_name}"
+        run_wave_validation=$run_validation
+        if [ "$run_validation" = true ] && [ "$wave" -eq "$first_wave_id" ] && [ "$wave" -gt 0 ] \
+                && [ ! -d "$previous_gp_models_dirpath" ]; then
+            echo "    validate: ${previous_gp_models_dirpath} not found, skipping"
+            run_wave_validation=false
+        fi
+        if [ "$run_wave_validation" = true ] && [ "$wave" -gt 0 ]; then
             validate=$(submit "validate" "${dependency[@]}" --job-name="hm${wave}_validate" \
                 "$(log_argument "$validate_python_script")" "$python_stage_script" "$validate_python_script" \
                 --experiment_dirpath "$experiment_dirpath" --hm_wave_id $(( wave - 1 )) \
-                --gp_models_dirpath "${experiment_dirpath}/hm$(( wave - 1 ))/${gp_folder_name}")
+                --gp_models_dirpath "$previous_gp_models_dirpath")
             submitted_job_ids+=("$validate")
         fi
     fi
@@ -297,7 +334,7 @@ for wave in $(seq "$first_wave_id" $(( wave_count - 1 ))); do
     if [ "$start_index" -le 3 ]; then
         set_dependency afterok "$collate_hm"
         train=$(submit "train" ${dependency[@]+"${dependency[@]}"} --job-name="hm${wave}_train" \
-            "$train_script" "$experiment_dirpath" "$wave" "$gp_folder_name")
+            "$train_script" "$experiment_dirpath" "$wave" "$gp_folder_name" "${gp_training_arguments[@]}")
         submitted_job_ids+=("$train")
     fi
 

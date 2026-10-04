@@ -17,8 +17,8 @@ PHENOTYPES = ["WT", "RD"]
 CHAIN_FILENAMES = {"WT": "wt_mcmc_chain.npy", "RD": "rd_mcmc_chain.npy"}
 
 # The chain has shape (steps, chains, temperatures, parameters). Samples are drawn
-# from one temperature (0 is the cold chain), after discarding the burn-in:
-TEMPERATURE_INDEX = 1
+# from one temperature (0 is the cold chain), after discarding the burn-in. By default:
+DEFAULT_TEMPERATURE_INDEX = 1
 
 # Seed for the random cell counts, combined with the wave so that waves differ:
 COUNT_SEED = 0
@@ -47,13 +47,19 @@ def parse_arguments():
         "--burn_in_fraction", type=float, default=0.25,
         help="Fraction of the chain discarded as burn-in. Use the same value as the MCMC script."
     )
+    parser.add_argument(
+        "--temperature_index", type=int, default=DEFAULT_TEMPERATURE_INDEX,
+        help="Temperature of the chains to draw samples from (0 is the cold chain)."
+    )
     arguments = parser.parse_args()
     if not 0 < arguments.burn_in_fraction < 1:
         parser.error("--burn_in_fraction must be between 0 and 1.")
+    if arguments.temperature_index < 0:
+        parser.error("--temperature_index must not be negative.")
     return arguments
 
 
-def thin_chain(mc_distribution, sample_count, burn_in_fraction):
+def thin_chain(mc_distribution, sample_count, burn_in_fraction, temperature_index):
     """Draw sample_count evenly spaced parameter sets from one temperature of the chain.
 
     mc_distribution: (steps, chains, temperatures, n_parameters - 1) unit-cube values.
@@ -66,7 +72,11 @@ def thin_chain(mc_distribution, sample_count, burn_in_fraction):
         raise ValueError(
             f"Chain must have shape (steps, chains, temperatures, parameters), got {mc_distribution.shape}."
         )
-    step_count, chain_count = mc_distribution.shape[0], mc_distribution.shape[1]
+    step_count, chain_count, temperature_count = mc_distribution.shape[:3]
+    if temperature_index >= temperature_count:
+        raise ValueError(
+            f"Requested temperature {temperature_index}, but the chain only has {temperature_count} temperatures."
+        )
     burn_in_step_count = int(step_count * burn_in_fraction)
     kept_step_count = step_count - burn_in_step_count
     if sample_count > kept_step_count * chain_count:
@@ -88,7 +98,7 @@ def thin_chain(mc_distribution, sample_count, burn_in_fraction):
     chain_indices = np.concatenate(chain_indices)
     step_indices = np.concatenate(step_indices)
 
-    samples = mc_distribution[step_indices, chain_indices, TEMPERATURE_INDEX, :]
+    samples = mc_distribution[step_indices, chain_indices, temperature_index, :]
     return samples, np.stack([step_indices, chain_indices], axis=1)
 
 
@@ -159,7 +169,9 @@ def main():
         chain_filepath = os.path.join(mcmc_folderpath, CHAIN_FILENAMES[phenotype])
         print(f"Loading {phenotype} chain from {chain_filepath}...")
         mc_distribution = np.load(chain_filepath)
-        samples, chain_indices = thin_chain(mc_distribution, arguments.sample_count, arguments.burn_in_fraction)
+        samples, chain_indices = thin_chain(
+            mc_distribution, arguments.sample_count, arguments.burn_in_fraction, arguments.temperature_index
+        )
 
         # Repeated parameter sets are harmless, but worth knowing about:
         unique_count = np.unique(samples, axis=0).shape[0]
@@ -186,7 +198,7 @@ def main():
         "mcmc_dirpath": mcmc_folderpath,
         "sample_count": arguments.sample_count,
         "phenotypes": PHENOTYPES,
-        "temperature_index": TEMPERATURE_INDEX,
+        "temperature_index": arguments.temperature_index,
         "burn_in_fraction": arguments.burn_in_fraction,
         "count_seed": COUNT_SEED
     }

@@ -11,18 +11,22 @@
 # Trains the GP emulator of each model metric (one array task per metric) on the global
 # dataset of an experiment. Usage, from the repository root:
 #
-#     sbatch bash_scripts/gp_regression.sh <experiment_dirpath> <hm_wave_id> [gp_models_dirname]
+#     sbatch bash_scripts/gp_regression.sh <experiment_dirpath> <hm_wave_id> [gp_models_dirname] [GP settings...]
 #
 # The models are saved to the latest wave in the global dataset, inside the GP models
-# folder if given, or else a folder named after the training settings. hm_wave_id is only
-# reported: it takes the same arguments as the other stage scripts of submit_hm_waves.sh.
+# folder if given (or given as ""), or else a folder named after the GP settings. hm_wave_id
+# is only reported: it takes the same arguments as the other stage scripts of
+# submit_hm_waves.sh. Any further arguments set the GP architecture and training settings
+# (e.g. --epochs 15 --hidden_layer_count 2), which otherwise take the defaults in
+# muscleabm/history_matching.py.
 set -eo pipefail
 
 # --- Arguments ---
-usage="Usage: sbatch bash_scripts/gp_regression.sh <experiment_dirpath> <hm_wave_id> [gp_models_dirname]"
+usage="Usage: sbatch bash_scripts/gp_regression.sh <experiment_dirpath> <hm_wave_id> [gp_models_dirname] [GP settings...]"
 experiment_dirpath=${1:?$usage}
 hm_wave_id=${2:?$usage}
 gp_models_dirname=${3:-}
+gp_settings_arguments=("${@:4}")
 
 ml load uv
 # Lmod is not guaranteed to work with unset variables treated as errors, so only from here:
@@ -43,4 +47,5 @@ fi
 uv run --no-sync python python_scripts/emulation/gp_training.py \
     --experiment_dirpath "$experiment_dirpath" \
     --metric_name "$metric" \
-    ${gp_models_dirname_argument[@]+"${gp_models_dirname_argument[@]}"}
+    ${gp_models_dirname_argument[@]+"${gp_models_dirname_argument[@]}"} \
+    ${gp_settings_arguments[@]+"${gp_settings_arguments[@]}"}

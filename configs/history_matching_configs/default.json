@@ -1,0 +1,14 @@
+{
+    "wave_count": 4,
+    "wave_size": 32768,
+    "temperature_index": 1,
+    "gaussian_process": {
+        "epochs": 15,
+        "inducing_point_count": 512,
+        "hidden_layer_count": 2,
+        "hidden_layer_neuron_count": 32,
+        "learning_rate": 0.01,
+        "deep_kernel_learning_rate": 0.003,
+        "batch_size": 512
+    }
+}
