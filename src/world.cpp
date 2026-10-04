@@ -31,7 +31,10 @@ World::World
     , patternSigma{setPatternSigma}
     , patternFibreCount{setPatternFibreCount}
     , cellParameters{setCellParameters}
-    , collisionCellList{CollisionCellList(4, 2048)}
+    // Cells collide when within two body radii of each other's segment:
+    , collisionCellList{CollisionCellList(
+        setWorldSideLength, 2 * setCellParameters.cellBodyRadius, setNumberOfCells
+    )}
     , numberOfCells{setNumberOfCells}
 {
     // Distributions:
@@ -146,8 +149,7 @@ void World::initialiseCellVector() {
         std::unique_ptr<CellAgent> newCell{initialiseCell(cellID)};
 
         // Putting cell into collisions matrix:
-        auto [x, y] = newCell->getPosition();
-        collisionCellList.addToCollisionMatrix(x, y, newCell.get());
+        collisionCellList.addToCollisionMatrix(newCell.get());
 
         // Adding newly initialised cell to CellVector:
         cellAgentVector.push_back(std::move(newCell));
@@ -257,9 +259,8 @@ void World::runCellStep(CellAgent& actingCell) {
     }
 
     // Run cell intrinsic movement:
-    auto [startX, startY] = actingCell.getPosition();
-    collisionCellList.removeFromCollisionMatrix(startX, startY, &actingCell);
-    collisionCellList.getLocalAgents(startX, startY, localAgentBuffer);
+    collisionCellList.removeFromCollisionMatrix(&actingCell);
+    collisionCellList.getLocalAgents(actingCell, localAgentBuffer);
     actingCell.setLocalCellList(localAgentBuffer);
     actingCell.takeRandomStep();
 
@@ -275,9 +276,8 @@ void World::runCellStep(CellAgent& actingCell) {
     // Rollover the cell if out of bounds:
     actingCell.setPosition(rollPosition(cellFinish));
 
-    // Set new count:
-    auto [finishX, finishY] = actingCell.getPosition();
-    collisionCellList.addToCollisionMatrix(finishX, finishY, &actingCell);
+    // Register the cell in the collision grid at its new position:
+    collisionCellList.addToCollisionMatrix(&actingCell);
 }
 
 // Calculating percepts for cells:
