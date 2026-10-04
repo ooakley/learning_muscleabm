@@ -7,6 +7,10 @@
 #SBATCH --mem-per-cpu=8G
 #SBATCH --hint=nomultithread
 
+# Script inputs:
+usage="Usage: sbatch hessian_estimation.sh <experiment_dirpath>"
+experiment_dirpath=${1:?$usage}
+
 ml load uv parallel
 uv sync
 
@@ -18,14 +22,16 @@ estimate_hessian () {
 
     # Single-value Hessian estimation:
     # srun --exact --ntasks 1 --cpus-per-task 1 --nodes=1-1 --mem-per-cpu=8G --hint=nomultithread \
-    #     uv run --frozen python_scripts/generate_hessians.py \
+    #     uv run --frozen python_scripts/sensitivity/generate_hessians.py \
+    #     --experiment_dirpath "$experiment_dirpath" \
     #     --metric op65 \
     #     --world_size $world_size \
     #     --task_id $task_id
 
     # Design point Hessian estimation:
     srun --exact --ntasks 1 --cpus-per-task 1 --nodes=1-1 --mem-per-cpu=8G --hint=nomultithread \
-        uv run --frozen python_scripts/generate_full_rank_hessians.py \
+        uv run --frozen python_scripts/sensitivity/generate_full_rank_hessians.py \
+        --experiment_dirpath "$experiment_dirpath" \
         --metric op65 \
         --world_size $world_size \
         --task_id $task_id
@@ -37,6 +43,7 @@ estimate_hessian () {
 
 export -f estimate_hessian
 export world_size=$world_size
+export experiment_dirpath
 
 task_list=$(seq 0 $(( $world_size-1 )))
 

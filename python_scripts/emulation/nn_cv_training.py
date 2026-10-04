@@ -14,6 +14,8 @@ import numpy as np
 
 from torch.utils.data import TensorDataset, DataLoader
 
+from muscleabm.datasets import load_gridsearch_data
+
 sys.stdout.reconfigure(line_buffering=True)
 
 # Match the precision used for the GP models:
@@ -33,33 +35,6 @@ def parse_arguments():
     parser.add_argument('--metric_name', type=str)
     args = parser.parse_args()
     return args
-
-
-def load_gridsearch_data(experiment_dirpath, metric_name):
-    # Load parameter data:
-    parameter_matrix = np.load(
-        os.path.join(experiment_dirpath, "sample_matrix.npy")
-    )
-
-    # Load metric data:
-    if metric_name == "op65":
-        output_metric = np.load(
-            os.path.join(experiment_dirpath, "summary_data", "matrix_order_parameters.npy")
-        )
-        # Select final estimate of OP scale curve:
-        output_metric = output_metric[:, :, 2]
-    else:
-        output_metric = np.load(
-            os.path.join(experiment_dirpath, "summary_data", f"{metric_name}.npy")
-        )
-
-    # Remove failed simulations:
-    metric_mean = np.nanmean(output_metric, axis=1)
-    n_valid = np.sum(~np.isnan(output_metric), axis=1)
-    metric_sem = np.nanstd(output_metric, axis=1, ddof=1) / np.sqrt(n_valid)
-    nan_mask = np.isnan(metric_sem)
-
-    return parameter_matrix[~nan_mask, :], metric_mean[~nan_mask], metric_sem[~nan_mask]
 
 
 class RegressionNetwork(torch.nn.Module):
@@ -242,7 +217,7 @@ def main():
 
     # Load gridsearch data:
     print("Loading data...")
-    parameter_matrix, output_metric, output_sem = load_gridsearch_data(
+    parameter_matrix, output_metric, output_sem, *_ = load_gridsearch_data(
         args.experiment_dirpath, args.metric_name
     )
 

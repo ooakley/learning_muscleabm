@@ -19,7 +19,7 @@ gp_models_dirpath=${3:?$usage}
 ml load uv
 
 PHENOTYPES=(WT RD)
-uv run --no-sync python python_scripts/mcmc_gp_cov_fit.py \
+uv run --no-sync python python_scripts/inference/mcmc_gp_cov_fit.py \
     --experiment_dirpath $experiment_dirpath \
     --hm_wave_id $hm_wave_id \
     --gp_models_dirpath $gp_models_dirpath \

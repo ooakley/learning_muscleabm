@@ -1,164 +1,30 @@
 import os
+import argparse
 
 import torch
-import gpytorch
 import scipy.stats
 import numpy as np
 
 from datetime import datetime
 
+from muscleabm.emulators import ModelManager, get_experiment_model_folderpath
+
 torch.set_default_dtype(torch.float64)
 
 
-class DeepInputTransformation(torch.nn.Module):
-    def __init__(self, dimension, hidden_layer_neuron_count=16):
-        # Run general initialisation of the nn.Module base class:
-        super().__init__()
-
-        # Record parameters:
-        self.dimension = dimension
-        self.hl_neuron_count = hidden_layer_neuron_count
-
-        # Set up layers:
-        self.mlp = torch.nn.Sequential(
-            torch.nn.Linear(dimension, self.hl_neuron_count),
-            torch.nn.SiLU(),
-            torch.nn.Linear(self.hl_neuron_count, self.hl_neuron_count),
-            torch.nn.SiLU(),
-            torch.nn.Linear(self.hl_neuron_count, dimension)
-        )
-
-        # Initialise weights:
-        with torch.no_grad():
-            self.apply(self.initialise)
-
-    def forward(self, x):
-        return self.mlp.forward(x)
-
-    def initialise(self, m):
-        if isinstance(m, torch.nn.Linear):
-            torch.nn.init.xavier_normal_(m.weight)
-
-
-class SparseGPModel(gpytorch.models.ApproximateGP):
-    def __init__(self, inducing_points, dimensions):
-        # Set up distribution:
-        variational_distribution = gpytorch.variational.CholeskyVariationalDistribution(
-            inducing_points.size(0)
-        )
-
-        # Set up variational strategy:
-        variational_strategy = gpytorch.variational.VariationalStrategy(
-            self, inducing_points, variational_distribution,
-            learn_inducing_locations=True
-        )
-
-        # Inherit rest of init logic from approximate GP:
-        super().__init__(variational_strategy)
-
-        # Instantiate input transform:
-        print(f"Using dimensions: {dimensions}")
-        self.input_transform = DeepInputTransformation(dimensions)
-
-        # Define mean and additive covariance functions:
-        self.mean_module = gpytorch.means.ConstantMean()
-        self.covar_module = gpytorch.kernels.ScaleKernel(
-            gpytorch.kernels.RBFKernel(ard_num_dims=dimensions)
-        )
-
-    def forward(self, x):
-        # Warp input:
-        warped_x = self.input_transform(x)
-
-        # Calculate mean of input:
-        mean_x = self.mean_module(warped_x)
-        covar_x = self.covar_module(warped_x)
-        return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
-
-
-class ModelManager:
-
-    def __init__(self, inducing_points, learning_rate):
-        # Set up model:
-        inducing_points = torch.tensor(inducing_points)
-        self.likelihood = gpytorch.likelihoods.GaussianLikelihood()
-        self.model = SparseGPModel(inducing_points, inducing_points.shape[1])
-
-        # The default noise constraint sets the minimum too high,
-        # we need the more permissive constraint of positivity:
-        self.likelihood.noise_covar.register_constraint("raw_noise", gpytorch.constraints.Positive())
-
-        # Set up optimisation - Adam seems to work best (need to properly test this):
-        self.optimizer = torch.optim.Adam([
-            {'params': self.model.parameters()},
-            {'params': self.likelihood.parameters()},
-        ], lr=learning_rate)
-
-        self.loss_history = []
-
-    def train_epoch(self, dataloader, num_data):
-        # Ensure parameters are trainable:
-        self.model.train()
-        self.likelihood.train()
-
-        # Set up loss:
-        mll = gpytorch.mlls.PredictiveLogLikelihood(self.likelihood, self.model, num_data=num_data)
-
-        # Run through entire dataset:
-        for batch_index, (x_batch, y_batch) in enumerate(dataloader):
-            self.optimizer.zero_grad()
-            output_distribution = self.model(x_batch)
-            loss = -mll(output_distribution, y_batch)
-            loss.backward()
-
-            # Step through optimisers:
-            self.optimizer.step()
-            if (batch_index + 1) % 10 == 0:
-                print(batch_index, loss.item(), flush=True)
-
-            # Ensure inducing points don't go out of bounds (implicitly
-            # imposing constraints with transforms degrades performance):
-            with torch.no_grad():
-                inducing_points = self.model.variational_strategy.inducing_points.detach()
-                self.model.variational_strategy.inducing_points[inducing_points > 1] = 1
-                self.model.variational_strategy.inducing_points[inducing_points < 0] = 0
-
-            self.loss_history.append(loss.detach())
-
-    def train(self, x, y, batch_size, epochs=1):
-        # Convert datasets to pytorch:
-        x_tensor = torch.tensor(x)
-        y_tensor = torch.tensor(y)
-        dataset = TensorDataset(x_tensor, y_tensor)
-
-        for _ in range(epochs):
-            dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-            self.train_epoch(dataloader, len(y))
-
-    def save(self, experiment_dirpath, metric_name):
-        # Generate GP model folder if not present:
-        model_dirpath = os.path.join(experiment_dirpath, "gaussian_process_models")
-        if not os.path.exists(model_dirpath):
-            os.mkdir(model_dirpath)
-
-        # Generate folder for given metric:
-        metric_folderpath = os.path.join(model_dirpath, metric_name)
-        if not os.path.exists(metric_folderpath):
-            os.mkdir(metric_folderpath)
-
-        # Save model components:
-        model_filepath = os.path.join(metric_folderpath, "model.pth")
-        torch.save(self.model, model_filepath)
-        likelihood_filepath = os.path.join(metric_folderpath, "likelihood.pth")
-        torch.save(self.likelihood, likelihood_filepath)
-        optimiser_filepath = os.path.join(metric_folderpath, "optimiser.pth")
-        torch.save(self.optimizer, optimiser_filepath)
-
-    def load(self, experiment_dirpath, metric_name):
-        id_folderpath = os.path.join(experiment_dirpath, "gaussian_process_models", metric_name)
-        self.model = torch.load(os.path.join(id_folderpath, "model.pth"), weights_only=False)
-        self.likelihood = torch.load(os.path.join(id_folderpath, "likelihood.pth"), weights_only=False)
-        self.optimizer = torch.load(os.path.join(id_folderpath, "optimiser.pth"), weights_only=False)
+def parse_arguments():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--matrix_experiment_dirpath", required=True,
+        help="Matrix gridsearch experiment containing the op65 GP model and its global eigenparameter "
+             "estimation, e.g. model_experiments/2026-06-03-matrix_shape."
+    )
+    parser.add_argument(
+        "--mcmc_dirpath", required=True,
+        help="Folder containing the WT and RD MCMC chains and likelihoods, e.g. "
+             "model_experiments/2026-05-31-collisions_shape/mcmc_results."
+    )
+    return parser.parse_args()
 
 
 def regularise_transforms(log_transforms, log_scale_factors, loss_histories):
@@ -286,20 +152,21 @@ def get_optimal_intervention(weights, model_manager, ctl_mle, rd_mle, gee_transf
 
 
 def main():
+    args = parse_arguments()
+
     # Instantiate and load mean S_65 model:
     inducing_points = np.zeros((32, 14))
     op_model_manager = ModelManager(inducing_points, 0.003)
-    op_model_manager.load("model_experiments/2026-06-03-matrix_shape", "op65")
+    op_model_manager.load(get_experiment_model_folderpath(args.matrix_experiment_dirpath, "op65"))
 
     # Set up MLE source:
-    BASE_GRIDSEARCH_DIRPATH = "model_experiments/2026-05-31-collisions_shape"
     THIN_FACTOR = 64
 
     # Load MLE data:
-    ctl_chain = np.load(os.path.join(BASE_GRIDSEARCH_DIRPATH, "mcmc_results", "wt_mcmc_chain.npy"))
-    rd_chain = np.load(os.path.join(BASE_GRIDSEARCH_DIRPATH, "mcmc_results", "rd_mcmc_chain.npy"))
-    ctl_likelihoods = np.load(os.path.join(BASE_GRIDSEARCH_DIRPATH, "mcmc_results", "wt_mcmc_likelihoods.npy"))
-    rd_likelihoods = np.load(os.path.join(BASE_GRIDSEARCH_DIRPATH, "mcmc_results", "rd_mcmc_likelihoods.npy"))
+    ctl_chain = np.load(os.path.join(args.mcmc_dirpath, "wt_mcmc_chain.npy"))
+    rd_chain = np.load(os.path.join(args.mcmc_dirpath, "rd_mcmc_chain.npy"))
+    ctl_likelihoods = np.load(os.path.join(args.mcmc_dirpath, "wt_mcmc_likelihoods.npy"))
+    rd_likelihoods = np.load(os.path.join(args.mcmc_dirpath, "rd_mcmc_likelihoods.npy"))
 
     ctl_mle_idx = np.argsort(ctl_likelihoods[::THIN_FACTOR, :, 0].flatten())[-1024:]
     rd_mle_idx = np.argsort(rd_likelihoods[::THIN_FACTOR, :, 0].flatten())[-1024:]
@@ -311,19 +178,18 @@ def main():
     rd_mle =  np.concatenate([rd_mle, np.ones((rd_mle.shape[0], 3)) * 0.5], axis=1)
 
     # Load GEE transforms:
-    MATRIX_GRIDSEARCH_DIRPATH = "model_experiments/2026-06-03-matrix_shape"
     log_transforms = np.load(os.path.join(
-        MATRIX_GRIDSEARCH_DIRPATH,
+        args.matrix_experiment_dirpath,
         "gaussian_process_models", "op65",
         "global_eigenparameter_estimation", "log_transforms.npy"
     ))
     loss_histories = np.load(os.path.join(
-        MATRIX_GRIDSEARCH_DIRPATH,
+        args.matrix_experiment_dirpath,
         "gaussian_process_models", "op65",
         "global_eigenparameter_estimation", "loss_histories.npy"
     ))
     log_scale_factors = np.load(os.path.join(
-        MATRIX_GRIDSEARCH_DIRPATH,
+        args.matrix_experiment_dirpath,
         "gaussian_process_models", "op65",
         "global_eigenparameter_estimation", "scale_factors.npy"
     ))

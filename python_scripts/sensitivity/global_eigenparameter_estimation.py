@@ -11,27 +11,21 @@ import numpy as np
 from scipy.sparse.csgraph import dijkstra
 from sklearn.neighbors import NearestNeighbors
 
-EXPERIMENT_DIRPATH = "model_experiments/2026-09-19-matrix_shape"
+from muscleabm.sensitivity import get_eigenvectors
+
 PARAMETER_DIMENSION = 14
 RUN_COUNT = 1024
 
+
 def parse_arguments():
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--experiment_dirpath", required=True,
+        help="Experiment containing the op65_fullrank_hessian folder, e.g. model_experiments/2026-09-19-matrix_shape."
+    )
     parser.add_argument("--world_size", type=int, required=True)
     parser.add_argument("--task_id", type=int, required=True)
     return parser.parse_args()
-
-
-def get_eigenvectors(hessians):
-    eigenvalue_array = []
-    eigenvector_array = []
-    for index in range(hessians.shape[0]):
-        # As matrices are symmetric, all eigenvalues are real:
-        eigvals, eigenvectors = np.linalg.eigh(hessians[index])
-        # Reorient everything so it makes sense:
-        eigenvalue_array.append(eigvals[::-1])
-        eigenvector_array.append(eigenvectors.T[::-1, :])
-    return np.stack(eigenvalue_array, axis=0), np.stack(eigenvector_array, axis=0)
 
 
 def get_estimated_geodesic_distances(eigenvectors):
@@ -138,13 +132,13 @@ def main():
     args = parse_arguments()
 
     # Set up folder structure:
-    managing_dirpath = os.path.join(EXPERIMENT_DIRPATH, "global_eigenparameter_estimation")
+    managing_dirpath = os.path.join(args.experiment_dirpath, "global_eigenparameter_estimation")
     if not os.path.exists(managing_dirpath):
         os.mkdir(managing_dirpath)
 
     # Get Hessian dataset:
     print("Loading Hessian datasets...", flush=True)
-    hessian_dirpath = os.path.join(EXPERIMENT_DIRPATH, "op65_fullrank_hessian")
+    hessian_dirpath = os.path.join(args.experiment_dirpath, "op65_fullrank_hessian")
     hessian_inputs = np.load(os.path.join(hessian_dirpath, "hessian_inputs.npy"))
     hessians = np.load(os.path.join(hessian_dirpath, "hessian_estimate.npy"))
 

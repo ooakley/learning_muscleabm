@@ -1,25 +1,16 @@
 import os
 import sys
+import argparse
 
 import numba
 import sklearn
 
 import numpy as np
 
-sys.stdout.reconfigure(line_buffering=True)
-EXPERIMENT_DIRPATH = "model_experiments/2026-09-25-matrix_shape"
-TOP_K = 6
+from muscleabm.sensitivity import get_eigenvectors
 
-def get_eigenvectors(fims):
-    eigenvalue_array = []
-    eigenvector_array = []
-    for index in range(fims.shape[0]):
-        # As matrices are symmetric, all eigenvalues are real:
-        eigvals, eigenvectors = np.linalg.eigh(fims[index])
-        # Reorient everything so it makes sense:
-        eigenvalue_array.append(eigvals[::-1])
-        eigenvector_array.append(eigenvectors.T[::-1, :])
-    return np.stack(eigenvalue_array, axis=0), np.stack(eigenvector_array, axis=0)
+sys.stdout.reconfigure(line_buffering=True)
+TOP_K = 6
 
 
 @numba.njit()
@@ -135,13 +126,24 @@ def grassman_distance(A, B):
     return 1 - (similarity / TOP_K)
 
 
+def parse_arguments():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--experiment_dirpath", required=True,
+        help="Experiment containing the op65_fullrank_FIM folder, e.g. model_experiments/2026-09-25-matrix_shape."
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_arguments()
+
     # Load fims:
-    fim_dirpath = os.path.join(EXPERIMENT_DIRPATH, "op65_fullrank_FIM")
+    fim_dirpath = os.path.join(args.experiment_dirpath, "op65_fullrank_FIM")
     sample_fims = np.load(os.path.join(fim_dirpath, "fim_estimate.npy"))
     sample_inputs = np.load(os.path.join(fim_dirpath, "fim_inputs.npy"))
 
-    embeddings_dirpath = os.path.join(EXPERIMENT_DIRPATH, "embeddings")
+    embeddings_dirpath = os.path.join(args.experiment_dirpath, "embeddings")
     if not os.path.exists(embeddings_dirpath):
         os.mkdir(embeddings_dirpath)
 
@@ -154,7 +156,7 @@ def main():
     # kpca_transformed = kpca_manager.fit_transform(eigenvectors[:, 0, :])
 
     # print("Saving kPCA...", flush=True)
-    # save_filepath = os.path.join(EXPERIMENT_DIRPATH, "gaussian_process_models", "op65", "kpca_embeddings.npy")
+    # save_filepath = os.path.join(args.experiment_dirpath, "gaussian_process_models", "op65", "kpca_embeddings.npy")
     # np.save(save_filepath, kpca_transformed)
 
     # Calculate IsoMAP embeddings:

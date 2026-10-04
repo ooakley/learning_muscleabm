@@ -1,5 +1,6 @@
 import os
 import sys
+import argparse
 
 import numpy as np
 
@@ -121,10 +122,19 @@ def generate_initial_rotation(generator):
     return initial_rotation
 
 
+def parse_arguments():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--experiment_dirpath", required=True,
+        help="Experiment containing the op65_fullrank_FIM folder, e.g. model_experiments/2026-09-25-matrix_shape."
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_arguments()
     print("Loading FIM dataset...")
-    EXPERIMENT_DIRPATH = "model_experiments/2026-09-25-matrix_shape"
-    fim_dirpath = os.path.join(EXPERIMENT_DIRPATH, "op65_fullrank_FIM")
+    fim_dirpath = os.path.join(args.experiment_dirpath, "op65_fullrank_FIM")
     fim_dataset = np.load(os.path.join(fim_dirpath, "fim_estimate.npy"))
     print(f"Dataset size: {fim_dataset.shape}")
 
@@ -151,7 +161,7 @@ def main():
         objective_list.append(objective)
 
     print("Saving rotations...")
-    save_dirpath = os.path.join(EXPERIMENT_DIRPATH, "fim_rotated")
+    save_dirpath = os.path.join(args.experiment_dirpath, "fim_rotated")
     if not os.path.exists(save_dirpath):
         os.mkdir(save_dirpath)
     np.savez(

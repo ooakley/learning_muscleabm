@@ -8,8 +8,11 @@ import torch
 
 import numpy as np
 
-from scipy.stats import qmc
 from torch.utils.data import TensorDataset, DataLoader
+
+from muscleabm.datasets import load_gridsearch_data
+from muscleabm.emulators import ModelManager, SparseGPModel, run_inference
+from muscleabm.sensitivity import run_sobol_index_inference
 
 sys.stdout.reconfigure(line_buffering=True)
 
@@ -19,6 +22,7 @@ torch.set_default_dtype(torch.float64)
 NUM_EPOCHS = 5
 K_FOLD_COUNT = 8
 
+
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Train a deep kernel GP regressor on a given model metric')
     parser.add_argument('--experiment_dirpath', type=str)
@@ -27,102 +31,8 @@ def parse_arguments():
     return args
 
 
-def load_gridsearch_data(experiment_dirpath, metric_name):
-    # Load parameter data:
-    parameter_matrix = np.load(
-        os.path.join(experiment_dirpath, "sample_matrix.npy")
-    )
-
-    # Load metric data:
-    if metric_name == "op65":
-        output_metric = np.load(
-            os.path.join(experiment_dirpath, "summary_data", "matrix_order_parameters.npy")
-        )
-        # Select final estimate of OP scale curve:
-        output_metric = output_metric[:, :, 2]
-    else:
-        output_metric = np.load(
-            os.path.join(experiment_dirpath, "summary_data", f"{metric_name}.npy")
-        )
-
-    # Remove failed simulations:
-    metric_mean = np.nanmean(output_metric, axis=1)
-    n_valid = np.sum(~np.isnan(output_metric), axis=1)
-    metric_sem = np.nanstd(output_metric, axis=1, ddof=1) / np.sqrt(n_valid)
-    nan_mask = np.isnan(metric_sem)
-
-    print("Fractional dead zone:")
-    print(np.count_nonzero(metric_mean < 0.003) / metric_mean.shape[0])
-
-    return parameter_matrix[~nan_mask, :], metric_mean[~nan_mask], metric_sem[~nan_mask]
-
-
-class DeepInputTransformation(torch.nn.Module):
-    def __init__(self, dimension, hidden_layer_neuron_count=32):
-        # Run general initialisation of the nn.Module base class:
-        super().__init__()
-
-        # Record parameters:
-        self.dimension = dimension
-        self.hl_neuron_count = hidden_layer_neuron_count
-
-        # Set up layers:
-        self.mlp = torch.nn.Sequential(
-            torch.nn.Linear(dimension, self.hl_neuron_count),
-            torch.nn.SiLU(),
-            torch.nn.Linear(self.hl_neuron_count, self.hl_neuron_count),
-            torch.nn.SiLU(),
-            torch.nn.Linear(self.hl_neuron_count, dimension)
-        )
-
-        # Initialise weights:
-        with torch.no_grad():
-            self.apply(self.initialise)
-
-    def forward(self, x):
-        return self.mlp.forward(x)
-
-    def initialise(self, m):
-        if isinstance(m, torch.nn.Linear):
-            torch.nn.init.xavier_normal_(m.weight)
-
-
-class SparseGPModel(gpytorch.models.ApproximateGP):
-    def __init__(self, inducing_points, dimensions):
-        # Set up distribution:
-        variational_distribution = gpytorch.variational.CholeskyVariationalDistribution(
-            inducing_points.size(0)
-        )
-
-        # Set up variational strategy:
-        variational_strategy = gpytorch.variational.VariationalStrategy(
-            self, inducing_points, variational_distribution,
-            learn_inducing_locations=True
-        )
-
-        # Inherit rest of init logic from approximate GP:
-        super().__init__(variational_strategy)
-
-        # Instantiate input transform:
-        self.input_transform = DeepInputTransformation(dimensions)
-
-        # Define mean and additive covariance functions:
-        self.mean_module = gpytorch.means.ConstantMean()
-        self.covar_module = gpytorch.kernels.ScaleKernel(
-            gpytorch.kernels.RBFKernel(ard_num_dims=dimensions)
-        )
-
-    def forward(self, x):
-        # Warp input:
-        warped_x = self.input_transform(x)
-
-        # Calculate mean of input:
-        mean_x = self.mean_module(warped_x)
-        covar_x = self.covar_module(warped_x)
-        return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
-
-
-class ModelManager:
+class FixedNoiseModelManager(ModelManager):
+    """Model manager with the replicate noise of each datapoint fixed, trained on the ELBO."""
 
     def __init__(self, inducing_points, learning_rate):
         # Set up model, Fixed Noise requires an instantiating noise tensor as an API quirk:
@@ -130,7 +40,7 @@ class ModelManager:
         self.likelihood = gpytorch.likelihoods.FixedNoiseGaussianLikelihood(
             noise=torch.ones(1), learn_additional_noise=False
         )
-        self.model = SparseGPModel(inducing_points, inducing_points.shape[1])
+        self.model = SparseGPModel(inducing_points, inducing_points.shape[1], hidden_layer_neuron_count=32)
 
         # Set up optimisation:
         self.optimizer = torch.optim.Adam([
@@ -183,45 +93,6 @@ class ModelManager:
             self.train_epoch(dataloader, len(y))
             self.scheduler.step()
 
-    def save(self, id_folderpath):
-        # Save model components:
-        model_filepath = os.path.join(id_folderpath, "model.pth")
-        torch.save(self.model, model_filepath)
-        likelihood_filepath = os.path.join(id_folderpath, "likelihood.pth")
-        torch.save(self.likelihood, likelihood_filepath)
-        optimiser_filepath = os.path.join(id_folderpath, "optimiser.pth")
-        torch.save(self.optimizer, optimiser_filepath)
-
-    def load(self, id_folderpath):
-        self.model = torch.load(os.path.join(id_folderpath, "model.pth"), weights_only=False)
-        self.likelihood = torch.load(os.path.join(id_folderpath, "likelihood.pth"), weights_only=False)
-        self.optimizer = torch.load(os.path.join(id_folderpath, "optimiser.pth"), weights_only=False)
-
-
-def run_inference(model_manager, inputs, batch_size=512):
-    # Set up dataloading:
-    tensor_input = torch.tensor(inputs)
-    inference_dataset = TensorDataset(tensor_input)
-    inference_loader = DataLoader(inference_dataset, batch_size=batch_size, shuffle=False)
-
-    # Shift to eval mode:
-    model_manager.model.eval()
-    model_manager.likelihood.eval()
-
-    # Set up outputs:
-    predictions_array = []
-    stddev_array = []
-    with torch.no_grad():
-        for batch_index, inference_batch in enumerate(inference_loader):
-            inference_batch = inference_batch[0]
-            predictions = model_manager.model(inference_batch)
-            predictions_array.append(predictions.mean.detach().numpy())
-            stddev_array.append(predictions.stddev.detach().numpy())
-            if (batch_index + 1) % 64 == 0:
-                print(batch_index + 1)
-
-    return np.concatenate(predictions_array), np.concatenate(stddev_array)
-
 
 def cross_validation(parameter_matrix, output_metric, output_sem, inducing_points):
     # Shuffle datapoints prior to cross-validation (as otherwise there
@@ -243,7 +114,7 @@ def cross_validation(parameter_matrix, output_metric, output_sem, inducing_point
     for k_index in range(K_FOLD_COUNT):
         # Set up the model and the model's associated training apparatus:
         print(f"Performing validation with index: {k_index}...", flush=True)
-        model_manager = ModelManager(inducing_points, 0.003)
+        model_manager = FixedNoiseModelManager(inducing_points, 0.003)
 
         # Get test indices:
         test_indices = np.arange(k_index, dataset_size, K_FOLD_COUNT)
@@ -283,7 +154,9 @@ def cross_validation(parameter_matrix, output_metric, output_sem, inducing_point
         model_manager.train(train_parameters, whitened_train, whitened_train_noise, 512, epochs=NUM_EPOCHS)
 
         # Run predictions on test set:
-        predictions, stddev = run_inference(model_manager, test_parameters, 512)
+        predictions, stddev, _ = run_inference(
+            model_manager.model, None, test_parameters, 512, standard_deviations=True
+        )
 
         # Get basic metrics:
         mean_absolute_error = np.mean(np.abs(whitened_test - predictions))
@@ -325,63 +198,6 @@ def cross_validation(parameter_matrix, output_metric, output_sem, inducing_point
     return mae_list, mse_list, sll_list, cr_list
 
 
-def emulate(manager, x):
-    manager.likelihood.eval()
-    manager.model.eval()
-    tensor_input = torch.tensor(x)
-    if len(tensor_input.shape) == 1:
-        tensor_input = torch.unsqueeze(tensor_input, 0)
-    with torch.no_grad():
-        prediction = manager.model(tensor_input)
-        prediction_mean = prediction.mean.detach().numpy()
-        prediction_std = prediction.stddev.detach().numpy()
-    return prediction_mean, prediction_std
-
-
-def get_sobol_indices(dimension, f_A, f_B, f_Ai):
-    Si_list = []
-    STi_list = []
-    for index in range(dimension):
-        f0_sq = np.mean(f_A) * np.mean(f_B)
-        V = np.var(np.concatenate([f_A, f_B]))
-        S_i  = (np.mean(f_A * f_Ai[index]) - f0_sq) / V
-        S_Ti = 1 - (np.mean(f_B * f_Ai[index]) - f0_sq) / V
-        Si_list.append(S_i)
-        STi_list.append(S_Ti)
-
-    return np.array(Si_list), np.array(STi_list)
-
-
-def run_sobol_index_inference(model_manager, parameter_dimension):
-    # Get necessary model evaluations for Sobol' indices:
-    hyperspace_dimension = parameter_dimension * 2
-    sobol_sampler = qmc.Sobol(d=hyperspace_dimension, scramble=True, rng=0)
-    hyperspace_inputs = sobol_sampler.random_base2(m=17)
-
-    # Extract base parameter matrices:
-    parameters_A = hyperspace_inputs[:, :parameter_dimension]
-    parameters_B = hyperspace_inputs[:, parameter_dimension:]
-
-    # Generating the combined parameter matrices:
-    parameter_matrices = []
-    for parameter_index in range(parameter_dimension):
-        parameters_ABi = np.copy(parameters_B)
-        parameters_ABi[:, parameter_index] = parameters_A[:, parameter_index]
-        parameter_matrices.append(parameters_ABi)
-
-    # Estimate model values at these points:
-    f_A, _ = emulate(model_manager, parameters_A)
-    f_B, _ = emulate(model_manager, parameters_B)
-
-    f_Ai = []
-    for i_parameters in parameter_matrices:
-        f_Ai.append(emulate(model_manager, i_parameters)[0])
-
-    # Estimate indices from the evaluations:
-    Si, STi = get_sobol_indices(parameter_dimension, f_A, f_B, f_Ai)
-    return Si, STi
-
-
 def main():
     # Set seed:
     torch.manual_seed(0)
@@ -393,9 +209,11 @@ def main():
 
     # Load gridsearch data:
     print("Loading data...")
-    parameter_matrix, output_metric, output_sem = load_gridsearch_data(
+    parameter_matrix, output_metric, output_sem, *_ = load_gridsearch_data(
         args.experiment_dirpath, args.metric_name
     )
+    print("Fractional dead zone:")
+    print(np.count_nonzero(output_metric < 0.003) / output_metric.shape[0])
 
     # Get inducing points:
     print("Sampling inducing points...")
@@ -413,7 +231,7 @@ def main():
 
     # Set up the model and the model's associated training apparatus:
     print("Setting up model...")
-    model_manager = ModelManager(inducing_points, 0.003)
+    model_manager = FixedNoiseModelManager(inducing_points, 0.003)
 
     # Whiten metric distribution:
     metric_mean = np.mean(output_metric)
@@ -442,7 +260,9 @@ def main():
     np.save(os.path.join(id_folderpath, "loss_history.npy"), loss_history)
 
     # Generate and save predictions:
-    whitened_predictions, whitened_stddev = run_inference(model_manager, parameter_matrix, batch_size=512)
+    whitened_predictions, whitened_stddev, _ = run_inference(
+        model_manager.model, None, parameter_matrix, batch_size=512, standard_deviations=True
+    )
     predictions = (whitened_predictions * metric_std) + metric_mean
     stddev = (whitened_stddev * metric_std)
     np.save(os.path.join(id_folderpath, "parameter_predictions.npy"), np.stack([predictions, stddev], axis=1))
@@ -466,7 +286,7 @@ def main():
 
     # Get Sobol' indices from GP model:
     print("Running Sobol' index inference...", flush=True)
-    Si, STi = run_sobol_index_inference(model_manager, parameter_matrix.shape[1])
+    Si, STi = run_sobol_index_inference(model_manager.model, parameter_matrix.shape[1])
     np.save(os.path.join(id_folderpath, "sobol_i.npy"), Si)
     np.save(os.path.join(id_folderpath, "sobol_Ti.npy"), STi)
 

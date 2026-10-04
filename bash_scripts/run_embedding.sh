@@ -7,6 +7,10 @@
 #SBATCH --mem-per-cpu=8G
 #SBATCH --hint=nomultithread
 
+# Script inputs:
+usage="Usage: sbatch run_embedding.sh <experiment_dirpath>"
+experiment_dirpath=${1:?$usage}
+
 ml load uv
-uv run python python_scripts/run_isomap_embedding.py
-# uv run python python_scripts/rotate_hessians.py
+uv run python python_scripts/sensitivity/run_isomap_embedding.py --experiment_dirpath "$experiment_dirpath"
+# uv run python python_scripts/sensitivity/rotate_hessians.py --experiment_dirpath "$experiment_dirpath"

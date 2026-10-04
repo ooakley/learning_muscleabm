@@ -1,8 +1,8 @@
 import os
 import json
+import argparse
 
 import torch
-import gpytorch
 
 import scipy.stats
 
@@ -12,183 +12,32 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 
-from scipy.stats import qmc
-from torch.utils.data import TensorDataset, DataLoader
 from statsmodels.regression import mixed_linear_model
+
+from muscleabm.datasets import MODEL_METRICS, WETLAB_METRICS
+from muscleabm.emulators import ModelManager, get_experiment_model_folderpath
 
 torch.set_default_dtype(torch.float64)
 
 PARAMETER_DIMENSION = 13
-EXPERIMENT_DIRPATH = "model_experiments/2026-09-16-collisions_shape"
 CAT_VAR = "C(phenotype, Treatment(reference='CTL'))[T.RD]"
 QUERY_COUNTS = list(np.linspace(50, 300, 11).astype(int))
 SCALED_QUERY_COUNTS = (np.array(QUERY_COUNTS) - 50) / (400 - 50)
 GRIDSEARCH_COUNT_INDEX = 12
-WETLAB_METRICS = [
-    "mean_speed",
-    "mean_mr",
-    "anni",
-    "coherency_fraction"
-]
-MODEL_METRICS = [
-    "speeds",
-    "meander_ratios",
-    "ann_indices",
-    "coherency"
-]
 SEM_ESTIMATE = False
 CHAIN_LENGTH = 32768 * 2
 BATCH_SIZE = 8
 
-class DeepInputTransformation(torch.nn.Module):
-    def __init__(self, dimension, hidden_layer_neuron_count=16):
-        # Run general initialisation of the nn.Module base class:
-        super().__init__()
 
-        # Record parameters:
-        self.dimension = dimension
-        self.hl_neuron_count = hidden_layer_neuron_count
-
-        # Set up layers:
-        self.mlp = torch.nn.Sequential(
-            torch.nn.Linear(dimension, self.hl_neuron_count),
-            torch.nn.SiLU(),
-            torch.nn.Linear(self.hl_neuron_count, self.hl_neuron_count),
-            torch.nn.SiLU(),
-            torch.nn.Linear(self.hl_neuron_count, dimension)
-        )
-
-        # Initialise weights:
-        with torch.no_grad():
-            self.apply(self.initialise)
-
-    def forward(self, x):
-        return self.mlp.forward(x)
-
-    def initialise(self, m):
-        if isinstance(m, torch.nn.Linear):
-            torch.nn.init.xavier_normal_(m.weight)
-
-
-class SparseGPModel(gpytorch.models.ApproximateGP):
-    def __init__(self, inducing_points, dimensions):
-        # Set up distribution:
-        variational_distribution = gpytorch.variational.CholeskyVariationalDistribution(
-            inducing_points.size(0)
-        )
-
-        # Set up variational strategy:
-        variational_strategy = gpytorch.variational.VariationalStrategy(
-            self, inducing_points, variational_distribution,
-            learn_inducing_locations=True
-        )
-
-        # Inherit rest of init logic from approximate GP:
-        super().__init__(variational_strategy)
-
-        # Instantiate input transform:
-        print(f"Using dimensions: {dimensions}")
-        self.input_transform = DeepInputTransformation(dimensions)
-
-        # Define mean and additive covariance functions:
-        self.mean_module = gpytorch.means.ConstantMean()
-        self.covar_module = gpytorch.kernels.ScaleKernel(
-            gpytorch.kernels.RBFKernel(ard_num_dims=dimensions)
-        )
-
-    def forward(self, x):
-        # Warp input:
-        warped_x = self.input_transform(x)
-
-        # Calculate mean of input:
-        mean_x = self.mean_module(warped_x)
-        covar_x = self.covar_module(warped_x)
-        return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
-
-
-class ModelManager:
-
-    def __init__(self, inducing_points, learning_rate):
-        # Set up model:
-        inducing_points = torch.tensor(inducing_points)
-        self.likelihood = gpytorch.likelihoods.GaussianLikelihood()
-        self.model = SparseGPModel(inducing_points, inducing_points.shape[1])
-
-        # The default noise constraint sets the minimum too high,
-        # we need the more permissive constraint of positivity:
-        self.likelihood.noise_covar.register_constraint("raw_noise", gpytorch.constraints.Positive())
-
-        # Set up optimisation - Adam seems to work best (need to properly test this):
-        self.optimizer = torch.optim.Adam([
-            {'params': self.model.parameters()},
-            {'params': self.likelihood.parameters()},
-        ], lr=learning_rate)
-
-        self.loss_history = []
-
-    def train_epoch(self, dataloader, num_data):
-        # Ensure parameters are trainable:
-        self.model.train()
-        self.likelihood.train()
-
-        # Set up loss:
-        mll = gpytorch.mlls.PredictiveLogLikelihood(self.likelihood, self.model, num_data=num_data)
-
-        # Run through entire dataset:
-        for batch_index, (x_batch, y_batch) in enumerate(dataloader):
-            self.optimizer.zero_grad()
-            output_distribution = self.model(x_batch)
-            loss = -mll(output_distribution, y_batch)
-            loss.backward()
-
-            # Step through optimisers:
-            self.optimizer.step()
-            if (batch_index + 1) % 10 == 0:
-                print(batch_index, loss.item(), flush=True)
-
-            # Ensure inducing points don't go out of bounds (implicitly
-            # imposing constraints with transforms degrades performance):
-            with torch.no_grad():
-                inducing_points = self.model.variational_strategy.inducing_points.detach()
-                self.model.variational_strategy.inducing_points[inducing_points > 1] = 1
-                self.model.variational_strategy.inducing_points[inducing_points < 0] = 0
-
-            self.loss_history.append(loss.detach())
-
-    def train(self, x, y, batch_size, epochs=1):
-        # Convert datasets to pytorch:
-        x_tensor = torch.tensor(x)
-        y_tensor = torch.tensor(y)
-        dataset = TensorDataset(x_tensor, y_tensor)
-
-        for _ in range(epochs):
-            dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-            self.train_epoch(dataloader, len(y))
-
-    def save(self, experiment_dirpath, metric_name):
-        # Generate GP model folder if not present:
-        model_dirpath = os.path.join(experiment_dirpath, "gaussian_process_models")
-        if not os.path.exists(model_dirpath):
-            os.mkdir(model_dirpath)
-
-        # Generate folder for given metric:
-        metric_folderpath = os.path.join(model_dirpath, metric_name)
-        if not os.path.exists(metric_folderpath):
-            os.mkdir(metric_folderpath)
-
-        # Save model components:
-        model_filepath = os.path.join(metric_folderpath, "model.pth")
-        torch.save(self.model, model_filepath)
-        likelihood_filepath = os.path.join(metric_folderpath, "likelihood.pth")
-        torch.save(self.likelihood, likelihood_filepath)
-        optimiser_filepath = os.path.join(metric_folderpath, "optimiser.pth")
-        torch.save(self.optimizer, optimiser_filepath)
-
-    def load(self, experiment_dirpath, metric_name):
-        id_folderpath = os.path.join(experiment_dirpath, "gaussian_process_models", metric_name)
-        self.model = torch.load(os.path.join(id_folderpath, "model.pth"), weights_only=False)
-        self.likelihood = torch.load(os.path.join(id_folderpath, "likelihood.pth"), weights_only=False)
-        self.optimizer = torch.load(os.path.join(id_folderpath, "optimiser.pth"), weights_only=False)
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='Run parallel tempering MCMC against wet lab data using GP emulators')
+    parser.add_argument(
+        '--experiment_dirpath', type=str, required=True,
+        help='Experiment folder containing sample_matrix.npy, summary_data and gaussian_process_models, '
+             'e.g. model_experiments/2026-09-16-collisions_shape.'
+    )
+    args = parser.parse_args()
+    return args
 
 
 class MetricInferenceManager:
@@ -210,12 +59,12 @@ class MetricInferenceManager:
         # Instantiate and load mean GP model:
         inducing_points = np.zeros((32, dimension))
         self.mean_model_manager = ModelManager(inducing_points, 0.003)
-        self.mean_model_manager.load(experiment_dirpath, metric_name)
+        self.mean_model_manager.load(get_experiment_model_folderpath(experiment_dirpath, metric_name))
 
         # Instantiate and load SEM GP model:
         if SEM_ESTIMATE:
             self.sem_model_manager = ModelManager(inducing_points, 0.003)
-            self.sem_model_manager.load(experiment_dirpath, f"{metric_name}_noise")
+            self.sem_model_manager.load(get_experiment_model_folderpath(experiment_dirpath, f"{metric_name}_noise"))
 
     def sem_emulate(self, input):
         # Place mean manager into eval mode:
@@ -358,12 +207,6 @@ def estimate_log_likelihoods(x, inference_managers, target_data):
     return np.sum(log_likelihoods, axis=1)
 
 
-def generate_sobol_sequence(dimension, exponent, seed):
-    sobol_sampler = qmc.Sobol(d=dimension, scramble=True, rng=0)
-    sample_matrix = sobol_sampler.random_base2(m=exponent)
-    return sample_matrix
-
-
 def run_ensemble_mcmc(inference_managers, target_data, batch_size, temperature_steps, chain_length):
     # Generate first candidate point & likelihood:
     rng = np.random.default_rng(0)
@@ -474,6 +317,8 @@ def get_posterior_predictions(x, inference_managers):
 
 
 def main():
+    args = parse_arguments()
+
     # Load wet lab data:
     site_dataframe = pd.read_csv("wetlab_data/site_dataframe.csv")
     particle_counts = np.array(site_dataframe["particle_count"])
@@ -506,7 +351,7 @@ def main():
         rd_data[wetlab_metric] = {"target": rd_fit_target, "se": rd_fit_se}
 
     # Get parameter matrix:
-    parameter_matrix = np.load(os.path.join(EXPERIMENT_DIRPATH, "sample_matrix.npy"))
+    parameter_matrix = np.load(os.path.join(args.experiment_dirpath, "sample_matrix.npy"))
     reduced_parameter_matrix = np.concatenate(
         [
             parameter_matrix[:, :GRIDSEARCH_COUNT_INDEX],
@@ -518,10 +363,10 @@ def main():
     inference_managers = {}
     for metric_name in MODEL_METRICS:
         # Instantiate inference manager:
-        metric_filepath = os.path.join(EXPERIMENT_DIRPATH, "summary_data", f"{metric_name}.npy")
+        metric_filepath = os.path.join(args.experiment_dirpath, "summary_data", f"{metric_name}.npy")
         model_metric = np.load(metric_filepath)
         inference_manager = MetricInferenceManager(
-            EXPERIMENT_DIRPATH, metric_name, model_metric, parameter_matrix.shape[1]
+            args.experiment_dirpath, metric_name, model_metric, parameter_matrix.shape[1]
         )
         inference_managers[metric_name] = inference_manager
 
@@ -532,9 +377,9 @@ def main():
     print("Saving Sobol' likelihoods...", flush=True)
 
     if SEM_ESTIMATE:
-        mcmc_dirpath = os.path.join(EXPERIMENT_DIRPATH, "sem_mcmc_results")
+        mcmc_dirpath = os.path.join(args.experiment_dirpath, "sem_mcmc_results")
     else:
-        mcmc_dirpath = os.path.join(EXPERIMENT_DIRPATH, "wide_mcmc_results")
+        mcmc_dirpath = os.path.join(args.experiment_dirpath, "wide_mcmc_results")
     if not os.path.exists(mcmc_dirpath):
         os.mkdir(mcmc_dirpath)
     np.save(os.path.join(mcmc_dirpath, "wt_sobol_likelihoods.npy"), wt_sobol_likelihoods)
