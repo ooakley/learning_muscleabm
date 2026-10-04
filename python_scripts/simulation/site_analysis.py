@@ -3,6 +3,7 @@ import argparse
 import os
 import json
 import skimage
+from skimage.draw import line as draw_line
 
 import numpy as np
 import pandas as pd
@@ -81,45 +82,60 @@ def get_window_limits(positions_array):
     return window_limits
 
 
+DILATION_RADIUS = 16
+
+
+def draw_trajectory(xy_data, half_size):
+    """Draw the line segments of a trajectory onto a boolean image indexed [x, y]."""
+    line_image = np.zeros((half_size, half_size), dtype=bool)
+    xy_floor = np.floor(xy_data).astype(int)
+    starts, ends = xy_floor[:-1], xy_floor[1:]
+    # Skip segments touching the far edge, or crossing the periodic boundary:
+    on_edge = np.any(starts == half_size, axis=1) | np.any(ends == half_size, axis=1)
+    distance = np.sqrt(np.sum((starts - ends)**2, axis=1))
+    keep = ~on_edge & ~(distance > half_size / 2)
+    for (x0, y0), (x1, y1) in zip(starts[keep], ends[keep]):
+        line_rr, line_cc = draw_line(x0, y0, x1, y1)
+        line_image[line_rr, line_cc] = True
+    return line_image
+
+
+def dilate_trajectory(line_image):
+    """Dilate a trajectory image by DILATION_RADIUS, returning (crop slices, cropped disk).
+
+    The dilation is computed only on a crop around the trajectory, padded by more than the radius,
+    which gives the same result as dilating the whole image, since every trajectory pixel is in
+    the crop and every pixel outside it is further than the radius from all of them.
+    """
+    rows, columns = np.nonzero(line_image)
+    if rows.size == 0:
+        disk = skimage.morphology.isotropic_dilation(line_image, DILATION_RADIUS)
+        return (slice(None), slice(None)), disk
+    pad = DILATION_RADIUS + 1
+    region = (
+        slice(max(rows.min() - pad, 0), rows.max() + pad + 1),
+        slice(max(columns.min() - pad, 0), columns.max() + pad + 1),
+    )
+    return region, skimage.morphology.isotropic_dilation(line_image[region], DILATION_RADIUS)
+
+
 def find_coherency_fraction(positions_array):
     # Estimate order from trajectories plotted onto image, downsampling by 2:
-    line_array = []
-    disk_array = []
+    half_size = int(WORLD_SIZE / 2)
+    trajectory_array = np.zeros((half_size, half_size), dtype=bool)
+    disk_sum = np.zeros((half_size, half_size), dtype=np.int64)
+    disks = []
     for cell_index in range(positions_array.shape[0]):
-        # Create empty array for placing trajectories:
-        half_size = int(WORLD_SIZE / 2)
-        particle_line_array = np.zeros((half_size, half_size))
-        xy_data = np.copy(positions_array[cell_index, :, :])
-        # !!! Downsample:
-        xy_data /= 2
-        for frame_index in range(len(xy_data) - 1):
-            # Get indices of line:
-            xy_t = np.floor(xy_data[frame_index, :]).astype(int)
-            xy_t1 = np.floor(xy_data[frame_index + 1, :]).astype(int)
-            if np.any(np.concatenate([xy_t, xy_t1]) == half_size):
-                continue
-            # Account for periodic boundaries:
-            distance = np.sqrt(np.sum((xy_t - xy_t1)**2, axis=0))
-            if distance > half_size / 2:
-                continue
-            # Plot line indices on matrix:
-            line_rr, line_cc = skimage.draw.line(*xy_t, *xy_t1)
-            particle_line_array[line_rr, line_cc] += 1
-
-        # Get frame of interaction area of trajectory:
-        particle_line_array = np.clip(particle_line_array, 0, 1)
-        particle_disk_array = skimage.morphology.isotropic_dilation(np.bool(particle_line_array), 16)
-        line_array.append(particle_line_array)
-        disk_array.append(particle_disk_array)
-
-    # Get full arrays:
-    line_array = np.stack(line_array, axis=0)
-    disk_array = np.stack(disk_array, axis=0)
-    trajectory_array = np.clip(np.sum(line_array, axis=0), 0, 1)
+        # Draw trajectory, and get the area it interacts with:
+        line_image = draw_trajectory(positions_array[cell_index, :, :] / 2, half_size)
+        trajectory_array |= line_image
+        region, disk = dilate_trajectory(line_image)
+        disk_sum[region] += disk
+        disks.append((region, disk))
 
     # Find orientations of lines:
     structure_tensor = skimage.feature.structure_tensor(
-        trajectory_array, sigma=16,
+        trajectory_array.astype(float), sigma=16,
         mode='constant', cval=0,
         order='rc'
     )
@@ -137,14 +153,16 @@ def find_coherency_fraction(positions_array):
     # -- Iterate through particle frames:
     coherency_values = []
     interaction_values = []
-    disk_sum = np.sum(disk_array, axis=0)
-    for particle_index in range(disk_array.shape[0]):
-        indexed_path = disk_array[particle_index, :, :]
-        comparator_paths = np.clip(disk_sum - indexed_path, 0, 1)
-        interaction_value = np.sum(comparator_paths * indexed_path) / np.sum(indexed_path)
-        coherency_value = np.sum(filtered_coherency * indexed_path) / np.sum(indexed_path)
-        interaction_values.append(interaction_value)
-        coherency_values.append(coherency_value)
+    indexed_path = np.zeros((half_size, half_size), dtype=bool)
+    for region, disk in disks:
+        disk_area = np.sum(disk)
+        # Fraction of the particle's area that other particles' areas overlap:
+        overlapped = (disk_sum[region] - disk) > 0
+        interaction_values.append(np.sum(overlapped & disk) / disk_area)
+        # Mean coherency over the particle's area (summed over the whole image, as before):
+        indexed_path[region] = disk
+        coherency_values.append(np.sum(filtered_coherency * indexed_path) / disk_area)
+        indexed_path[region] = False
     # -- Concatenate to arrays:
     coherency_values = np.stack(coherency_values)
     interaction_values = np.stack(interaction_values)
