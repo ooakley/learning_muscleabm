@@ -10,6 +10,7 @@ import numpy as np
 
 from muscleabm.datasets import GLOBAL_DATASET_FOLDER, load_gridsearch_data
 from muscleabm.emulators import ModelManager, run_inference
+from muscleabm.history_matching import GPSettings
 from muscleabm.sensitivity import run_sobol_index_inference
 
 sys.stdout.reconfigure(line_buffering=True)
@@ -17,21 +18,11 @@ sys.stdout.reconfigure(line_buffering=True)
 # Need a higher precision for computing double derivatives:
 torch.set_default_dtype(torch.float64)
 
-NUM_EPOCHS = 15
 K_FOLD_COUNT = 8
-INDUCING_POINT_COUNT = 512
 
-# Learning rates: one for the GP (variational parameters, inducing locations,
-# kernel hyperparameters and likelihood), and one for the deep kernel network:
-LEARNING_RATE = 0.01
-DEEP_KERNEL_LEARNING_RATE = 0.003
-
-# Deep kernel architecture: number of hidden layers, and neurons per hidden layer:
-NUM_LAYERS = 2
-NUM_NEURONS = 32
-
-# Batch size used for both training and inference:
-BATCH_SIZE = 512
+# The GP architecture and training settings (epochs, inducing points, deep kernel layers
+# and neurons, learning rates and batch size) are command line arguments, with defaults in
+# muscleabm/history_matching.py.
 
 
 def parse_arguments():
@@ -44,8 +35,9 @@ def parse_arguments():
     parser.add_argument(
         '--gp_models_dirname', type=str, default=None,
         help='Folder, inside the latest wave folder, to save the models to. Defaults to a name '
-             'built from the training settings at the top of this script.'
+             'built from the GP settings.'
     )
+    GPSettings.add_arguments(parser)
     args = parser.parse_args()
     return args
 
@@ -78,9 +70,14 @@ def scatter_to_original(values, original_indices, original_row_count):
 class DeepKernelModelManager(ModelManager):
     """Model manager with its own learning rate for the deep kernel network, and cosine decay."""
 
-    def __init__(self, inducing_points, learning_rate, deep_kernel_learning_rate):
+    def __init__(self, inducing_points, gp_settings):
         # Set up model:
-        super().__init__(inducing_points, learning_rate, NUM_LAYERS, NUM_NEURONS)
+        learning_rate = gp_settings.learning_rate
+        deep_kernel_learning_rate = gp_settings.deep_kernel_learning_rate
+        super().__init__(
+            inducing_points, learning_rate,
+            gp_settings.hidden_layer_count, gp_settings.hidden_layer_neuron_count
+        )
 
         # Split the model parameters into the deep kernel network and everything else:
         deep_kernel_parameters = list(self.model.input_transform.parameters())
@@ -98,7 +95,7 @@ class DeepKernelModelManager(ModelManager):
             {'params': deep_kernel_parameters, 'lr': deep_kernel_learning_rate},
         ])
         self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            self.optimizer, T_max=NUM_EPOCHS
+            self.optimizer, T_max=gp_settings.epochs
         )
 
 
@@ -116,7 +113,7 @@ def run_warp_inference(model_manager, inputs, batch_size=512):
 
 def cross_validation(
         parameter_matrix, output_metric, output_sem, replicate_counts, inducing_points,
-        valid_indices, original_row_count, wave_indices, wave_row_indices, id_folderpath
+        valid_indices, original_row_count, wave_indices, wave_row_indices, id_folderpath, gp_settings
     ):
     # Shuffle datapoints prior to cross-validation (as otherwise there
     # are weird autocorrelations from the Sobol' sampling):
@@ -181,7 +178,7 @@ def cross_validation(
     for k_index in range(K_FOLD_COUNT):
         # Set up the model and the model's associated training apparatus:
         print(f"Performing validation with index: {k_index}...", flush=True)
-        model_manager = DeepKernelModelManager(inducing_points, LEARNING_RATE, DEEP_KERNEL_LEARNING_RATE)
+        model_manager = DeepKernelModelManager(inducing_points, gp_settings)
 
         # Get test indices:
         test_indices = np.arange(k_index, dataset_size, K_FOLD_COUNT)
@@ -214,7 +211,7 @@ def cross_validation(
         whitened_test_noise = (test_sem / train_std) ** 2
 
         # Train model:
-        model_manager.train(train_parameters, whitened_train, BATCH_SIZE, epochs=NUM_EPOCHS)
+        model_manager.train(train_parameters, whitened_train, gp_settings.batch_size, epochs=gp_settings.epochs)
 
         # Save this fold's model, whitening transform and loss history, so that further
         # held-out diagnostics can be computed later without retraining:
@@ -227,7 +224,7 @@ def cross_validation(
 
         # Run predictions on every datapoint, then pick out the test and training sets:
         all_predictions, all_latent_sigma, all_sigma = run_inference(
-            model_manager.model, model_manager.likelihood, permuted_parameters, BATCH_SIZE,
+            model_manager.model, model_manager.likelihood, permuted_parameters, gp_settings.batch_size,
             standard_deviations=True
         )
         predictions = all_predictions[test_mask]
@@ -324,8 +321,10 @@ def main():
 
     # Parse arguments:
     args = parse_arguments()
+    gp_settings = GPSettings.from_arguments(args)
     print(f"Using experiment {args.experiment_dirpath}...")
     print(f"Training on {args.metric_name}...")
+    print(f"GP settings: {gp_settings.to_dict()}")
 
     # The models train on the dataset aggregated across history matching waves:
     dataset_dirpath = os.path.join(args.experiment_dirpath, GLOBAL_DATASET_FOLDER)
@@ -356,14 +355,14 @@ def main():
     # Get inducing points - sampling the row indices, so they can be recorded:
     print("Sampling inducing points...")
     generator = np.random.default_rng(0)
-    inducing_indices = generator.choice(parameter_matrix.shape[0], INDUCING_POINT_COUNT, replace=False)
+    inducing_indices = generator.choice(parameter_matrix.shape[0], gp_settings.inducing_point_count, replace=False)
     inducing_points = parameter_matrix[inducing_indices, :]
     print(f"Inducing points shape: {inducing_points.shape}...")
 
     # Set up save directories:
     gp_models_dirname = args.gp_models_dirname
     if gp_models_dirname is None:
-        gp_models_dirname = f"pll_gp_models_e{NUM_EPOCHS}_ip{INDUCING_POINT_COUNT}_l{NUM_LAYERS}_n{NUM_NEURONS}"
+        gp_models_dirname = gp_settings.models_dirname
     gp_folderpath = os.path.join(wave_dirpath, gp_models_dirname)
     os.makedirs(gp_folderpath, exist_ok=True)
     id_folderpath = os.path.join(gp_folderpath, args.metric_name)
@@ -377,14 +376,14 @@ def main():
         "wave_row_counts": [int(wave_row_count) for wave_row_count in wave_row_counts],
         "latest_wave_id": latest_wave_id,
         "metric_name": args.metric_name,
-        "num_epochs": NUM_EPOCHS,
+        "num_epochs": gp_settings.epochs,
         "k_fold_count": K_FOLD_COUNT,
-        "inducing_point_count": INDUCING_POINT_COUNT,
-        "learning_rate": LEARNING_RATE,
-        "deep_kernel_learning_rate": DEEP_KERNEL_LEARNING_RATE,
-        "num_layers": NUM_LAYERS,
-        "num_neurons": NUM_NEURONS,
-        "batch_size": BATCH_SIZE,
+        "inducing_point_count": gp_settings.inducing_point_count,
+        "learning_rate": gp_settings.learning_rate,
+        "deep_kernel_learning_rate": gp_settings.deep_kernel_learning_rate,
+        "num_layers": gp_settings.hidden_layer_count,
+        "num_neurons": gp_settings.hidden_layer_neuron_count,
+        "batch_size": gp_settings.batch_size,
         "original_row_count": int(original_row_count),
         "valid_row_count": int(parameter_matrix.shape[0]),
         "torch_version": torch.__version__,
@@ -395,7 +394,7 @@ def main():
 
     # Set up the model and the model's associated training apparatus:
     print("Setting up model...")
-    model_manager = DeepKernelModelManager(inducing_points, LEARNING_RATE, DEEP_KERNEL_LEARNING_RATE)
+    model_manager = DeepKernelModelManager(inducing_points, gp_settings)
 
     # Whiten metric distribution:
     metric_mean = np.mean(output_metric)
@@ -409,7 +408,7 @@ def main():
 
     # Train the model:
     print("Training model...")
-    model_manager.train(parameter_matrix, whitened_metric, BATCH_SIZE, epochs=NUM_EPOCHS)
+    model_manager.train(parameter_matrix, whitened_metric, gp_settings.batch_size, epochs=gp_settings.epochs)
     print("Saving model...")
     model_manager.save(id_folderpath)
 
@@ -419,7 +418,7 @@ def main():
 
     # Generate and save predictions:
     whitened_predictions, whitened_latent_stddev, whitened_stddev = run_inference(
-        model_manager.model, model_manager.likelihood, parameter_matrix, batch_size=BATCH_SIZE,
+        model_manager.model, model_manager.likelihood, parameter_matrix, batch_size=gp_settings.batch_size,
         standard_deviations=True
     )
     predictions = (whitened_predictions * metric_std) + metric_mean
@@ -464,16 +463,16 @@ def main():
         inducing_points=final_inducing_points,
         # --- Positions in the warped space that the kernel acts on:
         warped_parameters=scatter_to_original(
-            run_warp_inference(model_manager, parameter_matrix, BATCH_SIZE), valid_indices, original_row_count
+            run_warp_inference(model_manager, parameter_matrix, gp_settings.batch_size), valid_indices, original_row_count
         ),
-        warped_inducing_points=run_warp_inference(model_manager, final_inducing_points, BATCH_SIZE)
+        warped_inducing_points=run_warp_inference(model_manager, final_inducing_points, gp_settings.batch_size)
     )
 
     # Perform cross-validation - the per-datapoint diagnostics and the per-fold
     # metrics are saved by the function itself as each fold finishes:
     cv_dict = cross_validation(
         parameter_matrix, output_metric, output_sem, replicate_counts, inducing_points,
-        valid_indices, original_row_count, wave_indices, wave_row_indices, id_folderpath
+        valid_indices, original_row_count, wave_indices, wave_row_indices, id_folderpath, gp_settings
     )
     for key in ["mae", "mse", "train_mse", "sll", "lcr", "tcr"]:
         print(f"Mean {key}: {np.mean(cv_dict[key])}")
