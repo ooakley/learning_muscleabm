@@ -23,5 +23,5 @@
     "cellStiffness": 0.1367406408356016,
     "surfaceStickiness": 9.89469891706022,
     "jobArrayID": 1175,
-    "outputFolder": "model_parameter_json/example_rd_cs_params"
+    "outputFolder": "configs/model_parameter_json/example_rd_cs_params"
 }

@@ -29,7 +29,7 @@ def _():
 @app.cell
 def _(np):
     # Data location:
-    DATA_DIR_PATH = "model_parameter_json/matrix_test"
+    DATA_DIR_PATH = "configs/model_parameter_json/matrix_test"
 
     # Matrix variables:
     MESH_NUMBER = 64

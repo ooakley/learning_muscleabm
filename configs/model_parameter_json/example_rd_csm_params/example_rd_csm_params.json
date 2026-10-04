@@ -23,5 +23,5 @@
     "cellStiffness": 0.1,
     "surfaceStickiness": 10,
     "jobArrayID": 2,
-    "outputFolder": "model_parameter_json/example_rd_csm_params"
+    "outputFolder": "configs/model_parameter_json/example_rd_csm_params"
 }

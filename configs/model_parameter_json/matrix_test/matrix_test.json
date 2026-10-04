@@ -23,5 +23,5 @@
     "matrixAdvectionRate": 1.0,
     "matrixSampleRate": 4,
     "jobArrayID": 21257,
-    "outputFolder": "model_parameter_json/matrix_test"
+    "outputFolder": "configs/model_parameter_json/matrix_test"
 }

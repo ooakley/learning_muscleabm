@@ -23,5 +23,5 @@
     "cellStiffness": 1.4029307238291948,
     "surfaceStickiness": 0.1,
     "jobArrayID": 74811,
-    "outputFolder": "model_parameter_json/organised_parameters"
+    "outputFolder": "configs/model_parameter_json/organised_parameters"
 }

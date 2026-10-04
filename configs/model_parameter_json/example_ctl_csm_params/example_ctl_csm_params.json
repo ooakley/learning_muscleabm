@@ -23,5 +23,5 @@
     "matrixSampleRate": 10,
     "numberOfCells": 300,
     "jobArrayID": 53,
-    "outputFolder": "model_parameter_json/example_ctl_csm_params"
+    "outputFolder": "configs/model_parameter_json/example_ctl_csm_params"
 }

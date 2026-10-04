@@ -49,7 +49,7 @@ def _():
 def _():
     MESH_NUMBER = 128
     TIMESTEPS = 2880
-    VIDEO_DIRPATH = "model_parameter_json/example_rd_csm_params"
+    VIDEO_DIRPATH = "configs/model_parameter_json/example_rd_csm_params"
     CELL_COUNT = 400
     MATRIX_TIMESERIES = False
     return CELL_COUNT, MESH_NUMBER, TIMESTEPS, VIDEO_DIRPATH

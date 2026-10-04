@@ -18,6 +18,10 @@ Scripts are run from the repository root, and are grouped in `python_scripts/` b
 | `sensitivity/` | Hessians, Fisher information, eigenparameters and interventions |
 | `wetlab/` | Analysing the wet lab trajectories |
 
+## Configs
+
+`configs/` holds the simulation configs: `gridsearch_configs/` for parameter sweeps (passed to `python_scripts/search/generate_sobol_search.py`), and `model_parameter_json/` for single simulations (passed to `python_scripts/simulation/call_json_parameters.py`), whose outputs are written next to them. `example_config.json` is another single simulation config. Only the collisions, `csm_posterior`, `matrix_shape` and `repatterning` sweep configs match the options `src/main.cpp` currently accepts; the others still pass matrix options (e.g. `matrixTurnoverRate`) that it no longer registers.
+
 ## Job scripts
 
 `bash_scripts/` holds the SLURM job scripts, submitted from the repository root with `sbatch bash_scripts/<script> <arguments>`; each describes its arguments at its top. `bash_scripts/submit_hm_waves.sh` submits the history matching pipeline as a chain of these jobs.

@@ -22,5 +22,5 @@
     "collisionFlowReductionRate": 0.3565961364656687,
     "collisionAdvectionRate": 0.3497830890119076,
     "jobArrayID": 19443,
-    "outputFolder": "model_parameter_json/direct_abc_outputs"
+    "outputFolder": "configs/model_parameter_json/direct_abc_outputs"
 }

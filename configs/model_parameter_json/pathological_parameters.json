@@ -22,5 +22,5 @@
     "collisionFlowReductionRate": 2.9312838697806,
     "collisionAdvectionRate": 1.091816428117454,
     "jobArrayID": 34477,
-    "outputFolder": "model_parameter_json/pathological_params"
+    "outputFolder": "configs/model_parameter_json/pathological_params"
 }

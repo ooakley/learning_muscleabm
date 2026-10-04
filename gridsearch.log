@@ -1,6 +1,0 @@
-Seq	Host	Starttime	JobRuntime	Send	Receive	Exitval	Signal	Command
-8	:	1779378378.255	   329.021	0	0	1	0	srun --ntasks 1 bash_scripts/simulate.sh 7
-5	:	1779378378.232	   329.051	0	0	1	0	srun --ntasks 1 bash_scripts/simulate.sh 4
-6	:	1779378378.238	   329.047	0	0	1	0	srun --ntasks 1 bash_scripts/simulate.sh 5
-9	:	1779378378.261	   329.025	0	0	1	0	srun --ntasks 1 bash_scripts/simulate.sh 8
-10	:	1779378378.265	   329.020	0	0	1	0	srun --ntasks 1 bash_scripts/simulate.sh 9
