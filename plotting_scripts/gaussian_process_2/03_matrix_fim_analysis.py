@@ -62,7 +62,7 @@ def _(datetime, os, subprocess):
     # A4 dimensions: 8.27 × 11.69 inches
     # Image dimensions: 160 x ? mm
     # Metadata: date, script, github branch id, og experiment source
-    OUT_DIRPATH = "plotting_scripts/gaussian_process/out"
+    OUT_DIRPATH = "plotting_scripts/gaussian_process_2/out"
     CONTROL_PALETTE = "#1A85FF"
     RD_PALETTE = "#D41159"
     ADJ_RD_PALETTE = "#FFB000"
@@ -103,19 +103,27 @@ def _(datetime, os, subprocess):
 
 
 @app.cell
-def _(np):
-    EXPERIMENT_DIRPATH = "model_experiments/2026-06-03-matrix_shape"
-    sample_hessians = np.load("model_experiments/2026-06-03-matrix_shape/gaussian_process_models/op65/hessian_estimate.npy")
-    sample_hessians = (sample_hessians + np.transpose(sample_hessians, axes=[0, 2, 1])) / 2
-    sample_inputs = np.load("model_experiments/2026-06-03-matrix_shape/gaussian_process_models/op65/hessian_inputs.npy")
-    return EXPERIMENT_DIRPATH, sample_hessians, sample_inputs
+def _(TEXT_WIDTH):
+    TEXT_WIDTH
+    return
 
 
 @app.cell
-def _(np):
-    sample_order_estimates = np.load("model_experiments/2026-06-03-matrix_shape/gaussian_process_models/op65/hessian_outputs.npy")
+def _(np, os):
+    EXPERIMENT_DIRPATH = "model_experiments/2026-09-25-matrix_shape"
 
-    simulation_op = np.load("model_experiments/2026-06-03-matrix_shape/summary_data/matrix_order_parameters.npy")
+    hessian_dirpath = os.path.join(EXPERIMENT_DIRPATH, "op65_fullrank_FIM")
+    sample_hessians = np.load(os.path.join(hessian_dirpath, "fim_estimate.npy"))
+    sample_hessians = (sample_hessians + np.transpose(sample_hessians, axes=[0, 2, 1])) / 2
+    sample_inputs = np.load(os.path.join(hessian_dirpath, "fim_inputs.npy"))
+    return EXPERIMENT_DIRPATH, hessian_dirpath, sample_hessians, sample_inputs
+
+
+@app.cell
+def _(EXPERIMENT_DIRPATH, hessian_dirpath, np, os):
+    sample_order_estimates = np.load(os.path.join(hessian_dirpath, "fim_outputs.npy"))
+
+    simulation_op = np.load(os.path.join(EXPERIMENT_DIRPATH, "summary_data", "matrix_order_parameters.npy"))
     simulation_op = np.mean(simulation_op[:, :, 2], axis=1)
     mean_op_dist = np.mean(simulation_op)
     std_op_dist = np.std(simulation_op)
@@ -156,6 +164,40 @@ def _(get_eigenvectors, sample_hessians):
 
 
 @app.cell
+def _(np, sample_hessians):
+    def global_active_subspace():
+        global_subspace = np.mean(sample_hessians, axis=0)
+        global_eigenvalues, global_eigenvectors = np.linalg.eigh(global_subspace)
+        value_sort = np.argsort(-global_eigenvalues)
+        global_eigenvalues = global_eigenvalues[value_sort]
+        global_eigenvectors = global_eigenvectors.T[value_sort, :]
+        return global_eigenvalues, global_eigenvectors
+
+    global_eigenvalues, global_eigenvectors = global_active_subspace()
+    return global_eigenvalues, global_eigenvectors
+
+
+@app.cell
+def _(global_eigenvectors, np, sample_inputs):
+    ga_input_0 = np.log(sample_inputs) @ global_eigenvectors[0, :]
+    ga_input_1 = np.log(sample_inputs) @ global_eigenvectors[1, :]
+    ga_input_2 = np.log(sample_inputs) @ global_eigenvectors[2, :]
+    return
+
+
+@app.cell
+def _(global_eigenvectors):
+    print(global_eigenvectors[:, 0])
+    return
+
+
+@app.cell
+def _(global_eigenvalues, plt):
+    plt.plot(global_eigenvalues)
+    return
+
+
+@app.cell
 def _(cc, eigenvalues, np, plt, sample_hessians):
     def plot_example_hessian(gridsize):
         fig, axs = plt.subplots(gridsize, gridsize, figsize=(5, 5))
@@ -173,12 +215,6 @@ def _(cc, eigenvalues, np, plt, sample_hessians):
         plt.show()
 
     plot_example_hessian(10)
-    return
-
-
-@app.cell
-def _(eigenvectors, np, sample_inputs):
-    intrinsic_activities = np.sum(np.log(sample_inputs) * eigenvectors[:, 0, :], axis=1)
     return
 
 
@@ -229,7 +265,7 @@ def _(
         cr.set_clim(1, 14)
         cbar = fig.colorbar(
             mpl.colorizer.ColorizingArtist(cr), ax=ax,
-            fraction=0.1, label="Eigenvector Order"
+            fraction=0.1, label="Eigenvalue Rank"
         )
         cbar.set_ticks([1, 7, 14])
         cbar.ax.invert_yaxis()
@@ -251,38 +287,44 @@ def _(
 
 
 @app.cell
-def _(np, plt, singular_values, u_vectors):
-    from numpy.polynomial import polynomial as P
+def _(np):
+    np.log(1e-16)
+    return
 
-    def plot_average_interaction(value_index, i, j, ax):
-        # Get eigencomponents:
-        eigencomponents = np.copy(u_vectors[:, value_index, [i, j]])
 
-        # Get gradient:
-        c = P.polyfit(eigencomponents[:, 0], eigencomponents[:, 1], [1], full=False)
-        c_angle = np.arctan(c[1])
+@app.cell
+def _():
+    # from numpy.polynomial import polynomial as P
 
-        # Get the correlation coefficient:
-        corr_coeff = np.corrcoef(eigencomponents[:, 0], eigencomponents[:, 1])[0, 1]
-        print(corr_coeff)
+    # def plot_average_interaction(value_index, i, j, ax):
+    #     # Get eigencomponents:
+    #     eigencomponents = np.copy(u_vectors[:, value_index, [i, j]])
 
-        # Plot the scatter plots:
-        color_values = np.log(singular_values[:, value_index])
-        color_sort = np.argsort(color_values)[::-1]
-        color_sort = color_values < np.quantile(color_values, 0.1)
-        ax.scatter(eigencomponents[color_sort, 0], eigencomponents[color_sort, 1], s=0.5, alpha=0.05, c=color_values[color_sort])
-        mean_components = np.mean(eigencomponents, axis=0)
-        # ax.scatter(mean_components[0], mean_components[1], c='r')
-        # ax.scatter(corr_coeff * np.cos(c_angle), corr_coeff * np.sin(c_angle), c='g')
+    #     # Get gradient:
+    #     c = P.polyfit(eigencomponents[:, 0], eigencomponents[:, 1], [1], full=False)
+    #     c_angle = np.arctan(c[1])
 
-        ax.set_aspect("equal")
-        ax.set_xlim(-1.05, 1.05)
-        ax.set_ylim(-1.05, 1.05)
-        # plt.plot([0, corr_coeff * np.cos(c_angle)], [0, corr_coeff * np.sin(c_angle)], c='k')
+    #     # Get the correlation coefficient:
+    #     corr_coeff = np.corrcoef(eigencomponents[:, 0], eigencomponents[:, 1])[0, 1]
+    #     print(corr_coeff)
 
-    fig, ax = plt.subplots(figsize=(3, 3))
-    plot_average_interaction(13, 0, 4, ax)
-    plt.show()
+    #     # Plot the scatter plots:
+    #     color_values = np.log(singular_values[:, value_index])
+    #     color_sort = np.argsort(color_values)[::-1]
+    #     color_sort = color_values < np.quantile(color_values, 0.1)
+    #     ax.scatter(eigencomponents[color_sort, 0], eigencomponents[color_sort, 1], s=0.5, alpha=0.05, c=color_values[color_sort])
+    #     mean_components = np.mean(eigencomponents, axis=0)
+    #     # ax.scatter(mean_components[0], mean_components[1], c='r')
+    #     # ax.scatter(corr_coeff * np.cos(c_angle), corr_coeff * np.sin(c_angle), c='g')
+
+    #     ax.set_aspect("equal")
+    #     ax.set_xlim(-1.05, 1.05)
+    #     ax.set_ylim(-1.05, 1.05)
+    #     # plt.plot([0, corr_coeff * np.cos(c_angle)], [0, corr_coeff * np.sin(c_angle)], c='k')
+
+    # fig, ax = plt.subplots(figsize=(3, 3))
+    # plot_average_interaction(0, 0, 4, ax)
+    # plt.show()
     return
 
 
@@ -355,7 +397,7 @@ def _(
 def _(np, parameter_list, pd, u_vectors):
     primary_component_dataset = np.abs(u_vectors[:, 0, :])
     significance_percentages = np.count_nonzero(np.abs(primary_component_dataset) > 0.1, axis=0) / primary_component_dataset.shape[0]
-    significance_dataframe = pd.DataFrame(significance_percentages, columns=["Significance Fraction"], index=parameter_list)
+    significance_dataframe = pd.DataFrame(significance_percentages, columns=["Significance Fraction"], index=parameter_list[:-1])
     return (significance_dataframe,)
 
 
@@ -395,13 +437,7 @@ def _(eigenvalues, np, u_vectors):
         return proposal_median, flipped_vectors, np.mean(nematic_distances)
 
     proposal_median, flipped_vectors, _ = calculate_geometric_median(u_vectors[:, 0, :], eigenvalues[:, 0])
-    return calculate_geometric_median, flipped_vectors, proposal_median
-
-
-@app.cell
-def _(np, proposal_median):
-    np.round(proposal_median, 2)
-    return
+    return calculate_geometric_median, flipped_vectors
 
 
 @app.cell
@@ -480,95 +516,141 @@ def _(np):
     @numba.njit()
     def nematic_similarity(a, b):
         return np.abs(a @ b.T)
+
+    @numba.njit(fastmath=True)
+    def airm(A, B, jitter=1e-10, tol=1e-8):
+        # Get matrix shape:
+        A = A.reshape((14, 14)).astype(np.float64)
+        B = B.reshape((14, 14)).astype(np.float64)
+
+        # Getting the inverse is more stable with a Cholesky:
+        L = np.linalg.cholesky(A + np.eye(14) * jitter)
+
+        # Solve for the inverse problem:
+        Y = np.linalg.solve(L, B)
+        M = np.linalg.solve(L, Y.T).T
+        sym_M = 0.5 * (M + M.T)
+        eigenvalues = np.linalg.eigvalsh(M)
+
+        # Get rational scale for clipping:
+        scale = np.max(np.abs(eigenvalues))
+        cutoff = tol * scale
+        eigenvalues = np.where(eigenvalues < cutoff, cutoff, eigenvalues)
+        return np.sqrt(np.sum(np.log(eigenvalues) ** 2))
+
+    @numba.njit(fastmath=True)
+    def airm_sym(A, B, jitter=1e-10, tol=1e-8):
+        return 0.5 * (airm(A, B, jitter, tol) + airm(B, A, jitter, tol))
+
+    @numba.njit(fastmath=True, parallel=True)
+    def airm_pairwise(mats, jitter=1e-10):
+        N, n, _ = mats.shape
+        D = np.zeros((N, N))
+        for i in numba.prange(N):
+            L = np.linalg.cholesky(mats[i] + jitter * np.eye(n))
+            for j in range(i + 1, N):
+                Y = np.linalg.solve(L, mats[j])
+                M = np.linalg.solve(L, Y.T).T
+                M = 0.5 * (M + M.T)
+
+                eigvals = np.linalg.eigvalsh(M)
+                scale = np.max(np.abs(eigvals))
+                cutoff = 1e-8 * scale
+                eigvals = np.where(eigvals < cutoff, cutoff, eigvals)
+                d = np.sqrt(np.sum(np.log(eigvals) ** 2))
+                D[i, j] = d; D[j, i] = d
+        return D
+
+    @numba.njit(fastmath=True, parallel=True)
+    def airm_pairwise(mats, jitter=1e-10):
+        N, n, _ = mats.shape
+        D = np.zeros((N, N))
+        for i in numba.prange(N):
+            L = np.linalg.cholesky(mats[i] + jitter * np.eye(n))
+            for j in range(i + 1, N):
+                Y = np.linalg.solve(L, mats[j])
+                M = np.linalg.solve(L, Y.T).T
+                M = 0.5 * (M + M.T)
+
+                eigvals = np.linalg.eigvalsh(M)
+                scale = np.max(np.abs(eigvals))
+                cutoff = 1e-8 * scale
+                eigvals = np.where(eigvals < cutoff, cutoff, eigvals)
+                d = np.sqrt(np.sum(np.log(eigvals) ** 2))
+                D[i, j] = d; D[j, i] = d
+        return D
     return nematic_cosine, umap
 
 
 @app.cell
-def _(eigenvalues, eigenvectors):
-    primary_eigenvectors = eigenvectors[:, 0, :]
-    primary_eigenvalues = eigenvalues[:, [0]]
-    return primary_eigenvalues, primary_eigenvectors
-
-
-@app.cell
-def _(nematic_cosine, primary_eigenvectors, umap):
-    umap_manager = umap.UMAP(n_components=2, n_neighbors=10, min_dist=0.0, metric=nematic_cosine, random_state=1)
-    umap_embeddings = umap_manager.fit_transform(primary_eigenvectors)
-    return umap_embeddings, umap_manager
-
-
-@app.cell
 def _(np):
-    kpca_embeddings = np.load("model_experiments/2026-06-03-matrix_shape/gaussian_process_models/op65/kpca_embeddings.npy")
-    isomap_embeddings = np.load("model_experiments/2026-06-03-matrix_shape/gaussian_process_models/op65/isomap_embeddings.npy")
-    return (isomap_embeddings,)
+    def sqrt_matrix(A):
+        eigvals, eigvecs = np.linalg.eigh(A)
+        eigvals = np.clip(eigvals, 0, None)
+        return (eigvecs * np.sqrt(eigvals)) @ eigvecs.T
 
+    def bures_wasserstein_distance(A, B):
+        # Get square root of matrix:
+        sqrt_A = sqrt_matrix(A)
 
-@app.cell
-def _(isomap_embeddings):
-    import sklearn
-
-    density_manager = sklearn.neighbors.KernelDensity(kernel='gaussian', bandwidth=0.02, leaf_size=50, rtol=0.01)
-    density_manager = density_manager.fit(isomap_embeddings[::16, :])
-    density = density_manager.score_samples(isomap_embeddings[:, :])
-    return density, sklearn
-
-
-@app.cell
-def _(density, plt, primary_eigenvectors):
-    test_index = 12
-    plt.hist(primary_eigenvectors[density < 0.2, test_index], bins=40, density=True)
-    plt.hist(primary_eigenvectors[:, test_index], bins=40, histtype="step", density=True);
-    plt.show()
+        # Calculate BW:
+        inner = sqrt_A @ B @ sqrt_A
+        # -- Symmetrise (if floating-point error introduces off-diagonals):
+        inner = 0.5 * (inner + inner.T) 
+        trace_term = np.trace(sqrt_matrix(inner))
+        sq_dist = np.trace(A) + np.trace(B) - (2 * trace_term)
+        return np.sqrt(sq_dist)
     return
 
 
 @app.cell
-def _(np, plt, primary_eigenvalues, umap_embeddings):
-    def plot_umap_fi():
+def _(eigenvectors, nematic_cosine, umap):
+    base_umapper = umap.UMAP(min_dist=0.0, metric=nematic_cosine)
+    base_umap_embeddings = base_umapper.fit_transform(eigenvectors[:, 0, :])
+    return (base_umap_embeddings,)
+
+
+@app.cell
+def _(base_umap_embeddings, plt):
+    plt.scatter(base_umap_embeddings[:, 0], base_umap_embeddings[:, 1], s=1, alpha=0.1, edgecolors="none")
+    return
+
+
+@app.cell
+def _(EXPERIMENT_DIRPATH, np, os):
+    # minval_isomap_embeddings = np.load(os.path.join(EXPERIMENT_DIRPATH, "embeddings", "minval_isomap_embeddings.npy"))
+    # bw_isomap_embeddings = np.load(os.path.join(EXPERIMENT_DIRPATH, "embeddings", "bw_isomap_embeddings.npy"))
+
+    isomap_embeddings = np.load(os.path.join(EXPERIMENT_DIRPATH, "embeddings", "isomap_embeddings.npy"))
+    gd_isomap_embeddings = np.load(os.path.join(EXPERIMENT_DIRPATH, "embeddings", "grassman_isomap_embeddings.npy"))
+
+    top_6_fim_rotated = np.load(os.path.join(EXPERIMENT_DIRPATH, "fim_rotated", "fim_6_rotated.npz"))
+    top_6_fim_rotated = top_6_fim_rotated["rotated_axes"]
+    return isomap_embeddings, top_6_fim_rotated
+
+
+@app.cell
+def _(top_6_fim_rotated):
+    top_6_fim_rotated.shape
+    return
+
+
+@app.cell
+def _(cc, isomap_embeddings, np, parameter_list, plt, top_6_fim_rotated):
+    def plot_factor_rotation():
         fig, ax = plt.subplots()
+        print(parameter_list[11])
+        color_values = top_6_fim_rotated[:, 11, 1]
+        color_sort = np.argsort(color_values)
         ax.scatter(
-            umap_embeddings[:, 0], umap_embeddings[:, 1], s=1, alpha=0.2,
-            c=primary_eigenvalues, vmin=np.quantile(primary_eigenvalues, 0.2), vmax=np.quantile(primary_eigenvalues, 0.95)
+            isomap_embeddings[color_sort, 0], isomap_embeddings[color_sort, 1],
+            s=0.5, edgecolors="none",
+            c=color_values[color_sort],
+            vmin=-0.5, vmax=0.5, cmap=cc.m_CET_D1
         )
         plt.show()
 
-    plot_umap_fi()
-    return
-
-
-@app.cell
-def _(
-    cc,
-    density,
-    isomap_embeddings,
-    np,
-    plt,
-    sample_order_estimates,
-    scale_op65,
-):
-    def test_plot_isomap():
-        color_values = np.log(np.clip(scale_op65(sample_order_estimates), 0, None) + 1e-3)
-        vmin = np.quantile(color_values, 0.05)
-        vmax = np.quantile(color_values, 0.95)
-
-        density_mask = density > np.quantile(density, 0.0)
-
-        fig = plt.figure(figsize=(10, 10))
-        ax = fig.add_subplot(projection='3d')
-        ax.view_init(elev=25, azim=10, roll=0)
-
-        ax.scatter(
-            isomap_embeddings[density_mask, 0],
-            isomap_embeddings[density_mask, 1],
-            isomap_embeddings[density_mask, 2],
-            c=color_values[density_mask], s=1, alpha=0.25, vmin=vmin, vmax=vmax,
-            cmap=cc.m_CET_L8
-        )
-        ax.set_aspect("equal")
-        plt.show()
-
-    test_plot_isomap()
+    plot_factor_rotation()
     return
 
 
@@ -576,157 +658,120 @@ def _(
 def _(isomap_embeddings, np):
     import trimap
 
-    np.random.seed(1)
-    trimap_embeddder = trimap.TRIMAP(n_dims=3, weight_temp=0.25)
+    np.random.seed(0)
+    trimap_embeddder = trimap.TRIMAP(n_dims=2, weight_temp=0.25)
     trimap_embeddings = trimap_embeddder.fit_transform(isomap_embeddings[:, :])
     return (trimap_embeddings,)
 
 
 @app.cell
-def _(cc, np, os, plt, sample_order_estimates, scale_op65, trimap_embeddings):
-    TOTAL_FRAME = 24 * 40
+def _():
+    # import elpigraph
 
-    def plot_3d_trimap(timestep):
-        # Set up 3D plot:
-        width = 10
-        fig = plt.figure(figsize=(width, width * (9 / 16)))
-        ax = fig.add_subplot(projection='3d')
+    # pg_tree = elpigraph.computeElasticPrincipalTree(isomap_embeddings[::8, :], NumNodes=50)
 
-        # We aim to complete the loop at 60 seconds:
-        ax.view_init(elev=0, azim=(timestep/TOTAL_FRAME) * 720, roll=(timestep/TOTAL_FRAME) * 360)
+    # def plot_elpi():
+    #     fig, ax = plt.subplots()
+    #     ax.scatter(isomap_embeddings[:, 0], isomap_embeddings[:, 1], s=0.5, alpha=0.1, edgecolors="none")
+    #     ax.scatter(curve_positions[:, 0], curve_positions[:, 1], s=3)
 
-        # Set up coloring:
-        color_values = scale_op65(sample_order_estimates)
-        color_sort = np.argsort(color_values)
+    #     # plot edges
+    #     for j in range(curve_edges.shape[1]):
+    #         x_coo = np.concatenate(
+    #             (curve_positions[curve_edges[0, j], [0]], curve_positions[curve_edges[1, j], [0]])
+    #         )
+    #         y_coo = np.concatenate(
+    #             (curve_positions[curve_edges[0, j], [1]], curve_positions[curve_edges[1, j], [1]])
+    #         )
+    #         ax.plot(x_coo, y_coo, c="black", linewidth=1, alpha=0.6)
 
-        # Plot:
+    #     plt.show()
+
+    # plot_elpi()
+    return
+
+
+@app.cell
+def _():
+    # bw_embeddder = trimap.TRIMAP(n_dims=2, weight_temp=0.25)
+    # bw_embeddings = bw_embeddder.fit_transform(bw_isomap_embeddings)
+
+    # def plot_bw_embeddings():
+    #     fig, ax = plt.subplots()
+    #     ax.scatter(
+    #         bw_embeddings[:, 0], bw_embeddings[:, 1],
+    #         s=0.5, edgecolors="none", alpha=0.5,
+    #         c=scale_op65(sample_order_estimates),
+    #         vmin=np.quantile(scale_op65(sample_order_estimates), 0.05),
+    #         vmax=np.quantile(scale_op65(sample_order_estimates), 0.95)
+    #     )
+    #     plt.show()
+
+    # plot_bw_embeddings()
+    return
+
+
+@app.cell
+def _(cc, np, plt, trimap_embeddings):
+    def plot_trimap(color_values, cmap=cc.m_CET_L8, name="test"):
+        color_sort = color_values.argsort()
+
+        print(np.quantile(color_values, 0.05))
+        print(np.quantile(color_values, 0.95))
+        fig, ax = plt.subplots(figsize=(5, 5))
+
         ax.scatter(
             trimap_embeddings[color_sort, 0],
             trimap_embeddings[color_sort, 1],
-            -trimap_embeddings[color_sort, 2],
-            alpha=0.1, s=2, edgecolors="none",
-            c=color_values[color_sort],
+            cmap=cmap,
+            s=0.75, alpha=0.6, edgecolors="none", c=color_values[color_sort],
             vmin=np.quantile(color_values, 0.05),
             vmax=np.quantile(color_values, 0.95),
-            cmap=cc.m_CET_L8
         )
 
-        ax.set_axis_off()
-        ax.set_aspect("equal")
-
-        edging = 0.00
-        fig.subplots_adjust(edging, edging, 1-edging, 1-edging)
-
-    def write_video_to_file():
-
-        if not os.path.exists("img_tmp"):
-            os.mkdir("img_tmp")
-
-        for timestep in range(TOTAL_FRAME):
-            if (timestep + 1) % 24 == 0:
-                print(timestep + 1)
-
-            plot_3d_trimap(timestep)
-            plt.savefig(os.path.join("img_tmp", f"frame_{timestep}.png"), dpi=150)
-            plt.close()
-
-    write_video_to_file()
-
-    # plot_3d_trimap()
-    return
-
-
-@app.cell
-def _():
-    import subprocess
-    subprocess.run("ffmpeg -y -i img_tmp/frame_%d.png -r 24 -vcodec libx264 -crf 18 trimap_video.mp4", shell=True)
-    return (subprocess,)
-
-
-@app.cell
-def _(cc, np, parameter_eps, plt, trimap_embeddings):
-    def plot_trimap():
-        width = 8
-        fig, ax = plt.subplots(figsize=(width, width * (9 / 16)))
-        # color_vals = np.log(np.clip(scale_op65(sample_order_estimates), 0, None) + 1e-3)
-        # color_vals = np.log(primary_eigenvalues)
-        # color_vals = sobol_ouputs[5]
-        # color_vals = sample_inputs[:, 13]
-        color_vals = parameter_eps
-        # color_vals = flipped_vectors[:, 5]
-        # color_vals = color_vals[density > np.quantile(density, 0.05)]
-        color_sort = np.argsort(color_vals)
-        color_sort = np.arange(len(color_vals))
-        print(color_sort)
-        ax.scatter(
-            trimap_embeddings[color_sort, 0],
-            trimap_embeddings[color_sort, 1], s=1,
-            alpha=0.5, edgecolors="none",
-            c=color_vals[color_sort],
-            vmin=np.quantile(color_vals, 0.05),
-            vmax=np.quantile(color_vals, 0.95),
-            cmap=cc.m_CET_L8
-        )
-        ax.set_aspect("equal")
-        ax.set_axis_off()
-
-        edging = 0
-        fig.subplots_adjust(edging, edging, 1 - edging, 1 - edging)
-        print(np.quantile(color_vals, 0.05))
-        print(np.quantile(color_vals, 0.95))
         plt.show()
+    return (plot_trimap,)
 
-    plot_trimap()
+
+@app.cell
+def _(cc, plot_trimap, sample_order_estimates, scale_op65):
+    plot_trimap(scale_op65(sample_order_estimates), cmap=cc.m_CET_R1)
     return
 
 
 @app.cell
 def _():
-    # import datashader as ds
-    # import datashader.transfer_functions as tf
+    # plot_trimap(np.log(spectral_ratio), cmap=cc.m_CET_L8)
+    return
 
-    # tri_df = pd.DataFrame(trimap_embeddings, columns=["x", "y"])
-    # ds_image = tf.shade(tf.spread(ds.Canvas().points(tri_df, "x", "y")), cmap="darkred")
+
+@app.cell
+def _(eigenvalues, np):
+    inverse_gap = np.abs(np.abs(eigenvalues[:, -1] - eigenvalues[:, -2]) / eigenvalues[:, -1])
     return
 
 
 @app.cell
 def _():
-    # def plot_3d_scatterplot():
-    #     # Set up 3D plot:
-    #     fig = plt.figure(figsize=(10, 10))
-    #     ax = fig.add_subplot(projection='3d')
-    #     ax.view_init(elev=30, azim=-110, roll=0)
-
-    #     # Set up coloring:
+    # def plot_inverse_umap():
+    #     fig, ax = plt.subplots(figsize=(5, 5))
     #     color_values = scale_op65(sample_order_estimates)
-    #     # color_values = density
+    #     # color_values = np.log(inverse_gap)
+    #     # color_values = eigenvectors[:, -1, 13]
+    #     color_values = eigenvectors[:, -1, 12]
+    #     # color_values = sample_inputs[:, 12]
     #     color_sort = np.argsort(color_values)
-
-    #     # Plot:
     #     ax.scatter(
-    #         trimap_embeddings[color_sort, 0],
-    #         trimap_embeddings[color_sort, 1],
-    #         -trimap_embeddings[color_sort, 2],
-    #         alpha=0.1, s=5, edgecolors="none",
-    #         c=color_values[color_sort],
+    #         mv_embeddings[color_sort, 0],
+    #         mv_embeddings[color_sort, 1],
+    #         s=0.5, alpha=0.5, edgecolors="None",
+    #         c=color_values[color_sort], cmap=cc.m_CET_L8,
     #         vmin=np.quantile(color_values, 0.05),
-    #         vmax=np.quantile(color_values, 0.95),
-    #         cmap=cc.m_CET_L8
+    #         vmax=np.quantile(color_values, 0.95)
     #     )
-
-    #     ax.set_aspect("equal")
     #     plt.show()
 
-    # plot_3d_scatterplot()
-    return
-
-
-@app.cell
-def _():
-    # white_embeddings = (umap_embeddings - np.mean(umap_embeddings, axis=0)) / np.mean(np.std(umap_embeddings, axis=0))
-    # print(white_embeddings.shape)
-    # boundary_stats = gl.utils.boundary_statistic(kpca_embeddings[:, :2], 0.0005)
+    # plot_inverse_umap()
     return
 
 
@@ -742,7 +787,7 @@ def _(
     plt,
     sample_order_estimates,
     scale_op65,
-    umap_embeddings,
+    trimap_embeddings,
 ):
     def plot_op_umap():
         fig, ax = plt.subplots(figsize=(TEXT_WIDTH, TEXT_WIDTH * 0.8))
@@ -754,8 +799,8 @@ def _(
 
         # Plot UMAP points:
         pos = ax.scatter(
-            umap_embeddings[color_sort, 0], umap_embeddings[color_sort, 1],
-            s=1.5, alpha=0.3, c=color_values[color_sort], cmap=cc.m_CET_L8,
+            trimap_embeddings[color_sort, 0], trimap_embeddings[color_sort, 1],
+            s=1., alpha=0.5, c=color_values[color_sort], cmap=cc.m_CET_R1,
             vmin=np.quantile(color_values, 0.05),
             vmax=np.quantile(color_values, 0.95),
             edgecolors='none'
@@ -766,7 +811,7 @@ def _(
         ax.set_yticks([])
         ax.set_xlabel("UMAP I")
         ax.set_ylabel("UMAP II")
-        ax.set_aspect("equal")
+        # ax.set_aspect("equal")
 
         # Adjust layout:
         clip = 0.125
@@ -796,18 +841,20 @@ def _(
     TEXT_WIDTH,
     cc,
     datetime,
+    eigenvectors,
     np,
     os,
     plt,
-    primary_eigenvectors,
-    umap_embeddings,
+    trimap_embeddings,
 ):
+    primary_eigenvectors = eigenvectors[:, 0, :]
     normalised_components = np.abs(primary_eigenvectors) / np.sum(np.abs(primary_eigenvectors), axis=1, keepdims=True)
     parameter_entropy = np.sum(-normalised_components * np.log(normalised_components), axis=1)
     parameter_eps = np.exp(parameter_entropy)
 
     def plot_eps_umap():
-        fig, ax = plt.subplots(figsize=(TEXT_WIDTH, TEXT_WIDTH * 0.8))
+        fig, axs = plt.subplots(1, 2, figsize=(TEXT_WIDTH, TEXT_WIDTH * 0.8))
+        ax = axs[0]
 
         # Set up coloring:
         color_values = parameter_eps
@@ -815,8 +862,8 @@ def _(
 
         # Plot UMAP points:
         pos = ax.scatter(
-            umap_embeddings[color_sort, 0], umap_embeddings[color_sort, 1],
-            s=1, alpha=0.8, c=color_values[color_sort], cmap=cc.m_CET_L20,
+            trimap_embeddings[color_sort, 0], trimap_embeddings[color_sort, 1],
+            s=1, alpha=0.5, c=color_values[color_sort], cmap=cc.m_CET_L20,
             vmin=np.quantile(color_values, 0.04),
             vmax=np.quantile(color_values, 0.99),
             edgecolors='none'
@@ -827,7 +874,7 @@ def _(
         ax.set_yticks([])
         ax.set_xlabel("UMAP I")
         ax.set_ylabel("UMAP II")
-        ax.set_aspect("equal")
+        ax.set_box_aspect(1)
 
         # Adjust layout:
         clip = 0.125
@@ -835,7 +882,7 @@ def _(
 
         # Set up and format colorbar:
         cax = ax.inset_axes((1.03, 0, 0.025, 1))
-        cbar = fig.colorbar(pos, cax=cax, label="Parameter Degeneracy $\\varepsilon$")
+        cbar = fig.colorbar(pos, cax=axs[1], label="Parameter Degeneracy $\\varepsilon$")
         cbar.solids.set_alpha(1)
 
         # Save figures:
@@ -847,7 +894,7 @@ def _(
         plt.show()
 
     plot_eps_umap()
-    return (parameter_eps,)
+    return
 
 
 @app.cell
@@ -864,21 +911,25 @@ def _(
     parameter_list,
     plt,
     pos,
-    umap_embeddings,
+    trimap_embeddings,
 ):
     def plot_umap(ax, color_index):
         color_values = flipped_vectors[:, color_index]
         color_sort = np.argsort(color_values)
+        # pos = ax.scatter(
+        #     umap_embeddings[color_sort, 0], umap_embeddings[color_sort, 1],
+        #     s=0.5, alpha=0.1, c=color_values[color_sort], cmap=cc.m_CET_D13,
+        #     vmin=-0.6, vmax=0.6, edgecolors='none'
+        # )
         pos = ax.scatter(
-            umap_embeddings[color_sort, 0], umap_embeddings[color_sort, 1],
-            s=1, alpha=0.1, c=color_values[color_sort], cmap=cc.m_CET_D13,
-            vmin=-0.6, vmax=0.6, edgecolors='none'
+            trimap_embeddings[color_sort, 0], trimap_embeddings[color_sort, 1],
+            s=0.5, alpha=0.1, c=color_values[color_sort], cmap=cc.m_CET_D4,
+            vmin=-0.3, vmax=0.3, edgecolors='none'
         )
         ax.set_aspect("equal")
         ax.text(0.03, 0.03, parameter_list[color_index], transform=ax.transAxes, fontsize=4)
         ax.set_xticks([])
         ax.set_yticks([])
-
         return pos
 
 
@@ -895,7 +946,7 @@ def _(
                     # Remove spines:
                     axs[i, j].set_axis_off()
                     # Set up and format colorbar:
-                    cax = axs[i, j].inset_axes((0.15, 0.1, 0.05, 0.8))
+                    cax = axs[i, j].inset_axes((0.4, 0.1, 0.05, 0.8))
                     cbar = fig.colorbar(pos, cax=cax, label="$|\\theta|$ Component")
                     cbar.solids.set_alpha(1)
                     continue
@@ -903,11 +954,11 @@ def _(
                 count += 1
 
         fig.text(0.5, 0.01, 'UMAP I', ha='center', va="bottom")
-        fig.text(0.07, 0.5, 'UMAP II', ha='left', va='center', rotation='vertical')
+        fig.text(0.2, 0.5, 'UMAP II', ha='left', va='center', rotation='vertical')
 
         w_clip = 0.1
         h_clip = 0.04
-        fig.subplots_adjust(w_clip, h_clip, 1 - w_clip, 1 - h_clip, wspace=0, hspace=0.075)
+        fig.subplots_adjust(w_clip, h_clip, 1 - w_clip, 1 - h_clip, wspace=-0.0, hspace=0.075)
 
         METADATA_DICTIONARY["time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         plt.savefig(
@@ -921,29 +972,12 @@ def _(
 
 
 @app.cell
-def _(get_eigenvectors, np, umap_manager):
-    # Load Hessians of Sobol search:
-    sobol_hessians = np.load("model_experiments/2026-06-03-matrix_shape/sobol_op65_hessian/hessian_estimate.npy")
-    sobol_eigenvalues, sobol_eigenvectors = get_eigenvectors(sobol_hessians)
-    sobol_embeddings = umap_manager.transform(sobol_eigenvectors[:, 0, :])
-    return (sobol_embeddings,)
-
-
-@app.cell
-def _(EXPERIMENT_DIRPATH, np, os):
-    # Load simulation values:
-    sobol_matrix = np.load(os.path.join(EXPERIMENT_DIRPATH, "sample_matrix.npy"))
-    sl_mask = sobol_matrix < 0.02
-    sh_mask = sobol_matrix > 0.98
-    sobol_mask = ~np.logical_or(np.any(sl_mask, axis=1), np.any(sh_mask, axis=1))
-    masked_indices = np.arange(2 ** 17)[sobol_mask]
-
+def _(hessian_dirpath, np, os):
     SIM_METRICS = [
         "speeds",
         "meander_ratios",
         "ann_indices",
         "coherency",
-        "cell_lengths",
         "order_parameters"
     ]
 
@@ -952,20 +986,15 @@ def _(EXPERIMENT_DIRPATH, np, os):
         "MR",
         "ANNI",
         "Coherency",
-        "Cell Length",
         "Flocking Order Parameter"
     ]
 
-    # Load S65:
-    sobol_op = np.load("model_experiments/2026-06-03-matrix_shape/summary_data/matrix_order_parameters.npy")
-    sobol_op = np.mean(sobol_op[sobol_mask, :, 2], axis=1)
 
     sobol_ouputs = []
     for metric in SIM_METRICS:
-        sobol_out = np.load(f"model_experiments/2026-06-03-matrix_shape/summary_data/{metric}.npy")
-        sobol_out = np.mean(sobol_out[sobol_mask, :], axis=1)
+        sobol_out = np.load(os.path.join(hessian_dirpath, f"predicted_{metric}.npy"))
         sobol_ouputs.append(sobol_out)
-    return SIM_LABELS, masked_indices, sobol_op, sobol_ouputs
+    return SIM_LABELS, sobol_ouputs
 
 
 @app.cell
@@ -980,18 +1009,20 @@ def _(
     np,
     os,
     plt,
-    sobol_embeddings,
     sobol_ouputs,
+    trimap_embeddings,
 ):
+    import sklearn
+
     def plot_metric_umap():
         fig, axs = plt.subplots(3, 2, figsize=(TEXT_WIDTH, FULL_HEIGHT))
 
         count = 0
         for i in range(3):
             for j in range(2):
-                # if count == 5:
-                #     axs[i, j].set_axis_off()
-                #     continue
+                if count == 5:
+                    axs[i, j].set_axis_off()
+                    continue
                 # Get heatmap information:
                 color_values = sobol_ouputs[count]
                 color_sort = np.argsort(color_values)
@@ -1001,7 +1032,7 @@ def _(
 
                 # Do scatter plot:
                 scatter_out = axs[i, j].scatter(
-                    sobol_embeddings[color_sort, 0][nan_mask], sobol_embeddings[color_sort, 1][nan_mask],
+                    trimap_embeddings[color_sort, 0][nan_mask], trimap_embeddings[color_sort, 1][nan_mask],
                     c=color_values[color_sort][nan_mask], cmap=cc.m_CET_L8,
                     vmin=vmin, vmax=vmax,
                     s=1, alpha=0.1, edgecolors='none'
@@ -1033,7 +1064,7 @@ def _(
         plt.show()
 
     plot_metric_umap()
-    return
+    return (sklearn,)
 
 
 @app.cell
@@ -1045,21 +1076,24 @@ def _(
     np,
     os,
     plt,
+    sample_order_estimates,
+    scale_op65,
     sklearn,
-    sobol_embeddings,
-    sobol_op,
+    trimap_embeddings,
 ):
     def plot_masked_umap():
         fig, ax = plt.subplots(figsize=(TEXT_WIDTH, TEXT_WIDTH * 0.8))
 
         # Set up coloring:
-        color_values = sobol_op
-        op_mask = sobol_op >  0.04
+        op_values = scale_op65(sample_order_estimates)
+        color_values = scale_op65(sample_order_estimates)
+        op_mask = op_values >  0.04
+        # op_mask = op_values <  0.003
 
         # Get density:
-        kde = sklearn.neighbors.KernelDensity(bandwidth=0.5, rtol=0.1).fit(sobol_embeddings[op_mask, :])
-        log_density = kde.score_samples(sobol_embeddings[op_mask, :])
-        density_mask = log_density > -4
+        kde = sklearn.neighbors.KernelDensity(bandwidth=0.1, rtol=0.1).fit(trimap_embeddings[op_mask, :])
+        log_density = kde.score_samples(trimap_embeddings[op_mask, :])
+        density_mask = log_density > -10
 
         # Get joint OP-density mask:
         valid_indices = np.argwhere(op_mask)
@@ -1068,12 +1102,12 @@ def _(
         joint_mask[valid_indices] = 1
 
         # Set up clustering:
-        cluster_manager = sklearn.cluster.KMeans(n_clusters=3, random_state=0)
-        cluster_manager.fit(sobol_embeddings[joint_mask, :])
+        cluster_manager = sklearn.cluster.KMeans(n_clusters=2, random_state=2)
+        cluster_manager.fit(trimap_embeddings[joint_mask, :])
         cluster_labels = cluster_manager.labels_
 
         # Plot background points:
-        ax.scatter(sobol_embeddings[:, 0], sobol_embeddings[:, 1], c='k', alpha=0.1, s=0.5, edgecolors="none")
+        ax.scatter(trimap_embeddings[:, 0], trimap_embeddings[:, 1], c='k', alpha=0.1, s=0.5, edgecolors="none")
 
         # Plot UMAP points:
         labels = ["Cluster A", "Cluster B", "Cluster C"]
@@ -1082,8 +1116,8 @@ def _(
                 continue
             label_mask = cluster_labels == label
             ax.scatter(
-                sobol_embeddings[joint_mask][label_mask, 0], sobol_embeddings[joint_mask][label_mask, 1],
-                s=1.5, alpha=0.3, label=labels[label]
+                trimap_embeddings[joint_mask][label_mask, 0], trimap_embeddings[joint_mask][label_mask, 1],
+                s=1.5, alpha=0.5, edgecolors="none", label=labels[label]
             )
 
         # Configure axes:
@@ -1092,7 +1126,6 @@ def _(
         ax.set_xlabel("UMAP I")
         ax.set_ylabel("UMAP II")
         ax.set_aspect("equal")
-
         ax.legend()
 
         # Adjust layout:
@@ -1119,6 +1152,67 @@ def _(
 
 
 @app.cell
+def _(cluster_labels, joint_mask, plt, sample_inputs):
+    label_mask_A = cluster_labels == 0
+    label_mask_B = cluster_labels == 1
+
+    def plot_cluster_mcf():
+        fig, axs = plt.subplots(14, 14, figsize=(12, 12))
+
+        for i in range(14):
+            for offset in range(1, 14 - i):
+                j = offset + i
+                axs[i, j].set_axis_off()
+                axs[i, j].scatter(
+                    sample_inputs[joint_mask][label_mask_A, i],
+                    sample_inputs[joint_mask][label_mask_A, j],
+                    s=1, alpha=1, edgecolor="none"
+                )
+                axs[i, j].scatter(
+                    sample_inputs[joint_mask][label_mask_B, i],
+                    sample_inputs[joint_mask][label_mask_B, j],
+                    s=1, alpha=1, edgecolor="none"
+                )
+
+        for i in range(14):
+            axs[i, i].hist(sample_inputs[joint_mask][label_mask_A, i], histtype="step", density=True)
+            axs[i, i].hist(sample_inputs[joint_mask][label_mask_B, i], histtype="step", density=True)
+            axs[i, i].set_axis_off()
+
+        plt.show()
+
+    plot_cluster_mcf()
+    return (label_mask_B,)
+
+
+@app.cell
+def _(joint_mask, label_mask_B, np, sample_inputs):
+    def get_covars():
+        # Get covars:
+        mcf_covar = np.cov(sample_inputs[joint_mask][label_mask_B], rowvar=False)
+        precision_eigvals, precision_eigvectors = np.linalg.eig(np.linalg.inv(mcf_covar))
+        eig_sort = np.argsort(-precision_eigvals)
+        precision_eigvals = precision_eigvals[eig_sort]
+        precision_eigvectors = precision_eigvectors.T[eig_sort, :]
+        return precision_eigvals, precision_eigvectors
+
+    precision_eigvals, precision_eigvectors = get_covars()
+    return (precision_eigvectors,)
+
+
+@app.cell
+def _(precision_eigvectors):
+    precision_eigvectors[:, 0]
+    return
+
+
+@app.cell
+def _(precision_eigvectors):
+    precision_eigvectors[:, 0]
+    return
+
+
+@app.cell
 def _(
     METADATA_DICTIONARY,
     OUT_DIRPATH,
@@ -1130,6 +1224,7 @@ def _(
     joint_mask,
     np,
     os,
+    plot_cluster_violinplots,
     plt,
     sobol_ouputs,
 ):
@@ -1142,9 +1237,9 @@ def _(
 
     def plot_cluster_boxplots():
         # Show boxplots:
-        fig, axs = plt.subplots(6, 1, figsize=(TEXT_WIDTH, TEXT_HEIGHT), sharex=True)
+        fig, axs = plt.subplots(5, 1, figsize=(TEXT_WIDTH, TEXT_HEIGHT), sharex=True)
 
-        for metric_index in range(6):
+        for metric_index in range(5):
             axs[metric_index].boxplot(generate_cluster_arrays(sobol_ouputs[metric_index]))
             axs[metric_index].set_ylabel(SIM_LABELS[metric_index])
 
@@ -1161,12 +1256,18 @@ def _(
         )
         plt.show()
 
-    plot_cluster_boxplots()
+    plot_cluster_violinplots()
+    return
+
+
+@app.cell
+def _():
     return
 
 
 @app.cell
 def _(
+    EXPERIMENT_DIRPATH,
     FULL_WIDTH,
     METADATA_DICTIONARY,
     OUT_DIRPATH,
@@ -1181,7 +1282,7 @@ def _(
     import imageio.v3 as iio
 
     def load_image(index, image_type):
-        npz_archive = np.load(os.path.join("model_experiments/2026-06-03-matrix_shape", f"{image_type}.npz"))
+        npz_archive = np.load(os.path.join(EXPERIMENT_DIRPATH, f"{image_type}.npz"))
         image_array = npz_archive[str(index)]
         return image_array
 
@@ -1535,11 +1636,11 @@ def _(np):
 
 
 @app.cell
-def _(np):
-    loss_histories = np.load("model_experiments/2026-06-03-matrix_shape/gaussian_process_models/op65/global_eigenparameter_estimation/loss_histories.npy")
-    log_scale_factors = np.load("model_experiments/2026-06-03-matrix_shape/gaussian_process_models/op65/global_eigenparameter_estimation/scale_factors.npy")
-    log_scale_factors = np.squeeze(log_scale_factors)
-    return log_scale_factors, loss_histories
+def _():
+    # loss_histories = np.load("model_experiments/2026-06-03-matrix_shape/gaussian_process_models/op65/global_eigenparameter_estimation/loss_histories.npy")
+    # log_scale_factors = np.load("model_experiments/2026-06-03-matrix_shape/gaussian_process_models/op65/global_eigenparameter_estimation/scale_factors.npy")
+    # log_scale_factors = np.squeeze(log_scale_factors)
+    return
 
 
 @app.cell
@@ -2500,11 +2601,168 @@ def _():
 
 @app.cell
 def _():
-    return
+    # import sklearn
 
+    # kpca_embeddings = np.load("model_experiments/2026-06-03-matrix_shape/gaussian_process_models/op65/kpca_embeddings.npy")
 
-@app.cell
-def _():
+    # density_manager = sklearn.neighbors.KernelDensity(kernel='gaussian', bandwidth=0.02, leaf_size=50, rtol=0.01)
+    # density_manager = density_manager.fit(isomap_embeddings[::16, :])
+    # density = density_manager.score_samples(isomap_embeddings[:, :])
+
+    # test_index = 0
+    # plt.hist(primary_eigenvectors[density < 0.2, test_index], bins=40, density=True)
+    # plt.hist(primary_eigenvectors[:, test_index], bins=40, histtype="step", density=True);
+    # plt.show()
+
+    # def test_plot_isomap():
+    #     color_values = np.log(np.clip(scale_op65(sample_order_estimates), 0, None) + 1e-3)
+    #     vmin = np.quantile(color_values, 0.05)
+    #     vmax = np.quantile(color_values, 0.95)
+
+    #     density_mask = density > np.quantile(density, 0.0)
+
+    #     fig = plt.figure(figsize=(10, 10))
+    #     ax = fig.add_subplot(projection='3d')
+    #     ax.view_init(elev=25, azim=10, roll=0)
+
+    #     ax.scatter(
+    #         isomap_embeddings[density_mask, 0],
+    #         isomap_embeddings[density_mask, 1],
+    #         isomap_embeddings[density_mask, 2],
+    #         c=color_values[density_mask], s=1, alpha=0.25, vmin=vmin, vmax=vmax,
+    #         cmap=cc.m_CET_L8
+    #     )
+    #     ax.set_aspect("equal")
+    #     plt.show()
+
+    # test_plot_isomap()
+
+    # import trimap
+
+    # np.random.seed(1)
+    # trimap_embeddder = trimap.TRIMAP(n_dims=3, weight_temp=0.25)
+    # trimap_embeddings = trimap_embeddder.fit_transform(isomap_embeddings[:, :])
+
+    TOTAL_FRAME = 24 * 40
+
+    # def plot_3d_trimap(timestep):
+    #     # Set up 3D plot:
+    #     width = 10
+    #     fig = plt.figure(figsize=(width, width * (9 / 16)))
+    #     ax = fig.add_subplot(projection='3d')
+
+    #     # We aim to complete the loop at 60 seconds:
+    #     ax.view_init(elev=0, azim=(timestep/TOTAL_FRAME) * 720, roll=(timestep/TOTAL_FRAME) * 360)
+
+    #     # Set up coloring:
+    #     color_values = scale_op65(sample_order_estimates)
+    #     color_sort = np.argsort(color_values)
+
+    #     # Plot:
+    #     ax.scatter(
+    #         trimap_embeddings[color_sort, 0],
+    #         trimap_embeddings[color_sort, 1],
+    #         -trimap_embeddings[color_sort, 2],
+    #         alpha=0.1, s=2, edgecolors="none",
+    #         c=color_values[color_sort],
+    #         vmin=np.quantile(color_values, 0.05),
+    #         vmax=np.quantile(color_values, 0.95),
+    #         cmap=cc.m_CET_L8
+    #     )
+
+    #     ax.set_axis_off()
+    #     ax.set_aspect("equal")
+
+    #     edging = 0.00
+    #     fig.subplots_adjust(edging, edging, 1-edging, 1-edging)
+
+    # def write_video_to_file():
+
+    #     if not os.path.exists("img_tmp"):
+    #         os.mkdir("img_tmp")
+
+    #     for timestep in range(TOTAL_FRAME):
+    #         if (timestep + 1) % 24 == 0:
+    #             print(timestep + 1)
+
+    #         plot_3d_trimap(timestep)
+    #         plt.savefig(os.path.join("img_tmp", f"frame_{timestep}.png"), dpi=150)
+    #         plt.close()
+
+    # # write_video_to_file()
+    # # plot_3d_trimap()
+
+    # import subprocess
+    # subprocess.run("ffmpeg -y -i img_tmp/frame_%d.png -r 24 -vcodec libx264 -crf 18 trimap_video.mp4", shell=True)
+
+    # def plot_trimap():
+    #     width = 8
+    #     fig, ax = plt.subplots(figsize=(width, width * (9 / 16)))
+    #     # color_vals = np.log(np.clip(scale_op65(sample_order_estimates), 0, None) + 1e-3)
+    #     # color_vals = np.log(primary_eigenvalues)
+    #     # color_vals = sobol_ouputs[5]
+    #     # color_vals = sample_inputs[:, 13]
+    #     color_vals = parameter_eps
+    #     # color_vals = flipped_vectors[:, 5]
+    #     # color_vals = color_vals[density > np.quantile(density, 0.05)]
+    #     color_sort = np.argsort(color_vals)
+    #     color_sort = np.arange(len(color_vals))
+    #     print(color_sort)
+    #     ax.scatter(
+    #         trimap_embeddings[color_sort, 0],
+    #         trimap_embeddings[color_sort, 1], s=1,
+    #         alpha=0.5, edgecolors="none",
+    #         c=color_vals[color_sort],
+    #         vmin=np.quantile(color_vals, 0.05),
+    #         vmax=np.quantile(color_vals, 0.95),
+    #         cmap=cc.m_CET_L8
+    #     )
+    #     ax.set_aspect("equal")
+    #     ax.set_axis_off()
+
+    #     edging = 0
+    #     fig.subplots_adjust(edging, edging, 1 - edging, 1 - edging)
+    #     print(np.quantile(color_vals, 0.05))
+    #     print(np.quantile(color_vals, 0.95))
+    #     plt.show()
+
+    # import datashader as ds
+    # import datashader.transfer_functions as tf
+
+    # tri_df = pd.DataFrame(trimap_embeddings, columns=["x", "y"])
+    # ds_image = tf.shade(tf.spread(ds.Canvas().points(tri_df, "x", "y")), cmap="darkred")
+
+    # def plot_3d_scatterplot():
+    #     # Set up 3D plot:
+    #     fig = plt.figure(figsize=(10, 10))
+    #     ax = fig.add_subplot(projection='3d')
+    #     ax.view_init(elev=30, azim=-110, roll=0)
+
+    #     # Set up coloring:
+    #     color_values = scale_op65(sample_order_estimates)
+    #     # color_values = density
+    #     color_sort = np.argsort(color_values)
+
+    #     # Plot:
+    #     ax.scatter(
+    #         trimap_embeddings[color_sort, 0],
+    #         trimap_embeddings[color_sort, 1],
+    #         -trimap_embeddings[color_sort, 2],
+    #         alpha=0.1, s=5, edgecolors="none",
+    #         c=color_values[color_sort],
+    #         vmin=np.quantile(color_values, 0.05),
+    #         vmax=np.quantile(color_values, 0.95),
+    #         cmap=cc.m_CET_L8
+    #     )
+
+    #     ax.set_aspect("equal")
+    #     plt.show()
+
+    # plot_3d_scatterplot()
+
+    # white_embeddings = (umap_embeddings - np.mean(umap_embeddings, axis=0)) / np.mean(np.std(umap_embeddings, axis=0))
+    # print(white_embeddings.shape)
+    # boundary_stats = gl.utils.boundary_statistic(kpca_embeddings[:, :2], 0.0005)
     return
 
 

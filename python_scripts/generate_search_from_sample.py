@@ -10,7 +10,8 @@ from datetime import datetime
 
 # Define outputs folder:
 OUTPUTS_FOLDER = "model_experiments"
-
+MCMC_SOURCE_EXPERIMENT = "model_experiments/2026-09-16-collisions_shape"
+MCMC_PARAM_DIMS = 12
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -105,30 +106,34 @@ def main():
     if not os.path.exists(experiment_folderpath):
         os.mkdir(experiment_folderpath)
 
-    # Get MLE sample:
+    # Load posterior:
     print("Loading samples...")
-    THIN_FACTOR = 64
-    wt_chain = np.load("model_experiments/2026-05-31-collisions_shape/mcmc_results/wt_mcmc_chain.npy")
-    rd_chain = np.load("model_experiments/2026-05-31-collisions_shape/mcmc_results/rd_mcmc_chain.npy")
+    mcmc_folderpath = os.path.join(MCMC_SOURCE_EXPERIMENT, "disc_cov_mcmc_results")
+    wt_chain = np.load(os.path.join(mcmc_folderpath, "wt_mcmc_chain.npy"))
+    rd_chain = np.load(os.path.join(mcmc_folderpath, "rd_mcmc_chain.npy"))
 
-    ctl_likelihoods = np.load("model_experiments/2026-05-31-collisions_shape/mcmc_results/wt_mcmc_likelihoods.npy")
-    rd_likelihoods = np.load("model_experiments/2026-05-31-collisions_shape/mcmc_results/rd_mcmc_likelihoods.npy")
+    # Subsample posterior:
+    chain_length = wt_chain.shape[0]
+    half_index = int(chain_length // 2)
+    wt_posterior = wt_chain[half_index::128, :, 0, :].reshape(-1, MCMC_PARAM_DIMS)
+    rd_posterior = rd_chain[half_index::128, :, 0, :].reshape(-1, MCMC_PARAM_DIMS)
+    print(wt_posterior.shape)
 
-    ctl_mle_idx = np.argsort(ctl_likelihoods[::THIN_FACTOR, :, 0].flatten())[-1024:]
-    rd_mle_idx = np.argsort(rd_likelihoods[::THIN_FACTOR, :, 0].flatten())[-1024:]
-
-    ctl_mle = wt_chain[::THIN_FACTOR, :, 0, :].reshape(-1, 11)[ctl_mle_idx, :]
-    rd_mle = rd_chain[::THIN_FACTOR, :, 0, :].reshape(-1, 11)[rd_mle_idx, :]
-
-    # Apply adjustments:
-    base_intervention = np.load("model_experiments/2026-07-01-intervention-experiment/base_intervention.npz")["intervention"]
-    gee_intervention = np.load("model_experiments/2026-07-01-intervention-experiment/gee_intervention.npz")["intervention"]
-    base_intervention_mle = rd_mle * np.exp(base_intervention)
-    gee_intervention_mle = rd_mle * np.exp(gee_intervention)
+    # # Apply adjustments:
+    # base_intervention = np.load("model_experiments/2026-07-01-intervention-experiment/base_intervention.npz")["intervention"]
+    # gee_intervention = np.load("model_experiments/2026-07-01-intervention-experiment/gee_intervention.npz")["intervention"]
+    # base_intervention_mle = rd_mle * np.exp(base_intervention)
+    # gee_intervention_mle = rd_mle * np.exp(gee_intervention)
 
     # Format sample matrix:
-    sample_matrix = np.concatenate([base_intervention_mle, gee_intervention_mle], axis=0)
-    additional_parameters = np.ones((sample_matrix.shape[0], 3)) * 0.5
+    sample_matrix = np.concatenate([wt_posterior, rd_posterior], axis=0)
+    unit_coupling = 1
+    unit_sample_rate = 1
+    unit_cell_count = 0.35
+    additional_parameters = np.array([unit_coupling, unit_sample_rate, unit_cell_count])
+    additional_parameters = np.expand_dims(additional_parameters, axis=0)
+    additional_parameters = np.repeat(additional_parameters, 2048, axis=0)
+    print(additional_parameters.shape)
     sample_matrix = np.concatenate([sample_matrix, additional_parameters], axis=1)
 
     # Save sample matrix:

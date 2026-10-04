@@ -11,7 +11,7 @@ import numpy as np
 from scipy.sparse.csgraph import dijkstra
 from sklearn.neighbors import NearestNeighbors
 
-EXPERIMENT_DIRPATH = "model_experiments/2026-06-03-matrix_shape"
+EXPERIMENT_DIRPATH = "model_experiments/2026-09-19-matrix_shape"
 PARAMETER_DIMENSION = 14
 RUN_COUNT = 1024
 
@@ -138,28 +138,28 @@ def main():
     args = parse_arguments()
 
     # Set up folder structure:
-    managing_dirpath = os.path.join(EXPERIMENT_DIRPATH, "gaussian_process_models", "op65")
-    gee_dirpath = os.path.join(managing_dirpath, "global_eigenparameter_estimation")
-    if not os.path.exists(gee_dirpath):
-        os.mkdir(gee_dirpath)
+    managing_dirpath = os.path.join(EXPERIMENT_DIRPATH, "global_eigenparameter_estimation")
+    if not os.path.exists(managing_dirpath):
+        os.mkdir(managing_dirpath)
 
     # Get Hessian dataset:
     print("Loading Hessian datasets...", flush=True)
-    hessian_inputs = np.load(os.path.join(managing_dirpath, "hessian_inputs.npy"))
-    hessians = np.load(os.path.join(managing_dirpath, "hessian_estimate.npy"))
+    hessian_dirpath = os.path.join(EXPERIMENT_DIRPATH, "op65_fullrank_hessian")
+    hessian_inputs = np.load(os.path.join(hessian_dirpath, "hessian_inputs.npy"))
+    hessians = np.load(os.path.join(hessian_dirpath, "hessian_estimate.npy"))
 
     # Compute eigendecompositions:
     print("Computing eigendecompositions...", flush=True)
     eigenvalues, eigenvectors = get_eigenvectors(hessians)
 
     # Compute geodesic distance matrix if not already present:
-    geodesic_distance_filepath = os.path.join(gee_dirpath, "geodesic_distances.npy")
+    geodesic_distance_filepath = os.path.join(managing_dirpath, "geodesic_distances.npy")
     if not os.path.exists(geodesic_distance_filepath):
-        print("Computing geodesic distance on data manifold...", flush=True)
+        print("Computing geodesic distance on control manifold...", flush=True)
         geodesic_dm = get_estimated_geodesic_distances(eigenvectors[:, 0, :])
         np.save(geodesic_distance_filepath, geodesic_dm)
     else:
-        print("Loading geodesic distance on data manifold...", flush=True)
+        print("Loading geodesic distance on control manifold...", flush=True)
         geodesic_dm = np.load(geodesic_distance_filepath)
 
     # Get subset of runs to perform in this shard:
@@ -181,15 +181,15 @@ def main():
 
     # Save transforms and loss histories:
     np.save(
-        os.path.join(gee_dirpath, f"loss_histories_{args.task_id}.npy"),
+        os.path.join(managing_dirpath, f"loss_histories_{args.task_id}.npy"),
         np.stack(loss_histories, axis=0)
     )
     np.save(
-        os.path.join(gee_dirpath, f"log_transforms_{args.task_id}.npy"),
+        os.path.join(managing_dirpath, f"log_transforms_{args.task_id}.npy"),
         np.stack(log_transforms, axis=0)
     )
     np.save(
-        os.path.join(gee_dirpath, f"scale_factors_{args.task_id}.npy"),
+        os.path.join(managing_dirpath, f"scale_factors_{args.task_id}.npy"),
         np.stack(scale_factors, axis=0)
     )
 
@@ -197,7 +197,7 @@ def main():
     if args.task_id == 0:
         # Wait while other processes finish:
         tf_filename_list = [f"log_transforms_{task_id}.npy" for task_id in range(args.world_size)]
-        tf_filepath_list = [os.path.join(gee_dirpath, filename) for filename in tf_filename_list]
+        tf_filepath_list = [os.path.join(managing_dirpath, filename) for filename in tf_filename_list]
         subprocesses_completing = True
         while subprocesses_completing:
             print("Checking subprocesses...", flush=True)
@@ -213,21 +213,21 @@ def main():
         # Collate transform data:
         collated_log_transforms = [np.load(filepath) for filepath in tf_filepath_list]
         collated_log_transforms = np.concatenate(collated_log_transforms, axis=0)
-        np.save(os.path.join(gee_dirpath, "log_transforms.npy"), collated_log_transforms)
+        np.save(os.path.join(managing_dirpath, "log_transforms.npy"), collated_log_transforms)
 
         # Collate loss history data:
         lh_filename_list = [f"loss_histories_{task_id}.npy" for task_id in range(args.world_size)]
-        lh_filepath_list = [os.path.join(gee_dirpath, filename) for filename in lh_filename_list]
+        lh_filepath_list = [os.path.join(managing_dirpath, filename) for filename in lh_filename_list]
         collated_loss_histories = [np.load(filepath) for filepath in lh_filepath_list]
         collated_loss_histories = np.concatenate(collated_loss_histories, axis=0)
-        np.save(os.path.join(gee_dirpath, "loss_histories.npy"), collated_loss_histories)
+        np.save(os.path.join(managing_dirpath, "loss_histories.npy"), collated_loss_histories)
 
         # Collate scale factor data:
         sf_filename_list = [f"scale_factors_{task_id}.npy" for task_id in range(args.world_size)]
-        sf_filepath_list = [os.path.join(gee_dirpath, filename) for filename in sf_filename_list]
+        sf_filepath_list = [os.path.join(managing_dirpath, filename) for filename in sf_filename_list]
         collated_scale_factors = [np.load(filepath) for filepath in sf_filepath_list]
         collated_scale_factors = np.concatenate(collated_scale_factors, axis=0)
-        np.save(os.path.join(gee_dirpath, "scale_factors.npy"), collated_scale_factors)
+        np.save(os.path.join(managing_dirpath, "scale_factors.npy"), collated_scale_factors)
 
         # Remove sharded arrays:
         [os.remove(filepath) for filepath in tf_filepath_list]

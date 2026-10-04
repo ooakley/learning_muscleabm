@@ -2,61 +2,24 @@
 #SBATCH --job-name=gp_train
 #SBATCH --partition=ncpu
 #SBATCH --time=12:00:00
-#SBATCH --ntasks=9
-#SBATCH --cpus-per-task=2
-#SBATCH --mem-per-cpu=2G
-
-# --dependency=afterok:46748820
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=16
+#SBATCH --mem-per-cpu=4G
+#SBATCH --array=0-3
+#SBATCH --output=logs/gp_train_%A_%a.out
 
 ml load uv
-experiment_dirpath="model_experiments/2026-06-07-collisions_only"
+# Script inputs:
+usage="Usage: sbatch gp_regression.sh <experiment_dirpath> <hm_wave_id>"
+experiment_dirpath=${1:?$usage}
+hm_wave_id=${2:?$usage}
 
-# srun --ntasks 1 uv run python python_scripts/gp_training.py \
-#     --experiment_dirpath $experiment_dirpath \
-#     --metric_name op65 &
+metrics=(speeds meander_ratios ann_indices coherency)
+metric=${metrics[$SLURM_ARRAY_TASK_ID]}
 
-# sleep 60
+export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
+export MKL_NUM_THREADS=$SLURM_CPUS_PER_TASK
 
-# Movement metrics:
-srun --ntasks 1 uv run python python_scripts/gp_training.py \
-    --experiment_dirpath $experiment_dirpath \
-    --metric_name speeds &
-
-sleep 60
-
-srun --ntasks 1 uv run python python_scripts/gp_training.py \
-    --experiment_dirpath $experiment_dirpath \
-    --metric_name meander_ratios &
-srun --ntasks 1 uv run python python_scripts/gp_training.py \
-    --experiment_dirpath $experiment_dirpath \
-    --metric_name ann_indices &
-srun --ntasks 1 uv run python python_scripts/gp_training.py \
-    --experiment_dirpath $experiment_dirpath \
-    --metric_name coherency &
-srun --ntasks 1 uv run python python_scripts/gp_training.py \
-    --experiment_dirpath $experiment_dirpath \
-    --metric_name interaction &
-srun --ntasks 1 uv run python python_scripts/gp_training.py \
-    --experiment_dirpath $experiment_dirpath \
-    --metric_name order_parameters &
-
-# srun --ntasks 1 uv run python python_scripts/gp_training.py \
-#     --experiment_dirpath $experiment_dirpath \
-#     --metric_name com_speeds &
-# srun --ntasks 1 uv run python python_scripts/gp_training.py \
-#     --experiment_dirpath $experiment_dirpath \
-#     --metric_name com_meander_ratios &
-# srun --ntasks 1 uv run python python_scripts/gp_training.py \
-#     --experiment_dirpath $experiment_dirpath \
-#     --metric_name com_ann_indices &
-# srun --ntasks 1 uv run python python_scripts/gp_training.py \
-#     --experiment_dirpath $experiment_dirpath \
-#     --metric_name com_coherency &
-# srun --ntasks 1 uv run python python_scripts/gp_training.py \
-#     --experiment_dirpath $experiment_dirpath \
-#     --metric_name com_interaction &
-# srun --ntasks 1 uv run python python_scripts/gp_training.py \
-#     --experiment_dirpath $experiment_dirpath \
-#     --metric_name com_order_parameters &
-
-wait
+uv run --no-sync python python_scripts/gp_training.py \
+    --experiment_dirpath "$experiment_dirpath" \
+    --metric_name "$metric"

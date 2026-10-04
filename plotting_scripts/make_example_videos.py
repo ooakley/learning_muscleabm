@@ -50,7 +50,7 @@ def _():
     MESH_NUMBER = 128
     TIMESTEPS = 2880
     VIDEO_DIRPATH = "model_parameter_json/example_rd_csm_params"
-    CELL_COUNT = 300
+    CELL_COUNT = 400
     MATRIX_TIMESERIES = False
     return CELL_COUNT, MESH_NUMBER, TIMESTEPS, VIDEO_DIRPATH
 
@@ -278,6 +278,7 @@ def _(np, os, plt, position_array):
     def plot_csv(position_array):
         fig, ax = plt.subplots(figsize=(3, 3))
         for cell_index in range(position_array.shape[0]):
+        # for cell_index in range(10):
             cell_trajectory = position_array[cell_index, :, :]
             plot_trajectory(cell_trajectory, ax, 'k')
 
@@ -331,9 +332,15 @@ def _(VIDEO_DIRPATH, os, subprocess):
 
 @app.cell
 def _(CELL_COUNT, mpl, np, plt, stadium_array):
-    CELL_BODY_RADIUS = 30 / 2
+    CELL_BODY_RADIUS = 60 / 2
 
-    def plot_stadium(x1, x2, y1, y2, ax, radius=CELL_BODY_RADIUS, colour="k"):
+    def calculate_eff_radius(l, r_0):
+        phi = 2 * l / np.pi
+        det = phi**2 + 4*(r_0**2)
+        effectiveRadius = (np.sqrt(det) - phi) / 2
+        return effectiveRadius
+
+    def plot_stadium(x1, x2, y1, y2, ax, base_radius=CELL_BODY_RADIUS, colour="k"):
         # Account for boundaries:
         x_diff = x1 - x2
         y_diff = y1 - y2
@@ -341,6 +348,9 @@ def _(CELL_COUNT, mpl, np, plt, stadium_array):
         # Get stadium characteristics:
         stadium_length = np.sqrt(x_diff**2 + y_diff**2)
         stadium_angle = np.atan2(y_diff, x_diff) * 180 / np.pi
+
+        # Get effective radius:
+        radius = base_radius
 
         # Set up patch collection:
         patches = []
@@ -434,7 +444,7 @@ def _(os, plot_stadia, plt):
             os.mkdir("img_tmp")
 
         count = 0
-        for timestep in list(range(2880))[::8]:
+        for timestep in list(range(2880))[::16]:
             plot_stadia(timestep)
             plt.savefig(os.path.join("img_tmp", f"frame_{count}.png"), dpi=300)
             count += 1

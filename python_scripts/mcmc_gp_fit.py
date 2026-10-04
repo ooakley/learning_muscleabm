@@ -18,12 +18,12 @@ from statsmodels.regression import mixed_linear_model
 
 torch.set_default_dtype(torch.float64)
 
-PARAMETER_DIMENSION = 12
-EXPERIMENT_DIRPATH = "model_experiments/2026-05-31-collisions_shape"
+PARAMETER_DIMENSION = 13
+EXPERIMENT_DIRPATH = "model_experiments/2026-09-16-collisions_shape"
 CAT_VAR = "C(phenotype, Treatment(reference='CTL'))[T.RD]"
 QUERY_COUNTS = list(np.linspace(50, 300, 11).astype(int))
 SCALED_QUERY_COUNTS = (np.array(QUERY_COUNTS) - 50) / (400 - 50)
-GRIDSEARCH_COUNT_INDEX = 5
+GRIDSEARCH_COUNT_INDEX = 12
 WETLAB_METRICS = [
     "mean_speed",
     "mean_mr",
@@ -37,7 +37,8 @@ MODEL_METRICS = [
     "coherency"
 ]
 SEM_ESTIMATE = False
-
+CHAIN_LENGTH = 32768 * 2
+BATCH_SIZE = 8
 
 class DeepInputTransformation(torch.nn.Module):
     def __init__(self, dimension, hidden_layer_neuron_count=16):
@@ -506,7 +507,12 @@ def main():
 
     # Get parameter matrix:
     parameter_matrix = np.load(os.path.join(EXPERIMENT_DIRPATH, "sample_matrix.npy"))
-    reduced_parameter_matrix = np.concatenate([parameter_matrix[:, :5], parameter_matrix[:, 6:]], axis=1)
+    reduced_parameter_matrix = np.concatenate(
+        [
+            parameter_matrix[:, :GRIDSEARCH_COUNT_INDEX],
+            parameter_matrix[:, GRIDSEARCH_COUNT_INDEX + 1:]
+        ], axis=1
+    )
 
     # Load metrics and GP models:
     inference_managers = {}
@@ -538,7 +544,7 @@ def main():
     print("Running parallel tempering MCMC for control data...")
     wt_mc_distribution, wt_likelihoods, wt_acceptance_rate, wt_rung_acceptance_rate = run_ensemble_mcmc(
         inference_managers, wt_data,
-        batch_size=128, temperature_steps=6, chain_length=32768
+        batch_size=BATCH_SIZE, temperature_steps=6, chain_length=CHAIN_LENGTH
     )
     # Save results:
     print("Saving control results...")
@@ -550,7 +556,7 @@ def main():
     # Run posterior inference:
     print("Running posterior inference for control distribution...")
     wt_posterior_mean, wt_posterior_std = get_posterior_predictions(
-        wt_mc_distribution[16384::64, :, 0, :].reshape(-1, PARAMETER_DIMENSION - 1),
+        wt_mc_distribution[int(CHAIN_LENGTH / 2)::64, :, 0, :].reshape(-1, PARAMETER_DIMENSION - 1),
         inference_managers
     )
     np.save(os.path.join(mcmc_dirpath, "wt_posterior_mean.npy"), wt_posterior_mean)
@@ -560,7 +566,7 @@ def main():
     print("Running parallel tempering MCMC for RD data...")
     rd_mc_distribution, rd_likelihoods, rd_acceptance_rate, rd_rung_acceptance_rate = run_ensemble_mcmc(
         inference_managers, rd_data,
-        batch_size=128, temperature_steps=6, chain_length=32768
+        batch_size=BATCH_SIZE, temperature_steps=6, chain_length=CHAIN_LENGTH
     )
 
     # Save results:
@@ -573,7 +579,7 @@ def main():
     # Run posterior inference:
     print("Running posterior inference for RD distribution...")
     rd_posterior_mean, rd_posterior_std = get_posterior_predictions(
-        rd_mc_distribution[16384::64, :, 0, :].reshape(-1, PARAMETER_DIMENSION - 1),
+        rd_mc_distribution[int(CHAIN_LENGTH / 2)::64, :, 0, :].reshape(-1, PARAMETER_DIMENSION - 1),
         inference_managers
     )
     np.save(os.path.join(mcmc_dirpath, "rd_posterior_mean.npy"), rd_posterior_mean)

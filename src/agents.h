@@ -21,7 +21,6 @@ public:
         double setFluctuationAmplitude,
         double setFluctuationTimescale,
         double setActinAdvectionRate,
-        double setMatrixAdvectionRate,
         double setCollisionAdvectionRate,
         double setMaximumSteadyStateActinFlow,
 
@@ -29,10 +28,14 @@ public:
         double setCellBodyRadius,
         double setAspectRatio,
         double setCollisionFlowReductionRate,
+        double setAdhesionReductionRate,
 
         // Shape parameters:
         double setCellStiffness,
         double setSurfaceStickiness,
+
+        // Matrix parameters:
+        double setMatrixCoupling,
 
         // Randomised initial state parameters:
         double startX, double startY, double startHeading
@@ -69,6 +72,7 @@ public:
     double getTotalCILEffectY() const;
     double getStadiumX() const;
     double getStadiumY() const;
+    double getEffectiveRadius() const;
 
     // Setters:
     // Setters for simulation (moving cells around etc.):
@@ -117,6 +121,7 @@ private:
     double stadiumX;
     double stadiumY;
     double adhesionFraction;
+    double effectiveRadius;
 
     // History variables for analysis:
     int collisionsThisTimepoint;
@@ -129,7 +134,6 @@ private:
     double fluctuationAmplitude;
     double fluctuationTimescale;
     double actinAdvectionRate;
-    double matrixAdvectionRate;
     double collisionAdvectionRate;
     double maximumSteadyStateActinFlow;
 
@@ -139,12 +143,16 @@ private:
     double adhesionStiffness;
     double adhesionFragility;
 
+    // Matrix parameters:
+    double matrixCoupling;
+
     // Collision parameters:
     double cellBodyRadius;
     double cellAspectRatio;
     double majorAxisScaling;
     double minorAxisScaling;
     double collisionFlowReductionRate;
+    double adhesionReductionRate;
 
     // Contact inhibition state variables:
     double lowDiscrepancySample;
@@ -201,7 +209,7 @@ private:
 
     // Simulation subfunctions:
     void runTrajectoryDependentCollisionLogic();
-    void runAlternativeTrajectoryDependentCollisionLogic();
+    // void runAlternativeTrajectoryDependentCollisionLogic();
     void runStochasticCollisionLogic();
     void runCircularStochasticCollisionLogic();
     void runDeterministicCollisionLogic();
@@ -210,7 +218,8 @@ private:
     std::tuple<bool, double, double, double, double> isPositionInStadium(
         double samplePointX, double samplePointY,
         double startX, double startY,
-        double endX, double endY
+        double endX, double endY,
+        double localEffectiveRadius
     );
 
     void runStickSlipLogic();

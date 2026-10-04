@@ -22,7 +22,7 @@ def _():
     sample_fn_rd = "/camp/home/eloaklo/home/shared/eloaklo/data/OEO20260427/OEO20260427_1/A4-Site_0/img_channel001_position012_time000000000_z000.tif"
 
     aa_fn_rd = "/camp/home/eloaklo/home/shared/eloaklo/data/OEO20260427/OEO20260427_1/A6-Site_0/img_channel001_position020_time000000000_z000.tif"
-    return sample_fn_ctl, sample_fn_rd
+    return aa_fn_ctl, aa_fn_rd, sample_fn_ctl, sample_fn_rd
 
 
 @app.cell
@@ -57,13 +57,11 @@ def _(corrected_ctl, plt):
     return
 
 
-app._unparsable_cell(
-    r"""
-    }ctl_aa = tfl.imread(aa_fn_ctl)
+@app.cell
+def _(aa_fn_ctl, aa_fn_rd, tfl):
+    ctl_aa = tfl.imread(aa_fn_ctl)
     rd_aa = tfl.imread(aa_fn_rd)
-    """,
-    name="_"
-)
+    return ctl_aa, rd_aa
 
 
 @app.cell

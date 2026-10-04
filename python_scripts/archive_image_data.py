@@ -36,7 +36,12 @@ def main():
 
             # Copy image files from run data to image data:
             source_dirpath = os.path.join(run_dirpath, str(hash_id), str(run_id))
-            images[str(run_id)] = iio.imread(os.path.join(source_dirpath, f"{args.image_filename}.png"))
+            source_filepath = os.path.join(source_dirpath, f"{args.image_filename}.png")
+            if os.path.exists(source_filepath):
+                images[str(run_id)] = iio.imread(source_filepath)
+            else:
+                print(f"No image file found at {run_id}...")
+                images[str(run_id)] = 0
 
     # Compress and save numpy files:
     print("Compressing and saving image arrays...", flush=True)

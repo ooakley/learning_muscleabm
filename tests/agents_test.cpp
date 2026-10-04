@@ -7,27 +7,30 @@ protected:
         // Basic cell agent:
         cellAgent = new CellAgent(
             0, 1, 1,
-            1, 1, 1, 1, 1, 1, 1, 1,
-            1, 1, 1,
+            1, 1, 1, 1, 1, 1, 1,
+            1, 1, 1, 1,
             1, 1,
+            1,
             0, 0, 0
         );
 
         // Cell agent with the same random seed:
-        cellAgentAlt = new CellAgent(
+        cellAgent = new CellAgent(
             0, 1, 1,
-            1, 1, 1, 1, 1, 1, 1, 1,
-            1, 1, 1,
+            1, 1, 1, 1, 1, 1, 1,
+            1, 1, 1, 1,
             1, 1,
+            1,
             0, 0, 0
         );
 
         // Cell agent with a different random seed:
-        cellAgentDifferent = new CellAgent(
+        cellAgent = new CellAgent(
             1, 1, 1,
-            1, 1, 1, 1, 1, 1, 1, 1,
-            1, 1, 1,
+            1, 1, 1, 1, 1, 1, 1,
+            1, 1, 1, 1,
             1, 1,
+            1,
             0, 0, 0
         );
     }

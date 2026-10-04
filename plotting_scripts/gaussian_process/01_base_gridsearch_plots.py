@@ -76,7 +76,8 @@ def _(datetime, os, subprocess):
     OUT_DIRPATH = "plotting_scripts/gaussian_process/out"
     CONTROL_PALETTE = "#1A85FF"
     RD_PALETTE = "#D41159"
-    PIXEL_SIZE = 0.3469 * 2  # Pixel size in µm
+    PIXEL_SIZE = 0.3469 * 2  # Image pixel size in µm
+    SIM_UNIT_SIZE = 0.3469   # Simulation distance unit in µm
     MM_UNIT = 1/25.4  # Millimeters in inches, for matplotlib
 
     TEXT_WIDTH = 135 * MM_UNIT
@@ -103,9 +104,46 @@ def _(datetime, os, subprocess):
         FULL_WIDTH,
         METADATA_DICTIONARY,
         OUT_DIRPATH,
+        SIM_UNIT_SIZE,
         TEXT_HEIGHT,
         TEXT_WIDTH,
     )
+
+
+@app.cell
+def _(SIM_UNIT_SIZE):
+    PARAM_CONVERSION = {
+        "cueDiffusionRate": 1,
+        "cueKa": 1,
+        "fluctuationAmplitude": SIM_UNIT_SIZE**2,
+        "fluctuationTimescale": 1,
+        "maximumSteadyStateActinFlow": SIM_UNIT_SIZE,
+        "actinAdvectionRate": 1,
+        "cellBodyRadius": SIM_UNIT_SIZE,
+        "collisionFlowReductionRate": 1,
+        "collisionAdvectionRate": 1,
+        "cellStiffness": 1 / SIM_UNIT_SIZE,
+        "surfaceStickiness": 1,
+        "adhesionReductionRate": 1,
+        "numberOfCells": 1
+    }
+
+    PARAMETER_SYMBOLS = [
+        "D^{\\ast}",
+        "K_A",
+        "K",
+        "\\tau",
+        "\\beta",
+        "\\alpha",
+        "R",
+        "r_{col}",
+        "\\alpha_{CIL}",
+        "k",
+        "r",
+        "\\rho_{AR}",
+        "d"
+    ]
+    return PARAMETER_SYMBOLS, PARAM_CONVERSION
 
 
 @app.cell
@@ -138,7 +176,7 @@ def _():
         "Coherency Quantile"
     ]
 
-    EXPERIMENT_DIRPATH = "model_experiments/2026-05-31-collisions_shape"
+    EXPERIMENT_DIRPATH = "model_experiments/2026-09-16-collisions_shape"
     return EXPERIMENT_DIRPATH, METRICS_LABELS, METRICS_TO_PLOT, Q_LABELS
 
 
@@ -152,28 +190,66 @@ def _(EXPERIMENT_DIRPATH, METRICS_TO_PLOT, json, np, os):
     # Get metrics:
     def load_metrics():
         metrics_dict = {}
+        full_metrics_dict = {}
         for metric_name in METRICS_TO_PLOT:
             metric_array = np.load(os.path.join(
                 EXPERIMENT_DIRPATH, "summary_data", f"{metric_name}.npy"
             ))
             metrics_dict[metric_name] = np.nanmean(metric_array, axis=1)
-        return metrics_dict
+            full_metrics_dict[metric_name] = metric_array
+        return metrics_dict, full_metrics_dict
 
-    metrics_dict = load_metrics()
-    return config_dict, metrics_dict, parameter_values
+    metrics_dict, full_metrics_dict = load_metrics()
+    return config_dict, full_metrics_dict, metrics_dict, parameter_values
 
 
 @app.cell
-def _(config_dict):
+def _(full_metrics_dict, np):
+    test_speeds = np.log(full_metrics_dict["speeds"] + 0.003)
+    n_valid = np.count_nonzero(~np.isnan(test_speeds), axis=1)
+    test_sem = np.nanstd(test_speeds, axis=1, ddof=1) / np.sqrt(n_valid)
+    return test_sem, test_speeds
+
+
+@app.cell
+def _(np, test_sem):
+    np.quantile(test_sem ** 2, 0.05)
+    return
+
+
+@app.cell
+def _(np, test_speeds):
+    np.count_nonzero(test_speeds < 0.003)
+    return
+
+
+@app.cell
+def _(PARAMETER_SYMBOLS):
+    PARAMETER_SYMBOLS
+    return
+
+
+@app.cell
+def _(PARAMETER_SYMBOLS, PARAM_CONVERSION, config_dict):
     import pandas as pd
-    config_dataframe = [{"Parameter Name": name, "Lower Bound": range_def[0], "Upper Bound": range_def[1]} for name, range_def in  config_dict["gridsearch_parameters"]]
+
+    config_dataframe = [
+        {"Parameter Name": name, "Lower Bound": range_def[0] * PARAM_CONVERSION[name], "Upper Bound": range_def[1] * PARAM_CONVERSION[name]} \
+        for name, range_def in config_dict["gridsearch_parameters"]
+    ]
+
+    for i in range(13):
+        config_dataframe[i]["Symbol"] = f"${PARAMETER_SYMBOLS[i]}$"
+
     config_dataframe = pd.DataFrame(config_dataframe)
+
+    config_dataframe = config_dataframe.iloc[:, [0, 3, 1, 2]]
     return (config_dataframe,)
 
 
 @app.cell
 def _(config_dataframe):
-    print(config_dataframe.to_latex(index=False, float_format="%0.6g"))
+    print(config_dataframe.to_latex(index=False, float_format="%0.3g"))
     return
 
 
@@ -376,6 +452,7 @@ def _(metrics_dict, np, parameter_values, sklearn):
     whitened_input = (metric_dataset - metric_mean) / metric_stddev
     pca = sklearn.decomposition.PCA(n_components=2, whiten=True)
     metric_embeddings = pca.fit_transform(whitened_input)
+    metric_embeddings[:, 0] *= -1
     return metric_embeddings, nan_mask, pca
 
 
@@ -416,12 +493,13 @@ def _(
         # color_sort = np.argsort(color_values)
         ax.scatter(
             metric_embeddings[:, 0], metric_embeddings[:, 1],
-            c='k', s=1, edgecolors="none"
+            c='k', s=0.1, edgecolors="none", alpha=0.4
         )
 
         for metric_index in range(5):
             x, y = pca.components_[:, metric_index]
-            scatter = ax.scatter(x, y, s=10, alpha=0.7)
+            x = -x
+            scatter = ax.scatter(x, y, s=10, alpha=0.9)
 
             # Label loading:
             if metric_index == 1:
@@ -624,8 +702,8 @@ def _(plot_collage):
 
 
 @app.cell
-def _(plot_collage):
-    plot_collage("com_trajectory")
+def _():
+    # plot_collage("com_trajectory")
     return
 
 
@@ -635,7 +713,7 @@ def _(load_image, metrics_dict, np, plt):
         metric = list(metrics_dict.values())[metric_index]
         metric = metric[~np.isnan(metric)]
         # metric = parameter_values[:, 11]
-        metric_bins = np.linspace(np.quantile(metric, 0.1), np.quantile(metric, 0.9), 5)
+        metric_bins = np.linspace(np.quantile(metric, 0.02), np.quantile(metric, 0.98), 5)
 
         joint_array = []
         for bin_index in range(len(metric_bins) - 1):
@@ -643,7 +721,7 @@ def _(load_image, metrics_dict, np, plt):
             upper_bound = metric_bins[bin_index + 1]
             run_indices = np.argwhere(np.logical_and(metric >= lower_bound, metric <= upper_bound))
             selected_index = run_indices[0][0]
-            image_array = load_image(selected_index)
+            image_array = load_image(selected_index, "trajectory")
             joint_array.append(image_array)
 
         fig, ax = plt.subplots(figsize=(6, 1.5))
@@ -651,7 +729,29 @@ def _(load_image, metrics_dict, np, plt):
         ax.set_axis_off()
         plt.show()
 
-    get_metric_images(0)
+    get_metric_images(3)
+    return
+
+
+@app.cell
+def _(np):
+    def linalg_broadcast_check():
+        B, n = 5, 3
+        rng = np.random.default_rng(0)
+        A = rng.normal(size=(B, n, n))
+        joint = np.einsum('bij,bkj->bik', A, A) + n * np.eye(n)   # random batch of SPD matrices
+        b = rng.normal(size=(B, n))
+
+        L = np.linalg.cholesky(joint)
+        z = np.linalg.solve(L, b[..., None])[..., 0]
+        assert z.shape == (B, n)
+
+        # Cross-check against a per-batch loop:
+        z_loop = np.stack([np.linalg.solve(L[i], b[i]) for i in range(B)])
+        assert np.allclose(z, z_loop)
+        print("OK")
+
+    linalg_broadcast_check()
     return
 
 

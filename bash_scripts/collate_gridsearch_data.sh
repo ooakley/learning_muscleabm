@@ -4,38 +4,63 @@
 #SBATCH --time=24:00:00
 #SBATCH --ntasks=24
 #SBATCH --cpus-per-task=1
-#SBATCH --mem-per-cpu=500M
+#SBATCH --mem-per-cpu=1G
+
+# Script inputs:
+usage="Usage: sbatch collate_gridsearch_data.sh <experiment_dirpath> <hm_wave_id>"
+experiment_dirpath=${1:?$usage}
+hm_wave_id=${2:?$usage}
 
 ml load uv
-experiment_dirpath="model_experiments/2026-07-01-csm_posterior"
 
 collate () {
     local collation_target=$1
     uv run python python_scripts/collate_site_analyses.py \
-        --experiment_folderpath $experiment_dirpath \
-        --collation_target $collation_target
+        --experiment_folderpath "$experiment_dirpath" \
+        --hm_wave_id "$hm_wave_id" \
+        --collation_target "$collation_target"
 }
 
-collate "speeds" &
-sleep 30
-collate "meander_ratios" &
-collate "ann_indices" &
-collate "coherency" &
-collate "interaction" &
-collate "order_parameters" &
-collate "mean_directions" &
+collation_targets=(
+    speeds
+    meander_ratios
+    ann_indices
+    coherency
+    interaction
+    order_parameters
+    mean_directions
+    # com_speeds
+    # com_meander_ratios
+    # com_ann_indices
+    # com_coherency
+    # com_interaction
+    # com_order_parameters
+    # com_mean_directions
+    # cell_lengths
+)
 
-collate "com_speeds" &
-collate "com_meander_ratios" &
-collate "com_ann_indices" &
-collate "com_coherency" &
-collate "com_interaction" &
-collate "com_order_parameters" &
-collate "com_mean_directions" &
+# Run the collations in parallel, keeping track of each so that failures can be detected:
+process_ids=()
+for collation_target in "${collation_targets[@]}"; do
+    collate "$collation_target" &
+    process_ids+=($!)
+    # Give the first collation a head start before launching the rest:
+    if [ "${#process_ids[@]}" -eq 1 ]; then
+        sleep 30
+    fi
+done
 
-collate "cell_lengths" &
+# uv run python python_scripts/collate_matrix_analyses.py \
+#     --experiment_folderpath $experiment_dirpath &
+# process_ids+=($!)
 
-uv run python python_scripts/collate_matrix_analyses.py \
-    --experiment_folderpath $experiment_dirpath &
-
-wait
+# A bare `wait` always succeeds, so wait for each collation in turn. The job fails if any
+# of them did, which stops the jobs that are waiting on this one:
+exit_status=0
+for process_index in "${!process_ids[@]}"; do
+    if ! wait "${process_ids[$process_index]}"; then
+        echo "Collation of ${collation_targets[$process_index]} failed."
+        exit_status=1
+    fi
+done
+exit $exit_status

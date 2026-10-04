@@ -18,13 +18,10 @@ from statsmodels.regression import mixed_linear_model
 
 torch.set_default_dtype(torch.float64)
 
-MCMC_DIRPATH = "model_experiments/2026-05-31-collisions_shape"
-MATRIX_DIRPATH = "model_experiments/2026-06-03-matrix_shape"
-MATRIX_PARAM_DIMS = 14
-CAT_VAR = "C(phenotype, Treatment(reference='CTL'))[T.RD]"
-QUERY_COUNTS = [75, 250, 375]
-SCALED_QUERY_COUNTS = (np.array(QUERY_COUNTS) - 50) / (400 - 50)
-
+MCMC_DIRPATH = "model_experiments/2026-09-16-collisions_shape"
+MCMC_PARAM_DIMS = 12
+MATRIX_DIRPATH = "model_experiments/2026-09-25-matrix_shape"
+MATRIX_PARAM_DIMS = 15
 
 class DeepInputTransformation(torch.nn.Module):
     def __init__(self, dimension, hidden_layer_neuron_count=16):
@@ -189,8 +186,8 @@ class ScalingManager:
         gridsearch_dict = {metric_name: metric_range for metric_name, metric_range in matrix_parameters}
 
         # Get matrix advection rate scaling:    
-        self.ar_min = gridsearch_dict["matrixAdvectionRate"][0]
-        self.ar_max = gridsearch_dict["matrixAdvectionRate"][1]
+        self.ar_min = gridsearch_dict["matrixCoupling"][0]
+        self.ar_max = gridsearch_dict["matrixCoupling"][1]
         self.ar_range = self.ar_max - self.ar_min
 
         # Get matrix sample rate scaling:
@@ -242,28 +239,43 @@ class ScalingManager:
 
 
 def main():
+    MCMC_SUBPATH = 'disc_cov_mcmc_results'
+
     # Establish save path:
-    matrix_inference_dirpath = os.path.join(MCMC_DIRPATH, "mcmc_results", "matrix_inference")
+    matrix_inference_dirpath = os.path.join(MCMC_DIRPATH, MCMC_SUBPATH, "matrix_inference")
+    if not os.path.exists(matrix_inference_dirpath):
+        os.mkdir(matrix_inference_dirpath)
 
     # Load posterior distribution:
     print("Loading posterior distributions...", flush=True)
-    wt_chain = np.load(os.path.join(MCMC_DIRPATH, "mcmc_results", "wt_mcmc_chain.npy"))
-    rd_chain = np.load(os.path.join(MCMC_DIRPATH, "mcmc_results", "rd_mcmc_chain.npy"))
+    wt_chain = np.load(os.path.join(MCMC_DIRPATH, MCMC_SUBPATH, "wt_mcmc_chain.npy"))
+    rd_chain = np.load(os.path.join(MCMC_DIRPATH, MCMC_SUBPATH, "rd_mcmc_chain.npy"))
 
-    # Get MLE estimates:
-    ctl_likelihoods = np.load(os.path.join(MCMC_DIRPATH, "mcmc_results", "wt_mcmc_likelihoods.npy"))
-    rd_likelihoods = np.load(os.path.join(MCMC_DIRPATH, "mcmc_results", "rd_mcmc_likelihoods.npy"))
-
-    THIN_FACTOR = 64
-    ctl_mle_idx = np.argsort(ctl_likelihoods[::THIN_FACTOR, :, 0].flatten())[-1024:]
-    rd_mle_idx = np.argsort(rd_likelihoods[::THIN_FACTOR, :, 0].flatten())[-1024:]
-    ctl_mle = wt_chain[::THIN_FACTOR, :, 0, :].reshape(-1, 11)[ctl_mle_idx, :]
-    rd_mle = rd_chain[::THIN_FACTOR, :, 0, :].reshape(-1, 11)[rd_mle_idx, :]
-
-    # Full posterior:
-    wt_posterior = wt_chain[8192::512, :, 0, :].reshape(-1, 11)
-    rd_posterior = rd_chain[8192::512, :, 0, :].reshape(-1, 11)
+    # Subsampled posterior:
+    chain_length = wt_chain.shape[0]
+    half_index = int(chain_length // 2)
+    wt_posterior = wt_chain[half_index::256, :, 0, :].reshape(-1, MCMC_PARAM_DIMS)
+    rd_posterior = rd_chain[half_index::256, :, 0, :].reshape(-1, MCMC_PARAM_DIMS)
     print(f"Size of posteriors: {wt_posterior.shape}")
+
+    # Get subsampled likelihoods:
+    ctl_likelihoods = np.load(os.path.join(MCMC_DIRPATH, MCMC_SUBPATH, "wt_mcmc_likelihoods.npy"))
+    rd_likelihoods = np.load(os.path.join(MCMC_DIRPATH, MCMC_SUBPATH, "rd_mcmc_likelihoods.npy"))
+    ctl_ss_likelihoods = ctl_likelihoods[half_index::256, :, 0].flatten()
+    rd_ss_likelihoods = rd_likelihoods[half_index::256, :, 0].flatten()
+
+    # # Get threshold:
+    # index_threshold = int(np.floor(len(ctl_ss_likelihoods) * 0.05))
+    # ctl_mask = np.argsort(ctl_ss_likelihoods)[index_threshold:]
+    # rd_mask = np.argsort(rd_ss_likelihoods)[index_threshold:]
+    # wt_posterior = wt_posterior[ctl_mask, :]
+    # rd_posterior = rd_posterior[rd_mask, :]
+    # print(f"Size of 95 CI posteriors: {wt_posterior.shape}")
+
+    np.save(os.path.join(matrix_inference_dirpath, "wt_likelihood.npy"), ctl_ss_likelihoods)
+    np.save(os.path.join(matrix_inference_dirpath, "rd_likelihood.npy"), rd_ss_likelihoods)
+    np.save(os.path.join(matrix_inference_dirpath, "wt_posterior.npy"), wt_posterior)
+    np.save(os.path.join(matrix_inference_dirpath, "rd_posterior.npy"), rd_posterior)
 
     # Load GP model for matrix organisation:
     dummy_inducing_points = np.ones((16, MATRIX_PARAM_DIMS))
@@ -286,74 +298,47 @@ def main():
     order_parameters = np.load(os.path.join(MATRIX_DIRPATH, "summary_data", "matrix_order_parameters.npy"))
     scaling_manager = ScalingManager(matrix_parameters, order_parameters, op65_manager)
 
-    # Get estimates for the MLE runs:
-    ctl_mle_estimates = scaling_manager.run_inference(
-        ctl_mle, 1.5, 10, 350
-    )
-    rd_mle_estimates = scaling_manager.run_inference(
-        rd_mle, 1.5, 10, 350
-    )
-    np.save(os.path.join(matrix_inference_dirpath, "wt_mle_estimates.npy"), ctl_mle_estimates)
-    np.save(os.path.join(matrix_inference_dirpath, "rd_mle_estimates.npy"), rd_mle_estimates)
-
     # Set up gridsearch over advection rate, sample rate and cell number:
     print("Setting up grid for inference...", flush=True)
-    advection_rates = np.linspace(0, 3, 50)
-    sample_rates = np.linspace(0.5, 15, 10)
-    cell_counts = np.linspace(300, 400, 3)
+    MC_SAMPLE_COUNT = 10
+    SR_SAMPLE_COUNT = 10
+    CC_SAMPLE_COUNT = 10
+    matrix_coupling_values = np.linspace(0, 15, MC_SAMPLE_COUNT)
+    sample_rates = np.linspace(0.5, 15, SR_SAMPLE_COUNT)
+    cell_counts = np.linspace(50, 350, CC_SAMPLE_COUNT)
 
     print("Running inference...", flush=True)
     wt_posterior_array = []
     rd_posterior_array = []
-    wt_mle_array = []
-    rd_mle_array = []
     for cell_count in cell_counts:
         for sample_rate in sample_rates:
-            for advection_rate in advection_rates:
+            for mc_val in matrix_coupling_values:
                 # Run inference on (thinned) full posterior:
                 wt_full_pred = scaling_manager.run_inference(
-                    wt_posterior, advection_rate, sample_rate, cell_count
+                    wt_posterior, mc_val, sample_rate, cell_count
                 )
                 rd_full_pred = scaling_manager.run_inference(
-                    rd_posterior, advection_rate, sample_rate, cell_count
+                    rd_posterior, mc_val, sample_rate, cell_count
                 )
 
                 # Take average:
-                wt_posterior_array.append(np.mean(wt_full_pred))
-                rd_posterior_array.append(np.mean(rd_full_pred))
+                wt_posterior_array.append(wt_full_pred)
+                rd_posterior_array.append(rd_full_pred)
 
-                # Run inference on MLE:
-                wt_mle_pred = scaling_manager.run_inference(
-                    ctl_mle, advection_rate, sample_rate, cell_count
-                )
-                rd_mle_pred = scaling_manager.run_inference(
-                    rd_mle, advection_rate, sample_rate, cell_count
-                )
-
-                # Take average:
-                wt_mle_array.append(np.mean(wt_mle_pred))
-                rd_mle_array.append(np.mean(rd_mle_pred))
-        
         # Print progress:
         print(f"Cell count {cell_count} completed...", flush=True)
 
     # Reshape and save:
     print("Reshaping and saving...", flush=True)
-    wt_posterior_array = np.array(wt_posterior_array).reshape(3, 10, -1)
-    rd_posterior_array = np.array(rd_posterior_array).reshape(3, 10, -1)
+    wt_posterior_array = np.array(wt_posterior_array).reshape(CC_SAMPLE_COUNT, SR_SAMPLE_COUNT, MC_SAMPLE_COUNT, -1)
+    rd_posterior_array = np.array(rd_posterior_array).reshape(CC_SAMPLE_COUNT, SR_SAMPLE_COUNT, MC_SAMPLE_COUNT, -1)
 
-    wt_mle_array = np.array(wt_mle_array).reshape(3, 10, -1)
-    rd_mle_array = np.array(rd_mle_array).reshape(3, 10, -1)
-
-    matrix_inference_dirpath = os.path.join(MCMC_DIRPATH, "mcmc_results", "matrix_inference")
+    matrix_inference_dirpath = os.path.join(MCMC_DIRPATH, MCMC_SUBPATH, "matrix_inference")
     if not os.path.exists(matrix_inference_dirpath):
         os.mkdir(matrix_inference_dirpath)
 
     np.save(os.path.join(matrix_inference_dirpath, "wt_posterior_array.npy"), wt_posterior_array)
     np.save(os.path.join(matrix_inference_dirpath, "rd_posterior_array.npy"), rd_posterior_array)
-
-    np.save(os.path.join(matrix_inference_dirpath, "wt_mle_array.npy"), wt_mle_array)
-    np.save(os.path.join(matrix_inference_dirpath, "rd_mle_array.npy"), rd_mle_array)
 
 
 if __name__ == "__main__":

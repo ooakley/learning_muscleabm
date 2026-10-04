@@ -5,18 +5,34 @@
 #SBATCH --ntasks=512
 #SBATCH --cpus-per-task=1
 #SBATCH --mem-per-cpu=8G
+#SBATCH --hint=nomultithread
 
 ml load uv parallel
+uv sync
+
 world_size=512
 
 estimate_hessian () {
     local task_id=$1
     echo "Running task $task_id..."
-    srun --exact --ntasks 1 --nnodes 1 --cpus-per-task 1 \
-        uv run python_scripts/generate_hessians.py \
+
+    # Single-value Hessian estimation:
+    # srun --exact --ntasks 1 --cpus-per-task 1 --nodes=1-1 --mem-per-cpu=8G --hint=nomultithread \
+    #     uv run --frozen python_scripts/generate_hessians.py \
+    #     --metric op65 \
+    #     --world_size $world_size \
+    #     --task_id $task_id
+
+    # Design point Hessian estimation:
+    srun --exact --ntasks 1 --cpus-per-task 1 --nodes=1-1 --mem-per-cpu=8G --hint=nomultithread \
+        uv run --frozen python_scripts/generate_full_rank_hessians.py \
         --metric op65 \
         --world_size $world_size \
         --task_id $task_id
+
+    # Signal finished:
+    echo "Finished task $task_id..."
+
 }
 
 export -f estimate_hessian

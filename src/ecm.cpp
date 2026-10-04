@@ -14,7 +14,8 @@ using FibreMatrix = std::vector<FibreRow>;
 // Constructor:
 ECMField::ECMField(
     int setMatrixElements, int setCollisionElements, double setFieldSize,
-    double setMatrixTurnoverRate, double setMatrixAdditionRate, int setECMSeed
+    double setMatrixTurnoverRate, double setMatrixAdditionRate, double setPatternSigma,
+    int setECMSeed
     )
     : matrixElementCount{setMatrixElements}
     , collisionElementCount{setCollisionElements}
@@ -30,6 +31,7 @@ ECMField::ECMField(
     , cellHeadingMatrix{boostMatrix::zero_matrix<double>(collisionElementCount, collisionElementCount)}
     , matrixTurnoverRate{setMatrixTurnoverRate}
     , matrixAdditionRate{setMatrixAdditionRate}
+    , patternSigma{setPatternSigma}
 {
     // Initialise the fibre matrix:
     for (int i = 0; i < matrixElementCount; ++i) {
@@ -45,6 +47,20 @@ ECMField::ECMField(
     seedGenerator = std::mt19937(setECMSeed);
     seedDistribution = std::uniform_int_distribution<unsigned int>(0, UINT32_MAX);
     generatorFibreSampling = std::mt19937(seedDistribution(seedGenerator));
+
+    // Initialise the RNG for generating pattern:
+    generatorPatterning = std::mt19937(seedDistribution(seedGenerator));
+    patternDistribution = std::normal_distribution<double>(0, patternSigma);
+
+    // // Pattern the fibre matrix:
+    // for (int i = 0; i < matrixElementCount; ++i) {
+    //     for (int j = 0; j < matrixElementCount; ++j) {
+    //         for (int n = 0; n < 100; ++n) {
+    //             double sampledHeading{patternDistribution(generatorPatterning)};
+    //             addToFibreMatrix(i, j, sampledHeading);
+    //         }
+    //     }
+    // }
 }
 
 // Getters:

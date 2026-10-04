@@ -26,7 +26,19 @@ def _():
     from matplotlib.ticker import AutoLocator, MaxNLocator
 
     from datetime import datetime
-    return cc, datetime, json, np, os, pd, plt, scipy, sklearn, subprocess
+    return (
+        MaxNLocator,
+        cc,
+        datetime,
+        json,
+        np,
+        os,
+        pd,
+        plt,
+        scipy,
+        sklearn,
+        subprocess,
+    )
 
 
 @app.cell
@@ -63,7 +75,7 @@ def _(datetime, os, subprocess):
     # A4 dimensions: 8.27 × 11.69 inches
     # Image dimensions: 160 x ? mm
     # Metadata: date, script, github branch id, og experiment source
-    OUT_DIRPATH = "plotting_scripts/gaussian_process/out"
+    OUT_DIRPATH = "plotting_scripts/gaussian_process_2/out"
     CONTROL_PALETTE = "#1A85FF"
     RD_PALETTE = "#D41159"
     PIXEL_SIZE = 0.3469 * 2  # Pixel size in µm
@@ -88,12 +100,12 @@ def _(datetime, os, subprocess):
         "creation_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "current_commit_hash": commit_hash
     }
-    return FULL_WIDTH, METADATA_DICTIONARY, OUT_DIRPATH
+    return FULL_HEIGHT, FULL_WIDTH, METADATA_DICTIONARY, OUT_DIRPATH
 
 
 @app.cell
 def _():
-    EXPERIMENT_DIRPATH = "model_experiments/2026-06-03-matrix_shape"
+    EXPERIMENT_DIRPATH = "model_experiments/2026-09-25-matrix_shape"
 
     METRICS_TO_PLOT = [
         "speeds",
@@ -110,7 +122,15 @@ def _():
         "Coherency",
         "Matrix Order Parameter"
     ]
-    return EXPERIMENT_DIRPATH, METRICS_LABELS, METRICS_TO_PLOT
+
+    Q_LABELS = [
+        "Speed Quantile",
+        "MR Quantile",
+        "ANNI Quantile",
+        "Coherency Quantile",
+        "OP Quantile"
+    ]
+    return EXPERIMENT_DIRPATH, METRICS_LABELS, METRICS_TO_PLOT, Q_LABELS
 
 
 @app.cell
@@ -136,7 +156,98 @@ def _(EXPERIMENT_DIRPATH, METRICS_TO_PLOT, json, np, os):
         return metrics_dict
 
     metrics_dict = load_metrics()
-    return metrics_dict, parameter_values
+    return config_dict, metrics_dict, parameter_values
+
+
+@app.cell
+def _():
+    # np.argwhere(np.logical_and(np.exp(metrics_dict["op65"]) > 0.0298, np.exp(metrics_dict["op65"]) < 0.0302))
+    return
+
+
+@app.cell
+def _(
+    FULL_HEIGHT,
+    FULL_WIDTH,
+    METADATA_DICTIONARY,
+    METRICS_TO_PLOT,
+    MaxNLocator,
+    OUT_DIRPATH,
+    Q_LABELS,
+    cc,
+    config_dict,
+    datetime,
+    metrics_dict,
+    np,
+    os,
+    parameter_values,
+    plt,
+    scipy,
+):
+    def plot_binscatter(parameter_index, metric_index, ax):
+        # Format ticks:
+        ax.xaxis.set_major_locator(MaxNLocator(3))
+
+        # Get relevant data:
+        parameter_array = parameter_values[:, parameter_index]
+        metric_values = list(metrics_dict.values())[metric_index]
+        parameter_name = config_dict["gridsearch_parameters"][parameter_index][0]
+        scaling = config_dict["gridsearch_parameters"][parameter_index][1]
+
+        # Get binned statistic:
+        bins = np.linspace(0, 1, 51)
+        bin_centers = bins[:-1] + 0.01
+        bin_median, _, _ = scipy.stats.binned_statistic(parameter_array, metric_values, statistic=np.nanmedian, bins=bins)
+        bin_mean, _, _ = scipy.stats.binned_statistic(parameter_array, metric_values, statistic=np.nanmean, bins=bins)
+        bin_std, _, _ = scipy.stats.binned_statistic(parameter_array, metric_values, statistic=np.nanstd, bins=bins)
+        # bin_sem = bin_std / np.sqrt(2**17)
+
+        ecdf = scipy.stats.ecdf(metric_values[~np.isnan(metric_values)])
+        std_quantile = ecdf.cdf.evaluate(bin_median + bin_std)
+        bin_quantile = ecdf.cdf.evaluate(bin_median)
+
+        stderr = np.abs(bin_quantile - std_quantile)
+
+        # Plot data:
+        scaled_x = (bin_centers * (scaling[1] - scaling[0])) + scaling[0]
+        vmin, vmax = np.nanquantile(metric_values, [0.15, 0.85])
+        vmin, vmax = [0.15, 0.85]
+        ax.errorbar(scaled_x, bin_quantile, stderr, c='k', alpha=0.1)
+        ax.scatter(scaled_x, bin_quantile, s=1, c=bin_quantile, vmin=vmin, vmax=vmax, cmap=cc.m_CET_D7)
+
+        # Format plot:
+        ax.set_xlim(scaling[0], scaling[1])
+        ax.set_ylim(0, 1)
+
+        # Label:
+        ax.set_xlabel(parameter_name, fontsize=7)
+        # ax.set_ylabel(METRICS_LABELS[metric_index])
+
+    def plot_all_binscatter(metric_index):
+        fig, axs = plt.subplots(7, 2, figsize=(FULL_WIDTH, FULL_HEIGHT), sharey=True)
+
+        count = 0
+        for i in range(7):
+            for j in range(2):
+                plot_binscatter(count, metric_index, axs[i, j])
+                count += 1
+
+        # Adjust subplots:
+        fig.subplots_adjust(0.15, 0.05, 0.85, 0.95, wspace=0.15, hspace=0.55)
+
+        # Add global y-label:
+        fig.text(0.075, 0.5, Q_LABELS[metric_index], va='center', rotation='vertical', in_layout=True)
+
+        # Update metadata time:
+        METADATA_DICTIONARY["time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        plt.savefig(
+            os.path.join(OUT_DIRPATH, f"binscatter_{METRICS_TO_PLOT[metric_index]}.png"),
+            dpi=300, metadata=METADATA_DICTIONARY, transparent=True, pad_inches=0
+        )
+        plt.show()
+
+    plot_all_binscatter(4)
+    return
 
 
 @app.cell
@@ -276,14 +387,14 @@ def _(metrics_dict, np, parameter_values, sklearn):
     print(metric_mean.shape)
     print(metric_stddev.shape)
     whitened_input = (metric_dataset - metric_mean) / metric_stddev
-    pca = sklearn.decomposition.PCA(n_components=5, whiten=True)
+    pca = sklearn.decomposition.PCA(n_components=2, whiten=True)
     metric_embeddings = pca.fit_transform(whitened_input)
     return metric_embeddings, nan_mask
 
 
 @app.cell
 def _(metric_embeddings, plt):
-    plt.scatter(metric_embeddings[:, 1], metric_embeddings[:, 3], s=1)
+    plt.scatter(metric_embeddings[:, 0], metric_embeddings[:, 1], s=0.1)
     return
 
 
@@ -305,7 +416,7 @@ def _(
         rng = np.random.default_rng(0)
 
         # Extract bins of primary component:
-        base_bins = np.linspace(-2.0, 2.0, grid_size + 1)
+        base_bins = np.linspace(-1.0, 1.0, grid_size + 1)
 
         # Iterate through bins, retrieving example indexes:
         collage_array = []

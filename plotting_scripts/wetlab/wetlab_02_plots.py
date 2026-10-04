@@ -31,16 +31,51 @@ def _():
 
 
 @app.cell
+def _():
+    import matplotlib as mpl
+
+    # Font formatting:
+    mpl.rcParams['font.family'] = 'serif'
+    mpl.rcParams['font.serif'] = "cmr10"
+    mpl.rcParams['font.size'] = 9
+    mpl.rcParams["mathtext.fontset"] = "cm"
+    mpl.rcParams['axes.unicode_minus'] = False
+    mpl.rcParams['axes.labelsize'] = 9
+
+    # Tick formating:
+    mpl.rcParams['xtick.major.size'] = 2
+    mpl.rcParams['xtick.major.pad'] = 1.5
+    mpl.rcParams['ytick.major.size'] = 2
+    mpl.rcParams['ytick.major.pad'] = 1.5
+    mpl.rcParams['xtick.labelsize'] = 7
+    mpl.rcParams['ytick.labelsize'] = 7
+
+    # Label formatting:
+    mpl.rcParams['axes.labelpad'] = 2.5
+
+    # Layout formatting:
+    mpl.rcParams['figure.constrained_layout.hspace'] = 0.04
+    mpl.rcParams['figure.constrained_layout.wspace'] = 0.04
+    return
+
+
+@app.cell
 def _(datetime, subprocess):
     # PNG 300 dpi
     # A4 dimensions: 8.27 × 11.69 inches
     # Metadata: date, script, github branch id, og experiment source
-    OUT_DIRPATH = "plotting_scripts/out"
+    OUT_DIRPATH = "plotting_scripts/wetlab/out"
     CONTROL_PALETTE = "#1A85FF"
     RD_PALETTE = "#D41159"
     PIXEL_SIZE = 0.3469 * 2  # Pixel size in µm
     SAMPLE_EXPERIMENT = "/camp/home/eloaklo/home/shared/eloaklo/analysed_data/OEO20260313"
     MM_UNIT = 1/25.4  # Millimeters in inches, for matplotlib
+
+    TEXT_WIDTH = 135 * MM_UNIT
+    TEXT_HEIGHT = 217 * MM_UNIT 
+
+    FULL_WIDTH = 170 * MM_UNIT
+    FULL_HEIGHT = TEXT_HEIGHT * 0.8
 
     # Get current commit hash:
     commit_hash = subprocess.run("git rev-parse --short HEAD", shell=True, capture_output=True)
@@ -55,7 +90,7 @@ def _(datetime, subprocess):
     }
 
     seaborn_palette = [CONTROL_PALETTE, RD_PALETTE]
-    return METADATA_DICTIONARY, MM_UNIT, OUT_DIRPATH, PIXEL_SIZE
+    return METADATA_DICTIONARY, OUT_DIRPATH, PIXEL_SIZE, TEXT_WIDTH
 
 
 @app.cell
@@ -122,8 +157,8 @@ def _(FLUORESCENCE_CLIP, np, sample_images, sklearn):
 @app.cell
 def _(
     METADATA_DICTIONARY,
-    MM_UNIT,
     OUT_DIRPATH,
+    TEXT_WIDTH,
     datetime,
     filtered_pixel_distribution,
     gm_model,
@@ -134,7 +169,7 @@ def _(
 ):
     def plot_pixel_distribution():
         # Set up figure:
-        fig, axs = plt.subplots(2, 1, figsize=(160 * MM_UNIT, 90 * MM_UNIT), layout="constrained", sharex=True)
+        fig, axs = plt.subplots(2, 1, figsize=(TEXT_WIDTH * 0.66, 3), sharex=True)
 
         # Plot data:
         pix_min = np.min(filtered_pixel_distribution[::128])
@@ -143,7 +178,7 @@ def _(
         axs[0].hist(filtered_pixel_distribution[::128], bins=logbins, density=True)
 
         # Format axes:
-        # ax.set_xscale('log')
+        # axs[0].set_yscale('log')
         axs[0].set_xlim(pix_min, pix_max)
         axs[0].set_yticks([0.00, 0.01], labels=["0.00", "0.01"])
 
@@ -180,7 +215,10 @@ def _(
         # Label axes:
         axs[1].set_ylabel("PDF Density")
         axs[1].set_xlabel("Pixel Intensity")
-    
+
+        # Adjust layout:
+        fig.subplots_adjust(0.05, 0.1, 1 - 0.05, 1 - 0.05, hspace=0.05, wspace=0.05)
+
         # Save figure:
         METADATA_DICTIONARY["time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         plt.savefig(os.path.join(OUT_DIRPATH, "pixel_histogram.png"), dpi=300, metadata=METADATA_DICTIONARY, transparent=True)
@@ -193,8 +231,8 @@ def _(
 @app.cell
 def _(
     METADATA_DICTIONARY,
-    MM_UNIT,
     OUT_DIRPATH,
+    TEXT_WIDTH,
     cc,
     datetime,
     lower_fl,
@@ -217,7 +255,7 @@ def _(
 
     def plot_registration_thresholding():
         # Set up figure:
-        fig, axs = plt.subplots(1, 2, figsize=(160 * MM_UNIT, 85 * MM_UNIT), layout="constrained")
+        fig, axs = plt.subplots(1, 2, figsize=(TEXT_WIDTH, 3))
 
         # Plot sample image:
         axs[0].imshow(sample_images[0], cmap='gray', vmin=lower_fl, vmax=upper_fl)
@@ -232,16 +270,25 @@ def _(
         registration_image *= (2.5) / 60
         image_object = axs[1].imshow(registration_image, cmap=cc.m_CET_L16)
 
+        # Format axes:
+        axs[0].set_xticks([])
+        axs[0].set_yticks([])
+        axs[1].set_xticks([])
+        axs[1].set_yticks([])
+
+        axs[0].set_xlabel("Nuclear Image", labelpad=8)
+        axs[1].set_xlabel("Nuclear Outlines", labelpad=8)
+
+        # Adjust layout:
+        fig.subplots_adjust(0.05, 0.00, 1 - 0.05, 1 - 0.00, hspace=0.05, wspace=0.05)
+
         # Plot colorbar:
         fig.colorbar(
             image_object, ax=axs.flatten(),
             label="Time Elapsed (h)", ticks=[0, 2, 4],
-            fraction=0.1, shrink=0.8, pad=0.025
+            fraction=0.025, shrink=0.7,
+            # pad=0.025
         )
-
-        # Format axes:
-        axs[0].set_axis_off()
-        axs[1].set_axis_off()
 
         # Save figure:
         METADATA_DICTIONARY["time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -261,9 +308,9 @@ def _():
 @app.cell
 def _(
     METADATA_DICTIONARY,
-    MM_UNIT,
     OUT_DIRPATH,
     PIXEL_SIZE,
+    TEXT_WIDTH,
     datetime,
     lower_fl,
     np,
@@ -311,7 +358,7 @@ def _(
         return image_filtered
 
     def plot_log_filter():
-        fig, axs = plt.subplots(1, 2, figsize=(160 * MM_UNIT, 80 * MM_UNIT), layout="constrained")
+        fig, axs = plt.subplots(1, 2, figsize=(TEXT_WIDTH, 3))
 
         # Get sample normalised image:
         normalised_image = np.clip(sample_images[0], lower_fl, upper_fl)
@@ -324,7 +371,11 @@ def _(
         axs[0].imshow(filtered_image.T, cmap='gray', vmin=-extent, vmax=extent)
         axs[0].set_xlim(0, 1024)
         axs[0].set_ylim(0, 1024)
-        axs[0].set_axis_off()
+
+        # Label axes:
+        axs[0].set_xticks([])
+        axs[0].set_yticks([])
+        axs[0].set_xlabel("LoG Filtered Nuclear Image", labelpad=8)
 
         # Get peaks:
         maxima = skimage.feature.peak_local_max(filtered_image)
@@ -340,8 +391,15 @@ def _(
         axs[1].scatter(maxima[valid_mask, 0], maxima[valid_mask, 1], c='r', s=0.5, label="Valid Local Peaks")
         axs[1].set_xlim(0, 1024)
         axs[1].set_ylim(0, 1024)
-        axs[1].set_axis_off()
         axs[1].legend()
+
+        # Label axes:
+        axs[1].set_xticks([])
+        axs[1].set_yticks([])
+        axs[1].set_xlabel("Intensity Selected Peaks", labelpad=8)
+
+        # Adjust layout:
+        fig.subplots_adjust(0.05, 0.1, 1 - 0.05, 1 - 0.1, hspace=0.05, wspace=0.05)
 
         # Save:
         METADATA_DICTIONARY["time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -349,6 +407,11 @@ def _(
         plt.show()
 
     plot_log_filter()
+    return
+
+
+@app.cell
+def _():
     return
 
 

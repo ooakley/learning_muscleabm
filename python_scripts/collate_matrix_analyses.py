@@ -41,7 +41,17 @@ def collate_data(experiment_folderpath, summarise_filename, sample_count):
             blank_data = np.array([np.nan] * superiteration_count)
             out_data.append(blank_data)
 
-    out_data = np.stack(out_data, axis=0)
+    try:
+        out_data = np.stack(out_data, axis=0)
+    except ValueError:
+        print("Stacking gone wrong...")
+        print(out_data[0].shape)
+        for index, broken_data in enumerate(out_data):
+            if broken_data.shape != out_data[0].shape:
+                print(f"Index {index} has broken shape: {broken_data.shape}")
+                print(broken_data)
+        assert False
+
     out_filepath = os.path.join(experiment_folderpath, "summary_data", summarise_filename)
     np.save(out_filepath, out_data)
 
@@ -63,6 +73,7 @@ def main():
 
     # Collate individual simulation data into set of comprehensive numpy arrays:
     collate_data(args.experiment_folderpath, "matrix_order_parameters.npy", sample_count)
+    collate_data(args.experiment_folderpath, "mean_variances.npy", sample_count)
     collate_data(args.experiment_folderpath, "density_idr.npy", sample_count)
 
 

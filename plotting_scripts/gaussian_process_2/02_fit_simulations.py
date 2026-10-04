@@ -352,9 +352,41 @@ def _():
 
 @app.cell
 def _(np, os):
-    CSM_POSTERIOR_DIRPATH = "model_experiments/2026-06-14-csm_posterior"
+    CSM_POSTERIOR_DIRPATH = "model_experiments/2026-09-30-csm_posterior"
     matrix_op = np.load(os.path.join(CSM_POSTERIOR_DIRPATH, "summary_data", "matrix_order_parameters.npy"))
     return CSM_POSTERIOR_DIRPATH, matrix_op
+
+
+@app.cell
+def _(matrix_op, np, plt):
+    csm_op65 = np.mean(matrix_op[:, :, -1], axis=1)
+    plt.hist(csm_op65[:1024], bins=25, histtype="step")
+    plt.hist(csm_op65[1024:], bins=25, histtype="step")
+    return (csm_op65,)
+
+
+@app.cell
+def _(csm_op65, np):
+    print(np.mean(csm_op65[:1024]))
+    return
+
+
+@app.cell
+def _(csm_op65, np):
+    np.quantile(csm_op65[:1024], 0.9)
+    return
+
+
+@app.cell
+def _(csm_op65, np):
+    print(np.mean(csm_op65[1024:]))
+    return
+
+
+@app.cell
+def _(csm_op65, np):
+    np.quantile(csm_op65[1024:], 0.9)
+    return
 
 
 @app.cell

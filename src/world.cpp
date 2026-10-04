@@ -20,10 +20,8 @@ World::World
     double setWorldSideLength,
     int setECMElementCount,
     int setNumberOfCells,
-    bool setThereIsMatrixInteraction,
-    double setMatrixTurnoverRate,
-    double setMatrixAdditionRate,
     double setMatrixSampleRate,
+    double setPatternSigma,
     CellParameters setCellParameters
 )
     : worldSeed{setWorldSeed}
@@ -31,8 +29,8 @@ World::World
     , countECMElement{setECMElementCount}
     , lengthECMElement{worldSideLength/countECMElement}
     , numberOfCells{setNumberOfCells}
-    , thereIsMatrixInteraction{setThereIsMatrixInteraction}
     , matrixSampleRate{setMatrixSampleRate}
+    , patternSigma{setPatternSigma}
     , simulationTime{0}
     , cellParameters{setCellParameters}
     , collisionCellList{CollisionCellList(4, 2048)}
@@ -63,7 +61,8 @@ World::World
 
     // Initialise ECM:
     ecmField = ECMField(
-        countECMElement, 16, setWorldSideLength, setMatrixTurnoverRate, setMatrixAdditionRate,
+        countECMElement, 16, setWorldSideLength, 0, 0,
+        patternSigma,
         seedDistribution(seedGenerator)
     );
 
@@ -121,25 +120,25 @@ void World::writeMatrixToCSV(std::ofstream& matrixFile) {
     //     }
     // }
 
-    for (int i = 0; i < countECMElement; i++) {
-        for (int j = 0; j < countECMElement; j++) {
-            const auto [heading, count, concentration] = ecmField.summariseFibreMatrix(i, j);
-            matrixFile << heading << ",";
-            matrixFile << count << ",";
-            matrixFile << concentration << ",";
-        }
-    }
-    matrixFile << '\n';
-
     // for (int i = 0; i < countECMElement; i++) {
     //     for (int j = 0; j < countECMElement; j++) {
-    //         std::deque<float> fibreDeque{ecmField.getFibreDeque(i, j)};
-    //         for (float heading : fibreDeque) {
-    //             matrixFile << heading << ",";
-    //         }
-    //         matrixFile << '\n';
+    //         const auto [heading, count, concentration] = ecmField.summariseFibreMatrix(i, j);
+    //         matrixFile << heading << ",";
+    //         matrixFile << count << ",";
+    //         matrixFile << concentration << ",";
     //     }
     // }
+    // matrixFile << '\n';
+
+    for (int i = 0; i < countECMElement; i++) {
+        for (int j = 0; j < countECMElement; j++) {
+            std::deque<float> fibreDeque{ecmField.getFibreDeque(i, j)};
+            for (float heading : fibreDeque) {
+                matrixFile << heading << ",";
+            }
+            matrixFile << '\n';
+        }
+    }
 
     // for (int i = 0; i < countECMElement; i++) {
     //     for (int j = 0; j < countECMElement; j++) {
@@ -150,10 +149,7 @@ void World::writeMatrixToCSV(std::ofstream& matrixFile) {
     // }
 }
 
-// Setters:
-
 // Public simulation functions:
-
 void World::runSimulationStep() {
     // Shuffling acting order of cells:
     std::shuffle(std::begin(cellAgentVector), std::end(cellAgentVector), shuffleGenerator);
@@ -162,9 +158,6 @@ void World::runSimulationStep() {
     for (int i = 0; i < numberOfCells; ++i) {
         runCellStep(cellAgentVector[i]);
     }
-
-    // Updating ECM:
-    // ecmField.ageMatrix();
 
     simulationTime += 1;
 }
@@ -205,19 +198,22 @@ std::shared_ptr<CellAgent> World::initialiseCell(int setCellID) {
         cellParameters.fluctuationAmplitude,
         cellParameters.fluctuationTimescale,
         cellParameters.actinAdvectionRate,
-        cellParameters.matrixAdvectionRate,
         cellParameters.collisionAdvectionRate,
         cellParameters.maximumSteadyStateActinFlow,
 
-        // Matrix sensation parameters:
+        // Collision parameters:
         cellParameters.cellBodyRadius,
         cellParameters.aspectRatio,
         cellParameters.collisionFlowReductionRate,
+        cellParameters.adhesionReductionRate,
 
         // Shape parameters:
         cellParameters.cellStiffness,
         cellParameters.surfaceStickiness,
-    
+
+        // Matrix parameters:
+        cellParameters.matrixCoupling,
+
         // Randomised initial state parameters:
         startX, startY, startHeading
     );
@@ -270,6 +266,8 @@ void World::runCellStep(std::shared_ptr<CellAgent> actingCell) {
             double effectiveSampleCount{0};
             double averagedDeltaHeadingX{0};
             double averagedDeltaHeadingY{0};
+            double orderParameterX{};
+            double orderParameterY{};
             for (int i = 0; i < matrixSampleCount; i++) {
                 // Get point to sample:
                 std::vector<double> sampledPoint{attachmentVector[i]};
@@ -285,6 +283,9 @@ void World::runCellStep(std::shared_ptr<CellAgent> actingCell) {
                 averagedDeltaHeadingX += std::cos(deltaHeading);
                 averagedDeltaHeadingY += std::sin(deltaHeading);
                 effectiveSampleCount += 1;
+                // Get basic order parameter calculation:
+                orderParameterX += std::cos(2 * ecmHeading);
+                orderParameterY += std::sin(2 * ecmHeading);
             }
             if (effectiveSampleCount == 0) {
                 actingCell->setDirectionalInfluence(0);
@@ -296,13 +297,13 @@ void World::runCellStep(std::shared_ptr<CellAgent> actingCell) {
                 assert(std::abs(deltaHeadingDirection) < (M_PI/2));
                 actingCell->setDirectionalInfluence(deltaHeadingDirection);
 
-                // Retrieve fractional directional consistency:
-                double deltaNorm{std::sqrt(std::pow(averagedDeltaHeadingX, 2) + std::pow(averagedDeltaHeadingY, 2))};
-                double directionalConsistency{deltaNorm / matrixSampleCount};
-                directionalConsistency -= 1e-3;
-                // std::cout << "directionalConsistency: " << directionalConsistency << std::endl;
-                actingCell->setDirectionalIntensity(directionalConsistency);
-                // actingCell->setDirectionalIntensity(1);
+                // Retrieve nematic order parameter:
+                // double deltaNorm{std::sqrt(std::pow(averagedDeltaHeadingX, 2) + std::pow(averagedDeltaHeadingY, 2))};
+                // double directionIntensity{deltaNorm / effectiveSampleCount};
+                double opNorm{std::sqrt(std::pow(orderParameterX, 2) + std::pow(orderParameterY, 2))};
+                double directionalIntensity{opNorm / effectiveSampleCount};
+                directionalIntensity = std::clamp(directionalIntensity, 0.0, 1.0 - 1e-4);
+                actingCell->setDirectionalIntensity(directionalIntensity);
                 actingCell->setLocalECMDensity(1);
             }
         }

@@ -128,8 +128,10 @@ def _():
 
 @app.cell
 def _(np, os):
-    EXPERIMENT_DIRPATH = "model_experiments/2026-05-31-collisions_shape"
-    mcmc_results = "wide_mcmc_results"
+    EXPERIMENT_DIRPATH = "model_experiments/2026-10-02-collisions_shape"
+    # mcmc_results = "wide_mcmc_results"
+    # mcmc_results = "05_cov_mcmc_results"
+    mcmc_results = "hm2/disc_cov_mcmc_results"
 
     ctl_mcmc_chain = np.load(os.path.join(EXPERIMENT_DIRPATH, mcmc_results, "wt_mcmc_chain.npy"))
     ctl_mcmc_ar = np.load(os.path.join(EXPERIMENT_DIRPATH, mcmc_results, "wt_mcmc_acceptance_rate.npy"))
@@ -138,19 +140,71 @@ def _(np, os):
     rd_mcmc_chain = np.load(os.path.join(EXPERIMENT_DIRPATH, mcmc_results, "rd_mcmc_chain.npy"))
     rd_mcmc_ar = np.load(os.path.join(EXPERIMENT_DIRPATH, mcmc_results, "rd_mcmc_acceptance_rate.npy"))
     rd_mcmc_likelihood = np.load(os.path.join(EXPERIMENT_DIRPATH, mcmc_results, "rd_mcmc_likelihoods.npy"))
-    return EXPERIMENT_DIRPATH, ctl_mcmc_chain, mcmc_results, rd_mcmc_chain
+    return (
+        EXPERIMENT_DIRPATH,
+        ctl_mcmc_ar,
+        ctl_mcmc_chain,
+        ctl_mcmc_likelihood,
+        mcmc_results,
+        rd_mcmc_chain,
+    )
+
+
+@app.cell
+def _(ctl_mcmc_ar, np):
+    np.mean(ctl_mcmc_ar[0, :])
+    return
+
+
+@app.cell
+def _(ctl_mcmc_chain):
+    ctl_mcmc_chain.shape
+    return
+
+
+@app.cell
+def _(ctl_mcmc_likelihood):
+    test_flatten = ctl_mcmc_likelihood[::32, :, 0].flatten()
+    return
+
+
+@app.cell
+def _(ctl_mcmc_likelihood):
+    ctl_mcmc_likelihood.shape
+    return
 
 
 @app.cell
 def _(ctl_mcmc_chain, np, plt):
-    chains = ctl_mcmc_chain[:, :, 0, 0]
+    chains = ctl_mcmc_chain[:, :, 0, 3]
     x_pos = np.repeat(np.arange(0, chains.shape[0]), chains.shape[1], axis=0)
 
     fig, ax = plt.subplots(figsize=(8.0, 2.5))
-    ax.scatter(x_pos.flatten(), chains.flatten(), alpha=0.01, s=0.05, c='k')
+    ax.scatter(x_pos.flatten(), chains.flatten(), alpha=0.25, s=0.25, edgecolors="none", c='k')
     ax.set_xlim(0, chains.shape[0])
     ax.set_ylim(0, 1)
     plt.show()
+    return
+
+
+@app.cell
+def _(ctl_mcmc_chain):
+    ctl_mcmc_chain.shape
+    return
+
+
+@app.cell
+def _(ctl_mcmc_chain, plt):
+    # 24576
+    def plot_quick_hist():
+        fig, ax = plt.subplots()
+        chain_length = ctl_mcmc_chain.shape[0]
+        half_index = int(chain_length // 2)
+        ax.hist(ctl_mcmc_chain[half_index::32, :, 0, 3].flatten(), bins=100)
+        ax.set_xlim(0, 1)
+        plt.show()
+
+    plot_quick_hist()
     return
 
 
@@ -161,15 +215,16 @@ def _(ctl_mcmc_chain, np):
 
 
 @app.cell
-def _(EXPERIMENT_DIRPATH, np, os):
-    ctl_rung_acceptance = np.load(os.path.join(EXPERIMENT_DIRPATH, "mcmc_results", "wt_rung_acceptance_rate.npy"))
-    rd_rung_acceptance = np.load(os.path.join(EXPERIMENT_DIRPATH, "mcmc_results", "rd_rung_acceptance_rate.npy"))
-    return (ctl_rung_acceptance,)
+def _(EXPERIMENT_DIRPATH, mcmc_results, np, os):
+    ctl_rung_acceptance = np.load(os.path.join(EXPERIMENT_DIRPATH, mcmc_results, "wt_rung_acceptance_rate.npy"))
+    rd_rung_acceptance = np.load(os.path.join(EXPERIMENT_DIRPATH, mcmc_results, "rd_rung_acceptance_rate.npy"))
+    return ctl_rung_acceptance, rd_rung_acceptance
 
 
 @app.cell
-def _(ctl_rung_acceptance, plt):
+def _(ctl_rung_acceptance, plt, rd_rung_acceptance):
     plt.plot(ctl_rung_acceptance)
+    plt.plot(rd_rung_acceptance)
     return
 
 
@@ -177,8 +232,10 @@ def _(ctl_rung_acceptance, plt):
 def _(arviz_stats, ctl_mcmc_chain, rd_mcmc_chain):
     # ctl_posterior = ctl_mcmc_chain[:, :, -3, :]
     # rd_posterior = rd_mcmc_chain[:, :, 0, :]
-    ctl_rhat = arviz_stats.rhat(ctl_mcmc_chain[:, :, 0, :], chain_axis=1, draw_axis=0)
-    rd_rhat = arviz_stats.rhat(rd_mcmc_chain[:, :, 0, :], chain_axis=1, draw_axis=0)
+    quarter_index = int(ctl_mcmc_chain.shape[0] / 4)
+    print(quarter_index)
+    ctl_rhat = arviz_stats.rhat(ctl_mcmc_chain[quarter_index:, :, 0, :], chain_axis=1, draw_axis=0)
+    rd_rhat = arviz_stats.rhat(rd_mcmc_chain[quarter_index:, :, 0, :], chain_axis=1, draw_axis=0)
     return ctl_rhat, rd_rhat
 
 
@@ -216,20 +273,6 @@ def _(rd_ess):
 @app.cell
 def _(ctl_mcmc_chain):
     ctl_mcmc_chain.shape
-    return
-
-
-@app.cell
-def _(ctl_mcmc_chain, rd_mcmc_chain):
-    ctl_pl_data = ctl_mcmc_chain[8192:, :, 0, :].reshape(-1, 11)
-    rd_pl_data = rd_mcmc_chain[8192:, :, 0, :].reshape(-1, 11)
-    return (rd_pl_data,)
-
-
-@app.cell
-def _(np, plt, rd_pl_data):
-    plt.hist(rd_pl_data[:, 1], bins=np.linspace(0, 1, 51));
-    plt.show()
     return
 
 
@@ -324,8 +367,8 @@ def _(WETLAB_METRICS, get_fit_target, np, pd):
     for wetlab_metric in WETLAB_METRICS:
         # Retrieve results of regression, and do error propagation on parameters:
         regression_results = mixed_linear_model.MixedLMResults.load(f"wetlab_data/{wetlab_metric}.res")
-        wt_fit_target, wt_fit_se = get_fit_target(-0.5, regression_results, scaled_regression_inputs)
-        rd_fit_target, rd_fit_se = get_fit_target( 0.5, regression_results, scaled_regression_inputs)
+        wt_fit_target, wt_fit_se = get_fit_target(0.0, regression_results, scaled_regression_inputs)
+        rd_fit_target, rd_fit_se = get_fit_target(1.0, regression_results, scaled_regression_inputs)
 
         # Need to convert speed back to µm/min:
         if wetlab_metric == "mean_speed":
@@ -362,26 +405,138 @@ def _(EXPERIMENT_DIRPATH, mcmc_results, np, os):
 
 
 @app.cell
+def _(posterior_predictions):
+    posterior_predictions[0].shape
+    return
+
+
+@app.cell
+def _(EXPERIMENT_DIRPATH, mcmc_results, np, os):
+    wt_posterior_std = np.load(os.path.join(EXPERIMENT_DIRPATH, mcmc_results, "wt_posterior_std.npy"))
+    rd_posterior_std = np.load(os.path.join(EXPERIMENT_DIRPATH, mcmc_results, "rd_posterior_std.npy"))
+    return rd_posterior_std, wt_posterior_std
+
+
+@app.cell
+def _(EXPERIMENT_DIRPATH, mcmc_results, np, os):
+    wt_posterior_sigma = np.load(os.path.join(EXPERIMENT_DIRPATH, mcmc_results, "wt_posterior_sigma.npy"))
+    rd_posterior_sigma = np.load(os.path.join(EXPERIMENT_DIRPATH, mcmc_results, "rd_posterior_sigma.npy"))
+    return (wt_posterior_sigma,)
+
+
+@app.cell
+def _(wt_posterior_sigma):
+    wt_posterior_sigma.shape
+    return
+
+
+@app.cell
+def _(np, wt_posterior_sigma):
+    metric_sigma = wt_posterior_sigma[0]                                   # (samples, 11, 11)
+    metric_std = np.sqrt(np.diagonal(metric_sigma, axis1=1, axis2=2))       # (samples, 11)
+    wt_posterior_corr = metric_sigma / (metric_std[:, :, None] * metric_std[:, None, :])
+    return (wt_posterior_corr,)
+
+
+@app.cell
+def _(wt_posterior_corr):
+    wt_posterior_corr.shape
+    return
+
+
+@app.cell
+def _(np, wt_posterior_corr):
+    adjacent_corr = np.diagonal(wt_posterior_corr, offset=1, axis1=1, axis2=2)   # (samples, 10)
+    print(adjacent_corr.mean(), adjacent_corr.min(), adjacent_corr.max())
+    print(np.round(wt_posterior_corr.mean(axis=0), 3))                            # average 11x11 correlation
+    return
+
+
+@app.cell
+def _(np, wt_posterior_corr):
+    from scipy.optimize import minimize_scalar
+
+    lag_matrix = np.abs(np.arange(11)[:, None] - np.arange(11)[None, :])
+
+    def fit_lengthscale(corr):
+        loss = lambda log_l: np.sum((corr - np.exp(-0.5 * (lag_matrix / np.exp(log_l)) ** 2)) ** 2)
+        return np.exp(minimize_scalar(loss, bounds=(np.log(0.05), np.log(500)), method="bounded").x)
+
+    fitted_lengthscale = np.array([fit_lengthscale(corr) for corr in wt_posterior_corr])
+    return (fitted_lengthscale,)
+
+
+@app.cell
+def _(fitted_lengthscale, plt):
+    plt.hist(fitted_lengthscale * 25, bins=100)
+    return
+
+
+@app.cell
+def _(WETLAB_METRICS, gp_targets, np, rd_posterior_std, wt_posterior_std):
+    for i in range(4):
+        print(f"--- --- {WETLAB_METRICS[i]} --- ---")
+        wt_Sigma = gp_targets[0][1][i]
+        print(wt_Sigma.shape)
+        rd_Sigma = gp_targets[1][1][i]
+        print(f"Mean CTL std. dev. {np.mean(np.sqrt(np.diag(wt_Sigma)))}")
+        print(f"Mean RD std. dev. {np.mean(np.sqrt(np.diag(rd_Sigma)))}")
+        print(f"Mean CTL GP estimate std. dev. {np.mean(wt_posterior_std[i, :, :])}")
+        print(f"Mean RD  GP estimate std. dev. {np.mean(rd_posterior_std[i, :, :])}")
+
+        print(f"CTL ratio: {np.mean(wt_posterior_std[i, :, :]) / np.mean(np.sqrt(np.diag(wt_Sigma)))}")
+        print(f"RD ratio: {np.mean(rd_posterior_std[i, :, :]) / np.mean(np.sqrt(np.diag(rd_Sigma)))}")
+    return
+
+
+@app.cell
+def _(posterior_predictions):
+    posterior_predictions[0].shape
+    return
+
+
+@app.cell
+def _(WETLAB_METRICS, np, os):
+    def get_gp_targets():
+        wt_targets = []
+        wt_covs = []
+        rd_targets = []
+        rd_covs = []
+
+        gp_wetlab_dirpath = os.path.join("wetlab_data", "gp_results")
+
+        for wetlab_metric in WETLAB_METRICS:
+            wt_targets.append(np.load(os.path.join(gp_wetlab_dirpath, f"CTL_{wetlab_metric}_mean.npy")))
+            wt_covs.append(np.load(os.path.join(gp_wetlab_dirpath, f"CTL_{wetlab_metric}_sigma.npy")))
+            rd_targets.append(np.load(os.path.join(gp_wetlab_dirpath, f"RD_{wetlab_metric}_mean.npy")))
+            rd_covs.append(np.load(os.path.join(gp_wetlab_dirpath, f"RD_{wetlab_metric}_sigma.npy")))
+
+        return (wt_targets, wt_covs), (rd_targets, rd_covs)
+
+    gp_targets = get_gp_targets()
+    return (gp_targets,)
+
+
+@app.cell
 def _(
     CONTROL_PALETTE,
     FULL_HEIGHT,
     METADATA_DICTIONARY,
     METRICS_LABELS,
     MaxNLocator,
+    OUT_DIRPATH,
     RD_PALETTE,
     TEXT_WIDTH,
     WETLAB_METRICS,
     datetime,
+    gp_targets,
     np,
+    os,
     plt,
     posterior_predictions,
-    regression_dict,
-    regression_inputs,
 ):
-    # QUERY_COUNTS = [75, 250, 375]
-    # QUERY_COUNTS = [50, 125, 200, 275]
-    QUERY_COUNTS = [50, 100, 150, 200, 250, 300]
     QUERY_COUNTS = list(np.linspace(50, 300, 11).astype(int))
+    FIT_PALETTE = "#FFBF00"
 
     def plot_posterior_predictions():
         fig, axs = plt.subplots(4, 3, figsize=(TEXT_WIDTH, FULL_HEIGHT), sharex=True, sharey="row")
@@ -395,34 +550,72 @@ def _(
                 axs[metric_index, phenotype_index].xaxis.set_major_locator(MaxNLocator(3))
                 axs[metric_index, phenotype_index].xaxis.set_major_locator(MaxNLocator(3))
 
-                # Plot mean regression line:
-                mean_regression = regression_dict[metric_name][f"{ph_label}_mean"]
+                # # Plot mean regression line:
+                # mean_regression = regression_dict[metric_name][f"{ph_label}_mean"]
+                # axs[metric_index, phenotype_index].plot(
+                #     regression_inputs, mean_regression, c=ph_palette
+                # )
+
+                # # Fill in with full confidence interval:
+                # stddev = regression_dict[metric_name][f"{ph_label}_stddev"]
+                # upper_bound = mean_regression + (1.96 * stddev)
+                # lower_bound = mean_regression - (1.96 * stddev)
+                # axs[metric_index, phenotype_index].fill_between(
+                #     regression_inputs, upper_bound, lower_bound, 
+                #     color=ph_palette, alpha=0.25
+                # )
+
+                gp_mean = gp_targets[phenotype_index][0][metric_index]
+                gp_sigma = gp_targets[phenotype_index][1][metric_index]
+                gp_stddev = np.sqrt(np.diag(gp_sigma))
+
                 axs[metric_index, phenotype_index].plot(
-                    regression_inputs, mean_regression, c=ph_palette
+                    QUERY_COUNTS, gp_mean, c=ph_palette
                 )
 
                 # Fill in with full confidence interval:
-                stddev = regression_dict[metric_name][f"{ph_label}_stddev"]
-                upper_bound = mean_regression + (1.96 * stddev)
-                lower_bound = mean_regression - (1.96 * stddev)
+                upper_bound = gp_mean + (1.96 * gp_stddev)
+                lower_bound = gp_mean - (1.96 * gp_stddev)
                 axs[metric_index, phenotype_index].fill_between(
-                    regression_inputs, upper_bound, lower_bound, 
+                    QUERY_COUNTS, upper_bound, lower_bound, 
                     color=ph_palette, alpha=0.25
                 )
 
                 # Plot posterior distributions:
+                posterior_means = []
+                posterior_low = []
+                posterior_high = []
                 for count_index, count in enumerate(QUERY_COUNTS):
                     posterior_data = posterior_predictions[phenotype_index]
                     posterior_distribution = posterior_data[metric_index, :, count_index]
                     mean = np.mean(posterior_distribution)
-                    eti_low = np.quantile(posterior_distribution, 0.025)
-                    eti_high = np.quantile(posterior_distribution, 0.975)
+                    eti_low = np.quantile(posterior_distribution, 0.05)
+                    eti_high = np.quantile(posterior_distribution, 0.95)
+
+                    posterior_means.append(mean)
+                    posterior_low.append(eti_low)
+                    posterior_high.append(eti_high)
+
                     errorbar = np.expand_dims(np.array([eti_low, eti_high]), axis=1)
                     errorbar -= mean
-                    axs[metric_index, phenotype_index].errorbar(
-                        count, mean, yerr=np.abs(errorbar),
-                        fmt='o', c='k', ms=3, alpha=0.5
-                    )
+                    # axs[metric_index, phenotype_index].errorbar(
+                    #     count, mean, yerr=np.abs(errorbar),
+                    #     fmt='o', c='k', ms=3, alpha=0.5
+                    # )
+
+                # Plot posterior distributions
+                axs[metric_index, phenotype_index].scatter(
+                    QUERY_COUNTS, posterior_means, edgecolors="none",
+                    color=FIT_PALETTE, alpha=0.5, s=15
+                )
+                axs[metric_index, phenotype_index].plot(
+                    QUERY_COUNTS, posterior_means,
+                    color=FIT_PALETTE, alpha=1.0
+                )
+                axs[metric_index, phenotype_index].fill_between(
+                    QUERY_COUNTS, posterior_low, posterior_high, 
+                    color=FIT_PALETTE, alpha=0.25
+                )
 
                 # Format axes:
                 if phenotype_index == 0:
@@ -430,8 +623,14 @@ def _(
 
                 if metric_index == 0:
                     axs[metric_index, phenotype_index].text(
-                        0.95, 0.95, ["Control", "RD"][phenotype_index],
+                        0.95, 0.85, ["Control", "RD"][phenotype_index],
                         c=ph_palette,
+                        horizontalalignment='right', verticalalignment='top',
+                        transform=axs[metric_index, phenotype_index].transAxes
+                    )
+                    axs[metric_index, phenotype_index].text(
+                        0.95, 0.95, "Fit Prediction",
+                        c=FIT_PALETTE,
                         horizontalalignment='right', verticalalignment='top',
                         transform=axs[metric_index, phenotype_index].transAxes
                     )
@@ -442,29 +641,56 @@ def _(
                 ph_palette = [CONTROL_PALETTE, RD_PALETTE][phenotype_index]
                 means = []
                 errorbars = []
+
+                posterior_means = []
+                posterior_low = []
+                posterior_high = []
                 for count_index, count in enumerate(QUERY_COUNTS):
                     posterior_data = posterior_predictions[phenotype_index]
                     posterior_distribution = posterior_data[metric_index, :, count_index]
                     mean = np.mean(posterior_distribution)
-                    eti_low = np.quantile(posterior_distribution, 0.025)
-                    eti_high = np.quantile(posterior_distribution, 0.975)
-                    errorbar = np.array([eti_low, eti_high])
-                    errorbar -= mean
-                    means.append(mean)
-                    errorbars.append(errorbar)
+                    eti_low = np.quantile(posterior_distribution, 0.05)
+                    eti_high = np.quantile(posterior_distribution, 0.95)
+                    posterior_means.append(mean)
+                    posterior_low.append(eti_low)
+                    posterior_high.append(eti_high)
+                    # errorbar = np.array([eti_low, eti_high])
+                    # errorbar -= mean
+                    # means.append(mean)
+                    # errorbars.append(errorbar)
 
-                # Plot line:
-                errorbars = np.stack(errorbars, axis=1)
-                axs[metric_index, 2].errorbar(
-                    QUERY_COUNTS, means, yerr=np.abs(errorbars),
-                    fmt='o-', c=ph_palette, ms=3, alpha=0.5
+                # Plot posterior distributions
+                axs[metric_index, 2].scatter(
+                    QUERY_COUNTS, posterior_means, edgecolors="none",
+                    color=ph_palette, alpha=0.5, s=15
                 )
+                axs[metric_index, 2].plot(
+                    QUERY_COUNTS, posterior_means,
+                    color=ph_palette, alpha=1.0
+                )
+                axs[metric_index, 2].fill_between(
+                    QUERY_COUNTS, posterior_low, posterior_high, 
+                    color=ph_palette, alpha=0.25
+                )
+
+                # # Plot line:
+                # errorbars = np.stack(errorbars, axis=1)
+                # axs[metric_index, 2].errorbar(
+                #     QUERY_COUNTS, means, yerr=np.abs(errorbars),
+                #     fmt='o-', c=ph_palette, ms=3, alpha=0.5
+                # )
 
             # Label comparison:
             if metric_index == 0:
                 axs[metric_index, 2].text(
-                    0.96, 0.95, "Fit Comparison",
-                    c="k",
+                    0.96, 0.95, "Fit Control",
+                    c=CONTROL_PALETTE,
+                    horizontalalignment='right', verticalalignment='top',
+                    transform=axs[metric_index, 2].transAxes
+                )
+                axs[metric_index, 2].text(
+                    0.96, 0.85, "Fit RD",
+                    c=RD_PALETTE,
                     horizontalalignment='right', verticalalignment='top',
                     transform=axs[metric_index, 2].transAxes
                 )
@@ -479,7 +705,7 @@ def _(
 
         # Save:
         METADATA_DICTIONARY["time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        # plt.savefig(os.path.join(OUT_DIRPATH, "posterior_predictions.png"), dpi=300, metadata=METADATA_DICTIONARY, transparent=True)
+        plt.savefig(os.path.join(OUT_DIRPATH, "posterior_predictions.png"), dpi=300, metadata=METADATA_DICTIONARY, transparent=True)
         plt.show()
 
     plot_posterior_predictions()
@@ -487,25 +713,19 @@ def _(
 
 
 @app.cell
-def _(EXPERIMENT_DIRPATH, mcmc_results, np, os):
-    # Visualisations of high likelihood parameters from Sobol' search:
-    ctl_sobol_likelihoods = np.load(os.path.join(EXPERIMENT_DIRPATH, mcmc_results, "wt_sobol_likelihoods.npy"))
-    rd_sobol_likelihoods = np.load(os.path.join(EXPERIMENT_DIRPATH, mcmc_results, "rd_sobol_likelihoods.npy"))
-    return ctl_sobol_likelihoods, rd_sobol_likelihoods
-
-
-@app.cell
-def _(np, rd_sobol_likelihoods):
-    np.max(rd_sobol_likelihoods)
+def _():
+    # # Visualisations of high likelihood parameters from Sobol' search:
+    # ctl_sobol_likelihoods = np.load(os.path.join(EXPERIMENT_DIRPATH, mcmc_results, "wt_sobol_likelihoods.npy"))
+    # rd_sobol_likelihoods = np.load(os.path.join(EXPERIMENT_DIRPATH, mcmc_results, "rd_sobol_likelihoods.npy"))
     return
 
 
 @app.cell
 def _(EXPERIMENT_DIRPATH, mcmc_results, np, os):
     ctl_mcmc_likelihoods = np.load(os.path.join(EXPERIMENT_DIRPATH, mcmc_results, "wt_mcmc_likelihoods.npy"))
-    ctl_posterior_ll = ctl_mcmc_likelihoods[8192::8, :, 0].flatten()
+    ctl_posterior_ll = ctl_mcmc_likelihoods[512::8, :, 0].flatten()
     rd_mcmc_likelihoods = np.load(os.path.join(EXPERIMENT_DIRPATH, mcmc_results, "rd_mcmc_likelihoods.npy"))
-    rd_posterior_ll = rd_mcmc_likelihoods[8192::8, :, 0].flatten()
+    rd_posterior_ll = rd_mcmc_likelihoods[512::8, :, 0].flatten()
     return ctl_posterior_ll, rd_posterior_ll
 
 
@@ -517,13 +737,10 @@ def _(
     RD_PALETTE,
     TEXT_WIDTH,
     ctl_posterior_ll,
-    ctl_sobol_likelihoods,
     datetime,
-    np,
     os,
     plt,
     rd_posterior_ll,
-    rd_sobol_likelihoods,
 ):
     def plot_log_likelihood_distribution():
         fig, ax = plt.subplots(figsize=(TEXT_WIDTH, 2.0))
@@ -534,8 +751,8 @@ def _(
 
         # Plot vlines of max likelihoods of Sobol' search:
         y_limits = ax.get_ylim()
-        ax.vlines(np.max(ctl_sobol_likelihoods), *y_limits, ls="--", color=CONTROL_PALETTE, label="CTL Max. GS likelihood")
-        ax.vlines(np.max(rd_sobol_likelihoods), *y_limits, ls="--", color=RD_PALETTE, label="RD Max. GS likelihood")
+        # ax.vlines(np.max(ctl_sobol_likelihoods), *y_limits, ls="--", color=CONTROL_PALETTE, label="CTL Max. GS likelihood")
+        # ax.vlines(np.max(rd_sobol_likelihoods), *y_limits, ls="--", color=RD_PALETTE, label="RD Max. GS likelihood")
         ax.set_ylim(*y_limits)
 
         ax.legend()
@@ -704,6 +921,11 @@ def _(
         plt.show()
 
     plot_alt_posterior_predictions()
+    return
+
+
+@app.cell
+def _():
     return
 
 

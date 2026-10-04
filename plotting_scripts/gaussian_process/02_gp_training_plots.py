@@ -110,7 +110,7 @@ def _():
         "Coherency"
     ]
 
-    EXPERIMENT_DIRPATH = "model_experiments/2026-05-20-collisions_shape"
+    EXPERIMENT_DIRPATH = "model_experiments/2026-09-16-collisions_shape"
     return EXPERIMENT_DIRPATH, METRICS_LABELS, METRICS_TO_PLOT
 
 
@@ -125,26 +125,30 @@ def _(EXPERIMENT_DIRPATH, METRICS_TO_PLOT, json, np, os):
     def load_metrics():
         metrics_dict = {}
         noise_dict = {}
+        preds_dict = {}
         for metric_name in METRICS_TO_PLOT:
+            # Load actual data:
             metric_array = np.load(os.path.join(
                 EXPERIMENT_DIRPATH, "summary_data", f"{metric_name}.npy"
             ))
-            metrics_dict[metric_name] = np.nanmean(metric_array, axis=1)
-            noise_dict[metric_name] = np.nanstd(metric_array, axis=1)
-        return metrics_dict, noise_dict
+            metric_mean = np.nanmean(metric_array, axis=1)
+            metric_std = np.nanstd(metric_array, axis=1)
+            print(np.count_nonzero(np.isnan(metric_mean)))
+            print(np.count_nonzero(np.isnan(metric_std)))
+            metrics_dict[metric_name] = metric_mean
+            noise_dict[metric_name] = metric_std
+            print("--- --- --- ---")
+            print(metrics_dict[metric_name].shape)
+            print(noise_dict[metric_name].shape)
 
-    # Load predictions:
-    def load_predictions():
-        preds_dict = {}
-        for metric_name in METRICS_TO_PLOT:
+            # Load predictions:
             preds_array = np.load(os.path.join(
                 EXPERIMENT_DIRPATH, "gaussian_process_models", f"{metric_name}", "parameter_predictions.npy"
             ))
             preds_dict[metric_name] = preds_array
-        return preds_dict
+        return metrics_dict, noise_dict, preds_dict
 
-    metrics_dict, noise_dict = load_metrics()
-    preds_dict = load_predictions()
+    metrics_dict, noise_dict, preds_dict = load_metrics()
     return metrics_dict, noise_dict, preds_dict
 
 
@@ -174,6 +178,9 @@ def _(
         x = list(metrics_dict.values())[metric_index]
         x = x[~np.isnan(x)]
         y = list(preds_dict.values())[metric_index][:, 0]
+        print("--- --- ---")
+        print(x.shape)
+        print(y.shape)
         full_dataset = np.stack([x, y], axis=1)
 
         # Estimate density for scatter plot colouring:
@@ -213,15 +220,7 @@ def _(
         # Retrieve sample estimate of the SEM:
         x = list(noise_dict.values())[metric_index]
         x = x[~np.isnan(x)]
-        x /= np.sqrt(16)  # The superiteration count, and therefore sample count.
-
-        # x = x[~np.isnan(x)] 
-        # x = np.sqrt(x)
-        # x *= test_std
         y = list(preds_dict.values())[metric_index][:, 1]
-        y /= test_std
-        y = np.sqrt(y)
-        y *= test_std
 
         full_dataset = np.stack([x, y], axis=1) + 1e-5
 
@@ -242,9 +241,9 @@ def _(
 
         # Format axes:
         ax.set_xlim(*limits)
-        ax.set_xlabel(f"Sample {METRICS_LABELS[metric_index]} SEM")
+        ax.set_xlabel(f"Sample {METRICS_LABELS[metric_index]} $\\sigma$")
         ax.set_ylim(*limits)
-        ax.set_ylabel(f"Predicted {METRICS_LABELS[metric_index]} $\sigma$")
+        ax.set_ylabel(f"Predicted {METRICS_LABELS[metric_index]} $\\sigma$")
         ax.set_aspect("equal")
 
 
@@ -376,92 +375,6 @@ def _(
         plt.show()
 
     plot_all_losses()
-    return
-
-
-@app.cell
-def _(
-    METADATA_DICTIONARY,
-    METRICS_LABELS,
-    MaxNLocator,
-    OUT_DIRPATH,
-    cc,
-    datetime,
-    metrics_dict,
-    noise_dict,
-    np,
-    os,
-    plt,
-    preds_dict,
-    scipy,
-):
-    def plot_noise_predictions(metric_index, ax):
-        # Set up plot:
-        ax.xaxis.set_major_locator(MaxNLocator(3))
-        ax.yaxis.set_major_locator(MaxNLocator(3))
-        ax.set_xscale('log')
-        ax.set_yscale('log')
-
-        # Get data:
-        test_metric = list(metrics_dict.values())[metric_index]
-        test_std = np.nanstd(test_metric)
-
-        # Retrieve sample estimate of the SEM:
-        x = list(noise_dict.values())[metric_index]
-        x = x[~np.isnan(x)]
-        x /= np.sqrt(16)  # The superiteration count, and therefore sample count.
-
-        # x = x[~np.isnan(x)] 
-        # x = np.sqrt(x)
-        # x *= test_std
-        y = list(preds_dict.values())[metric_index][:, 1]
-        y /= test_std
-        y = np.sqrt(y)
-        y *= test_std
-
-        full_dataset = np.stack([x, y], axis=1) + 1e-5
-
-        # Estimate density for scatter plot colouring:
-        rng = np.random.default_rng(0)
-        random_indices = rng.choice(full_dataset.shape[0], size=(1024))
-        density = scipy.stats.gaussian_kde(full_dataset[random_indices, :].T)(full_dataset.T)
-        density_sort = np.argsort(density)
-        ax.scatter(
-            full_dataset[density_sort, 0],
-            full_dataset[density_sort, 1],
-            c=density[density_sort],
-            s=1, alpha=0.25, cmap=cc.m_CET_L20
-        )
-        # Plot linear guideline:
-        limits = [np.min(full_dataset), np.max(full_dataset)]
-        ax.plot(limits, limits, c='r', ls='--')
-
-        # Format axes:
-        ax.set_xlim(*limits)
-        ax.set_xlabel(f"Sample {METRICS_LABELS[metric_index]} SEM")
-        ax.set_ylim(*limits)
-        ax.set_ylabel(f"Predicted {METRICS_LABELS[metric_index]} $\sigma$")
-        ax.set_aspect("equal")
-
-
-    def plot_all_noise():
-        fig, axs = plt.subplots(2, 2, figsize=(5, 5), layout="constrained")
-
-        count = 0
-        for i in range(2):
-            for j in range(2):
-                plot_noise_predictions(count, axs[i, j])
-                count += 1
-
-        # Update metadata time:
-        METADATA_DICTIONARY["time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        plt.savefig(
-            os.path.join(OUT_DIRPATH, f"gp_noise.png"),
-            dpi=300, metadata=METADATA_DICTIONARY, transparent=True
-        )
-        plt.show()
-
-    plot_all_noise()
     return
 
 

@@ -10,8 +10,9 @@ import numpy as np
 from scipy.stats import qmc
 from torch.utils.data import TensorDataset, DataLoader
 
-EXPERIMENT_DIRPATH = "model_experiments/2026-06-03-matrix_shape"
-PARAMETER_DIMENSION = 14
+FIT_SOURCE = "model_experiments/2026-09-16-collisions_shape"
+EXPERIMENT_DIRPATH = "model_experiments/2026-09-19-matrix_shape"
+PARAMETER_DIMENSION = 15
 EXPONENT = 16
 
 # Need a higher precision for computing double derivatives:
@@ -176,9 +177,9 @@ class ModelManager:
         self.optimizer = torch.load(os.path.join(id_folderpath, "optimiser.pth"), weights_only=False)
 
 
-def generate_sobol_samples():
+def generate_sobol_samples(parameter_dimension=PARAMETER_DIMENSION):
     # Set up sampler:
-    sobol_sampler = qmc.Sobol(d=PARAMETER_DIMENSION, scramble=True, rng=0)
+    sobol_sampler = qmc.Sobol(d=parameter_dimension, scramble=True, rng=0)
     sampled_inputs = sobol_sampler.random_base2(EXPONENT)
 
     # Exclude edges of parameter space (Hessian estimation begins to break down):
@@ -224,25 +225,25 @@ def retrieve_sobol_samples():
 
 def main():
     args = parse_arguments()
-    analysis_type = "SOBOL"
+    analysis_type = "FULL_RANK"
 
-    # Generate outputs folder:
+    # Generate parameter samples:
     if args.task_id == 0:
         print("Generating samples...", flush=True)
-    if analysis_type == "FULL_GRID":
+    if analysis_type == "FULL_RANK":
         dir_path = os.path.join(EXPERIMENT_DIRPATH, "gaussian_process_models", args.metric)
         sampled_inputs = generate_sobol_samples()
     elif analysis_type == "MLE":
-        fit_source = "model_experiments/2026-05-31-collisions_shape"
-        dir_path = os.path.join(fit_source, "mcmc_results", "mle_hessians")
-        if not os.path.exists(dir_path):
-            os.mkdir(dir_path)
+        dir_path = os.path.join(FIT_SOURCE, "mcmc_results", "mle_hessians")
         sampled_inputs = retrieve_mle_samples()
     elif analysis_type == "SOBOL":
         dir_path = os.path.join(EXPERIMENT_DIRPATH, f"sobol_{args.metric}_hessian")
+        sampled_inputs = retrieve_sobol_samples()
+
+    # Generate outputs folder:
+    if args.task_id == 0:
         if not os.path.exists(dir_path):
             os.mkdir(dir_path)
-        sampled_inputs = retrieve_sobol_samples()
 
     # Load Gaussian Process model:
     if args.task_id == 0:

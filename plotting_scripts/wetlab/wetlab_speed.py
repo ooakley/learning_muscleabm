@@ -233,7 +233,6 @@ def _(
             color=RD_PALETTE, label="RD", scatter_kws=scatter_kws
         )
 
-
     def generate_experiment_lmplot():
         # Set up plot:
         fig, axs = plt.subplots(1, 2, figsize=(6, 2.4), sharex=True, sharey=True, layout="constrained")
@@ -433,7 +432,6 @@ def _(np, site_dataframe, sm, smf):
 
 @app.cell
 def _(site_dataframe, smf):
-    # Initialise the covariance of random effect parameters to zero to prevent 
     speed_mlm_res = smf.mixedlm(
         "mean_speed ~ C(phenotype, Treatment(reference='CTL')) * (scaled_particle_count + I(scaled_particle_count**2))",
         site_dataframe, groups=site_dataframe["experiment"],

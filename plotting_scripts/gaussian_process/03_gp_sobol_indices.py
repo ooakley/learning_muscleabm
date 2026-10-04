@@ -102,7 +102,7 @@ def _():
 
 @app.cell
 def _(METRICS_TO_PLOT, json, np, os):
-    EXPERIMENT_DIRPATH = "model_experiments/2026-05-31-collisions_shape"
+    EXPERIMENT_DIRPATH = "model_experiments/2026-09-16-collisions_shape"
 
     with open(os.path.join(EXPERIMENT_DIRPATH, "config.json")) as json_file:
         config_dict = json.load(json_file)
@@ -162,6 +162,11 @@ def _(METRICS_LABELS, np, parameter_list, pd, sTi_array):
         print(full_dataframe.to_latex(index=False, float_format=bold_format))
 
     print_sti_array()
+    return
+
+
+@app.cell
+def _():
     return
 
 

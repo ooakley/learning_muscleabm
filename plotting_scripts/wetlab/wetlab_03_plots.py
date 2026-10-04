@@ -28,16 +28,55 @@ def _():
 
 
 @app.cell
-def _(datetime, subprocess):
+def _():
+    import matplotlib as mpl
+
+    # Font formatting:
+    mpl.rcParams['font.family'] = 'serif'
+    mpl.rcParams['font.serif'] = "cmr10"
+    mpl.rcParams['font.size'] = 9
+    mpl.rcParams["mathtext.fontset"] = "cm"
+    mpl.rcParams['axes.unicode_minus'] = False
+
+    # Tick formating:
+    mpl.rcParams['xtick.major.size'] = 2
+    mpl.rcParams['xtick.major.pad'] = 1.5
+    mpl.rcParams['ytick.major.size'] = 2
+    mpl.rcParams['ytick.major.pad'] = 1.5
+    mpl.rcParams['xtick.labelsize'] = 7
+    mpl.rcParams['ytick.labelsize'] = 7
+
+    # Label formatting:
+    mpl.rcParams['axes.labelpad'] = 2.5
+
+    # Layout formatting:
+    mpl.rcParams['figure.constrained_layout.hspace'] = 0.04
+    mpl.rcParams['figure.constrained_layout.wspace'] = 0.04
+    return
+
+
+@app.cell
+def _():
+    SAMPLE_EXPERIMENT = "/camp/home/eloaklo/home/shared/eloaklo/analysed_data/OEO20260313"
+    return (SAMPLE_EXPERIMENT,)
+
+
+@app.cell
+def _(SAMPLE_EXPERIMENT, datetime, subprocess):
     # PNG 300 dpi
     # A4 dimensions: 8.27 × 11.69 inches
     # Metadata: date, script, github branch id, og experiment source
-    OUT_DIRPATH = "plotting_scripts/out"
+    OUT_DIRPATH = "plotting_scripts/wetlab/out"
     CONTROL_PALETTE = "#1A85FF"
     RD_PALETTE = "#D41159"
     PIXEL_SIZE = 0.3469 * 2  # Pixel size in µm
-    SAMPLE_EXPERIMENT = "/camp/home/eloaklo/home/shared/eloaklo/analysed_data/OEO20260313"
     MM_UNIT = 1/25.4  # Millimeters in inches, for matplotlib
+
+    TEXT_WIDTH = 135 * MM_UNIT
+    TEXT_HEIGHT = 217 * MM_UNIT 
+
+    FULL_WIDTH = 170 * MM_UNIT
+    FULL_HEIGHT = TEXT_HEIGHT * 0.8
 
     # Get current commit hash:
     commit_hash = subprocess.run("git rev-parse --short HEAD", shell=True, capture_output=True)
@@ -52,7 +91,7 @@ def _(datetime, subprocess):
     }
 
     seaborn_palette = [CONTROL_PALETTE, RD_PALETTE]
-    return MM_UNIT, SAMPLE_EXPERIMENT
+    return METADATA_DICTIONARY, MM_UNIT, OUT_DIRPATH, TEXT_WIDTH
 
 
 @app.cell
@@ -284,40 +323,110 @@ def _(
                     dataframe.append(pd.DataFrame.from_dict(partial_dataframe))
 
         return pd.concat(dataframe), line_arrays, disk_arrays, coherency_arrays
-    return (analyse_sites,)
+    return
 
 
 @app.cell
-def _(SAMPLE_EXPERIMENT, analyse_sites):
-    dataframe, line_arrays, disk_arrays, coherency_arrays = analyse_sites(SAMPLE_EXPERIMENT)
-    return coherency_arrays, dataframe, disk_arrays, line_arrays
-
-
-@app.cell
-def _(coherency_arrays, dataframe, disk_arrays, line_arrays, np, os):
-    # Set up scratch directory:
-    scratch_dirpath = os.path.join("plotting_scripts", "scratch")
-    if not os.path.exists(scratch_dirpath):
-        os.mkdir(scratch_dirpath)
-    dataframe, line_arrays, disk_arrays, coherency_arrays
-
-    # Save to scratch directory:
-    dataframe.to_csv(os.path.join(scratch_dirpath, "sample_df.csv"))
-    np.savez(os.path.join(scratch_dirpath, "line_arrays.npz"), *line_arrays)
-    np.savez(os.path.join(scratch_dirpath, "disk_arrays.npz"), *disk_arrays)
-    np.savez(os.path.join(scratch_dirpath, "coherency_arrays.npz"), *coherency_arrays)
+def _(os):
+    scratch_dirpath = os.path.join("plotting_scripts", "wetlab", "scratch")
     return (scratch_dirpath,)
 
 
 @app.cell
-def _(np, os, scratch_dirpath):
-    test = np.load(os.path.join(scratch_dirpath, "line_arrays.npz"))
+def _():
+    # dataframe, line_arrays, disk_arrays, coherency_arrays = analyse_sites(SAMPLE_EXPERIMENT)
     return
 
 
 @app.cell
 def _():
-    list()
+    # # Set up scratch directory:
+    # if not os.path.exists(scratch_dirpath):
+    #     os.mkdir(scratch_dirpath)
+    # dataframe, line_arrays, disk_arrays, coherency_arrays
+
+    # # Save to scratch directory:
+    # dataframe.to_csv(os.path.join(scratch_dirpath, "sample_df.csv"))
+    # np.savez(os.path.join(scratch_dirpath, "line_arrays.npz"), *line_arrays)
+    # np.savez(os.path.join(scratch_dirpath, "disk_arrays.npz"), *disk_arrays)
+    # np.savez(os.path.join(scratch_dirpath, "coherency_arrays.npz"), *coherency_arrays)
+    return
+
+
+@app.cell
+def _(np, os, scratch_dirpath):
+    line_arrays = np.load(os.path.join(scratch_dirpath, "line_arrays.npz"))
+    coherency_arrays = np.load(os.path.join(scratch_dirpath, "coherency_arrays.npz"))
+    return coherency_arrays, line_arrays
+
+
+@app.cell
+def _(coherency_arrays, line_arrays):
+    sample_la = line_arrays["arr_0"]
+    sample_coherency = coherency_arrays["arr_0"]
+    return sample_coherency, sample_la
+
+
+@app.cell
+def _(
+    METADATA_DICTIONARY,
+    OUT_DIRPATH,
+    TEXT_WIDTH,
+    cc,
+    datetime,
+    np,
+    os,
+    plt,
+    sample_coherency,
+    sample_la,
+):
+    def plot_line_coherency():
+        fig, axs = plt.subplots(1, 4, figsize=(TEXT_WIDTH, 2), width_ratios=[1, 1, 1, 0.05])
+
+        max_raster = np.any(sample_la, axis=0)
+        axs[0].imshow(max_raster, cmap=cc.m_CET_L1)
+        axs[0].set_axis_off()
+        axs[0].text(
+            0.02, 1.02, 'Trajectory Raster', ha="left", va="bottom",
+            transform=axs[0].transAxes, color='k'
+        )
+
+        axs[1].imshow(
+            sample_coherency,
+            vmin=np.quantile(sample_coherency.flatten(), 0.02),
+            vmax=np.quantile(sample_coherency.flatten(), 0.98),
+            cmap=cc.m_CET_L20
+        )
+        axs[1].set_axis_off()
+        axs[1].text(
+            0.02, 1.02, 'Global Coherency', ha="left", va="bottom",
+            transform=axs[1].transAxes, color='k'
+        )
+
+        masked_coherency = np.copy(sample_coherency)
+        masked_coherency[~np.bool(max_raster)] = 0
+        ax_out = axs[2].imshow(
+            masked_coherency,
+            vmin=np.quantile(masked_coherency.flatten(), 0.02),
+            vmax=np.quantile(masked_coherency.flatten(), 0.98),
+            cmap=cc.m_CET_L20
+        )
+        axs[2].set_axis_off()
+        axs[2].text(
+            0.02, 1.02, 'Masked Coherency', ha="left", va="bottom",
+            transform=axs[2].transAxes, color='k'
+        )
+
+        cbar = fig.colorbar(ax_out, cax=axs[3], shrink=0.1, label="Orientational Coherency")
+
+        fig.subplots_adjust(0.05, 0.05, 0.9, 0.95, 0.05, 0.02)
+
+        # Update metadata time:
+        METADATA_DICTIONARY["time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        plt.savefig(os.path.join(OUT_DIRPATH, "coherency_calc.png"), dpi=300, metadata=METADATA_DICTIONARY, transparent=True)
+        plt.show()
+
+    plot_line_coherency()
     return
 
 

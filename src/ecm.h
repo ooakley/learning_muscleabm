@@ -13,7 +13,8 @@ public:
     // Constructor:
     ECMField(
         int setMatrixElements, int setCollisionElements, double setFieldSize,
-        double setMatrixTurnoverRate, double setMatrixAdditionRate, int setECMSeed
+        double setMatrixTurnoverRate, double setMatrixAdditionRate, double setPatternSigma,
+        int setECMSeed
     );
     ECMField() = default;
 
@@ -68,9 +69,14 @@ private:
     std::uniform_int_distribution<unsigned int> seedDistribution;
     std::mt19937 generatorFibreSampling;
 
+    // RNG for generating pattern:
+    std::mt19937 generatorPatterning;
+    std::normal_distribution<double> patternDistribution;
+
     // Simulation properties of matrix:
     double matrixTurnoverRate;
     double matrixAdditionRate;
+    double patternSigma;
 
     // Base matrix properties:
     int matrixElementCount;

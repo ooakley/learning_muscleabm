@@ -13,12 +13,11 @@ def _():
     import pandas as pd
 
     import seaborn as sns
-    import matplotlib as mpl
 
     import matplotlib.pyplot as plt
 
     from datetime import datetime
-    return datetime, mpl, np, os, pd, plt, sns, subprocess
+    return datetime, np, os, pd, plt, sns, subprocess
 
 
 @app.cell
@@ -28,13 +27,31 @@ def _(mpl):
 
 
 @app.cell
-def _(mpl):
-    from matplotlib import rc
+def _():
+    import matplotlib as mpl
+
+    # Font formatting:
     mpl.rcParams['font.family'] = 'serif'
     mpl.rcParams['font.serif'] = "cmr10"
+    mpl.rcParams['font.size'] = 9
     mpl.rcParams["mathtext.fontset"] = "cm"
     mpl.rcParams['axes.unicode_minus'] = False
-    return
+
+    # Tick formating:
+    mpl.rcParams['xtick.major.size'] = 2
+    mpl.rcParams['xtick.major.pad'] = 1.5
+    mpl.rcParams['ytick.major.size'] = 2
+    mpl.rcParams['ytick.major.pad'] = 1.5
+    mpl.rcParams['xtick.labelsize'] = 7
+    mpl.rcParams['ytick.labelsize'] = 7
+
+    # Label formatting:
+    mpl.rcParams['axes.labelpad'] = 2.5
+
+    # Layout formatting:
+    mpl.rcParams['figure.constrained_layout.hspace'] = 0.04
+    mpl.rcParams['figure.constrained_layout.wspace'] = 0.04
+    return (mpl,)
 
 
 @app.cell
@@ -42,13 +59,19 @@ def _(datetime, subprocess):
     # PNG 300 dpi
     # A4 dimensions: 8.27 × 11.69 inches
     # Metadata: date, script, github branch id, og experiment source
-    OUT_DIRPATH = "plotting_scripts/out"
+    OUT_DIRPATH = "plotting_scripts/wetlab/out"
     CONTROL_PALETTE = "#1A85FF"
     RD_PALETTE = "#D41159"
     PIXEL_SIZE = 0.3469 * 2  # Pixel size in µm
     SAMPLE_EXPERIMENT_PATH = "/camp/home/eloaklo/home/shared/eloaklo/analysed_data/OEO20260313"
     SAMPLE_EXPERIMENT = "OEO20260313"
     MM_UNIT = 1/25.4  # Millimeters in inches, for matplotlib
+
+    TEXT_WIDTH = 135 * MM_UNIT
+    TEXT_HEIGHT = 217 * MM_UNIT 
+
+    FULL_WIDTH = 170 * MM_UNIT
+    FULL_HEIGHT = TEXT_HEIGHT * 0.8
 
     # Get current commit hash:
     commit_hash = subprocess.run("git rev-parse --short HEAD", shell=True, capture_output=True)
@@ -339,12 +362,6 @@ def _(site_dataframe, smf):
     ).fit(method=["powell", "lbfgs"], reml=True)
     print(anni_mlm_res.summary())
     return (anni_mlm_res,)
-
-
-@app.cell
-def _(anni_mlm_res):
-    dir(anni_mlm_res)
-    return
 
 
 @app.cell

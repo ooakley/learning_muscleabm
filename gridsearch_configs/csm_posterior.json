@@ -1,32 +1,31 @@
 {
     "experiment_name": "csm_posterior",
-    "sample_exponent": 17,
+    "sample_exponent": 10,
     "random_seed": 0,
     "constant_parameters": {
-        "superIterationCount": 8,
+        "superIterationCount": 4,
         "timestepsToRun": 2880,
         "worldSize": 2048,
         "gridSize": 128,
         "dt": 1,
-        "thereIsMatrixInteraction": 1,
         "aspectRatio": 1,
-        "matrixTurnoverRate": 0,
-        "matrixAdditionRate": 0
+        "patternSigma": 0
     },
     "gridsearch_parameters": [
-        ["cueDiffusionRate", [0.0001, 1.5]],
-        ["cueKa", [0.0001, 5]],
-        ["fluctuationAmplitude", [1e-5, 1e-3]],
+        ["cueDiffusionRate", [0.0001, 0.02]],
+        ["cueKa", [0.0001, 10]],
+        ["fluctuationAmplitude", [1e-5, 2e-3]],
         ["fluctuationTimescale", [1, 75]],
-        ["maximumSteadyStateActinFlow", [0.25, 2.5]],
-        ["actinAdvectionRate", [0.5, 3]],
-        ["cellBodyRadius", [10, 60]],
-        ["collisionFlowReductionRate", [0.0, 0.5]],
-        ["collisionAdvectionRate", [0.0, 0.5]],
-        ["cellStiffness", [0.1, 1.5]],
-        ["surfaceStickiness", [0.1, 10]],
-        ["matrixAdvectionRate", [0, 3]],
+        ["maximumSteadyStateActinFlow", [0.3, 3.0]],
+        ["actinAdvectionRate", [0.5, 100]],
+        ["cellBodyRadius", [30, 90]],
+        ["collisionFlowReductionRate", [0.0, 0.4]],
+        ["collisionAdvectionRate", [0.0, 25]],
+        ["cellStiffness", [0.0001, 0.2]],
+        ["surfaceStickiness", [0.0001, 50.0]],
+        ["adhesionReductionRate", [0.0, 1.0]],
+        ["matrixCoupling", [0, 15]],
         ["matrixSampleRate", [0.5, 15]],
-        ["numberOfCells", [300, 400]]
+        ["numberOfCells", [50, 400]]
     ]
 }

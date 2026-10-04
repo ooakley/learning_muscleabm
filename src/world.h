@@ -13,7 +13,6 @@ struct CellParameters {
     fluctuationAmplitude,
     fluctuationTimescale,
     actinAdvectionRate,
-    matrixAdvectionRate,
     collisionAdvectionRate,
     maximumSteadyStateActinFlow,
 
@@ -21,10 +20,14 @@ struct CellParameters {
     cellBodyRadius,
     aspectRatio,
     collisionFlowReductionRate,
+    adhesionReductionRate,
 
     // Shape parameters:
     cellStiffness,
-    surfaceStickiness;
+    surfaceStickiness,
+
+    // Matrix parameters:
+    matrixCoupling;
 };
 
 class World {
@@ -36,10 +39,8 @@ public:
         double setWorldSideLength,
         int setECMElementCount,
         int setNumberOfCells,
-        bool setThereIsMatrixInteraction,
-        double setMatrixTurnoverRate,
-        double setMatrixAdditionRate,
         double setMatrixSampleRate,
+        double setPatternSigma,
         CellParameters setCellParameters
     );
 
@@ -63,6 +64,7 @@ private:
     double lengthECMElement;
     bool thereIsMatrixInteraction;
     double matrixSampleRate;
+    double patternSigma;
 
     // Complex objects from our libraries:
     std::vector<std::shared_ptr<CellAgent>> cellAgentVector;

@@ -19,13 +19,11 @@ def _():
     import scipy.stats
 
     import matplotlib.pyplot as plt
-
-    import matplotlib.pyplot as plt
     import matplotlib.font_manager as fm
     from matplotlib.ticker import AutoLocator, MaxNLocator
 
     from datetime import datetime
-    return datetime, np, os, pd, plt, scipy, subprocess
+    return arviz_stats, datetime, json, np, os, pd, plt, scipy, subprocess
 
 
 @app.cell
@@ -101,14 +99,30 @@ def _(datetime, os, subprocess):
 
 @app.cell
 def _(np, os):
-    PARTICLE_DIRPATH = "model_experiments/2026-06-07-collisions_only"
-    pa_ctl_likelihoods = np.load(os.path.join(PARTICLE_DIRPATH, "mcmc_results", "wt_mcmc_likelihoods.npy"))
-    pa_rd_likelihoods = np.load(os.path.join(PARTICLE_DIRPATH, "mcmc_results", "rd_mcmc_likelihoods.npy"))
+    METRICS_TO_PLOT = [
+        "speeds",
+        "meander_ratios",
+        "ann_indices",
+        "coherency"
+    ]
 
-    SS_DIRPATH = "model_experiments/2026-05-31-collisions_shape"
-    ss_ctl_likelihoods = np.load(os.path.join(SS_DIRPATH, "mcmc_results", "wt_mcmc_likelihoods.npy"))
-    ss_rd_likelihoods = np.load(os.path.join(SS_DIRPATH, "mcmc_results", "rd_mcmc_likelihoods.npy"))
+    METRICS_LABELS = [
+        "Speed ($\mu$m/min)",
+        "MR",
+        "ANNI",
+        "Coherency"
+    ]
+
+    PARTICLE_DIRPATH = "model_experiments/2026-09-23-collisions_only"
+    pa_ctl_likelihoods = np.load(os.path.join(PARTICLE_DIRPATH, "disc_cov_mcmc_results", "wt_mcmc_likelihoods.npy"))
+    pa_rd_likelihoods = np.load(os.path.join(PARTICLE_DIRPATH, "disc_cov_mcmc_results", "rd_mcmc_likelihoods.npy"))
+
+    SS_DIRPATH = "model_experiments/2026-09-16-collisions_shape"
+    ss_ctl_likelihoods = np.load(os.path.join(SS_DIRPATH, "disc_cov_mcmc_results", "wt_mcmc_likelihoods.npy"))
+    ss_rd_likelihoods = np.load(os.path.join(SS_DIRPATH, "disc_cov_mcmc_results", "rd_mcmc_likelihoods.npy"))
     return (
+        METRICS_LABELS,
+        METRICS_TO_PLOT,
         PARTICLE_DIRPATH,
         SS_DIRPATH,
         pa_ctl_likelihoods,
@@ -116,6 +130,91 @@ def _(np, os):
         ss_ctl_likelihoods,
         ss_rd_likelihoods,
     )
+
+
+@app.cell
+def _(PARTICLE_DIRPATH, arviz_stats, np, os):
+    ctl_mcmc_chain = np.load(os.path.join(PARTICLE_DIRPATH, "disc_cov_mcmc_results", "wt_mcmc_chain.npy"))
+    rd_mcmc_chain = np.load(os.path.join(PARTICLE_DIRPATH, "disc_cov_mcmc_results", "rd_mcmc_chain.npy"))
+    ctl_rhat = arviz_stats.rhat(ctl_mcmc_chain[:, :, 0, :], chain_axis=1, draw_axis=0)
+    rd_rhat = arviz_stats.rhat(rd_mcmc_chain[:, :, 0, :], chain_axis=1, draw_axis=0)
+    ctl_ess = arviz_stats.ess(ctl_mcmc_chain[:, :, 0, :], chain_axis=1, draw_axis=0)
+    rd_ess = arviz_stats.ess(rd_mcmc_chain[:, :, 0, :], chain_axis=1, draw_axis=0)
+    return ctl_ess, ctl_rhat, rd_ess, rd_rhat
+
+
+@app.cell
+def _(PARTICLE_DIRPATH, ctl_ess, ctl_rhat, json, np, os, pd, rd_ess, rd_rhat):
+    with open(os.path.join(PARTICLE_DIRPATH, "config.json")) as json_file:
+        config_dict = json.load(json_file)
+
+    parameter_list = [parameter_range[0] for parameter_range in config_dict["gridsearch_parameters"]]
+    parameter_list.remove("numberOfCells")
+
+    column_names = [
+        "CTL $\\hat{R}$",
+        "CTL ESS",
+        "RD $\\hat{R}$",
+        "RD ESS"
+    ]
+
+    dataframe_array = np.stack([ctl_rhat, ctl_ess, rd_rhat, rd_ess], axis=1)
+    diagnostics_dataframe = pd.DataFrame(dataframe_array, columns=column_names, index=parameter_list)
+
+    print(diagnostics_dataframe.to_latex(index=parameter_list, float_format="%.2f"))
+    return
+
+
+@app.cell
+def _(METRICS_LABELS, METRICS_TO_PLOT, PARTICLE_DIRPATH, json, np, os, pd):
+    def collate_cross_validation_metrics():
+        dataframe = []
+        for metric_index, metric_name in enumerate(METRICS_TO_PLOT):
+            # Load CV data:
+            json_filepath = os.path.join(
+                PARTICLE_DIRPATH, "gaussian_process_models", f"{metric_name}", "cv_metrics.json"
+            )
+            with open(json_filepath) as json_file:
+                cv_dict = json.load(json_file)
+
+            # Process CV data:
+            cv_data = {}
+            cv_data["Metric"] = METRICS_LABELS[metric_index]
+            cv_data["MAE"] = np.mean(cv_dict["mae"])
+            cv_data["MSE"] = np.mean(cv_dict["mse"])
+            cv_data["SLL"] = np.mean(cv_dict["sll"])
+            dataframe.append(cv_data)
+
+        return pd.DataFrame(dataframe)
+
+    pa_cv_dataframe = collate_cross_validation_metrics()
+    return (pa_cv_dataframe,)
+
+
+@app.cell
+def _(pa_cv_dataframe):
+    print(pa_cv_dataframe.to_latex(index=False))
+    return
+
+
+@app.cell
+def _(PARTICLE_DIRPATH, np, os):
+    pa_order_parameter = np.load(os.path.join(PARTICLE_DIRPATH, "summary_data", "order_parameters.npy"))
+    pa_order_parameter = np.mean(pa_order_parameter, axis=1)
+
+    pa_speed = np.load(os.path.join(PARTICLE_DIRPATH, "summary_data", "speeds.npy"))
+    pa_speed = np.mean(pa_speed, axis=1)
+    return pa_order_parameter, pa_speed
+
+
+@app.cell
+def _(np, pa_order_parameter, pa_speed, plt):
+    plt.scatter(pa_speed, pa_order_parameter)
+    plt.show()
+
+    flock_mask = np.logical_and(pa_speed > 0.2, pa_order_parameter > 0.26)
+    print(np.argwhere(flock_mask))
+    return
 
 
 @app.cell
@@ -137,26 +236,27 @@ def _(
         fig, ax = plt.subplots(figsize=(FULL_WIDTH, 2.25))
 
         # Plot control comparison:
+        bins = 40
         ax.hist(
             pa_ctl_likelihoods[1024::64, :, 0].flatten(),
-            bins=75, histtype="step", color=CONTROL_PALETTE, alpha=0.5,
+            bins=bins, histtype="step", color=CONTROL_PALETTE, alpha=0.5,
             density=True, label="Control - Particle"
         )
         ax.hist(
             ss_ctl_likelihoods[1024::64, :, 0].flatten(),
-            bins=75, histtype="step", color=CONTROL_PALETTE,
+            bins=bins, histtype="step", color=CONTROL_PALETTE,
             density=True, label="Control - Stick-slip"
         )
 
         # Plot RD comparison:
         ax.hist(
             pa_rd_likelihoods[1024::64, :, 0].flatten(),
-            bins=75, histtype="step", color=RD_PALETTE, alpha=0.5,
+            bins=bins, histtype="step", color=RD_PALETTE, alpha=0.5,
             density=True, label="RD - Particle"
         )
         ax.hist(
             ss_rd_likelihoods[1024::64, :, 0].flatten(),
-            bins=75, histtype="step", color=RD_PALETTE,
+            bins=bins, histtype="step", color=RD_PALETTE,
             density=True, label="RD - Stick-slip"
         )
         ax.legend(loc="upper left")
@@ -266,102 +366,52 @@ def _(
 
 
 @app.cell
-def _(np):
-    CAT_VAR = "C(phenotype, Treatment(reference='CTL'))[T.RD]"
-
-    def get_fit_target(phenotype, regression_results, scaled_x):
-        # Get base parameters without phenotype interaction:
-        base_intercept = regression_results.params["Intercept"]
-        base_intercept_se = regression_results.bse["Intercept"]
-        linear_coeff = regression_results.params["scaled_particle_count"]
-        linear_coeff_se = regression_results.bse["scaled_particle_count"]
-        square_coeff = regression_results.params["I(scaled_particle_count ** 2)"]
-        square_coeff_se = regression_results.bse["I(scaled_particle_count ** 2)"]
-
-        # Get phenotype interactions:
-        phenotype_intercept = regression_results.params[f"{CAT_VAR}"]
-        phenotype_intercept_se = regression_results.bse[f"{CAT_VAR}"]
-        linear_interaction = regression_results.params[f"{CAT_VAR}:scaled_particle_count"]
-        linear_interaction_se = regression_results.bse[f"{CAT_VAR}:scaled_particle_count"]
-        square_interaction = regression_results.params[f"{CAT_VAR}:I(scaled_particle_count ** 2)"]
-        square_interaction_se = regression_results.bse[f"{CAT_VAR}:I(scaled_particle_count ** 2)"]
-
-        # Construct quadratic:
-        a = square_coeff + (phenotype * square_interaction)
-        b = linear_coeff + (phenotype * linear_interaction)
-        c = base_intercept + (phenotype * phenotype_intercept)
-
-        # Do error propagation to get standard errors in coefficients (multiplication preserves percentage errors):
-        sq_int_se = np.abs((phenotype * square_interaction) * (square_interaction_se / square_interaction))
-        lin_int_se = np.abs((phenotype * linear_interaction) * (linear_interaction_se / linear_interaction))
-        base_int_se = np.abs((phenotype * phenotype_intercept) * (phenotype_intercept_se / phenotype_intercept))
-
-        a_se = np.sqrt(square_coeff_se**2 + sq_int_se**2)
-        b_se = np.sqrt(linear_coeff_se**2 + lin_int_se**2)
-        c_se = np.sqrt(base_intercept_se**2 + base_int_se**2)
-
-        # Get regression prediction:
-        y = a*(scaled_x**2) + b*scaled_x + c
-
-        # Get regression standard error:
-        quad_error = (a_se / a) * (a*(scaled_x**2))
-        linear_error = (b_se / b) * (b*scaled_x)
-        se = np.sqrt(quad_error**2 + linear_error**2 + c_se**2)
-        return y, se
-    return (get_fit_target,)
+def _(pa_ctl_p_mean):
+    pa_ctl_p_mean.shape
+    return
 
 
 @app.cell
-def _(get_fit_target, np, pd):
-    from statsmodels.regression import mixed_linear_model
+def _(np, os):
+    wetlab_gp_path = "wetlab_data/gp_results"
 
-    WETLAB_METRICS = [
-        "mean_speed",
-        "mean_mr",
-        "anni",
-        "coherency_fraction"
-    ]
+    # Get wetlab speed data:
+    ctl_speed_mean = np.load(os.path.join(wetlab_gp_path, "CTL_mean_speed_mean.npy"))
+    ctl_speed_sigma = np.sqrt(np.diag(np.load(os.path.join(wetlab_gp_path, "CTL_mean_speed_sigma.npy"))))
+    rd_speed_mean = np.load(os.path.join(wetlab_gp_path, "RD_mean_speed_mean.npy"))
+    rd_speed_sigma = np.sqrt(np.diag(np.load(os.path.join(wetlab_gp_path, "RD_mean_speed_sigma.npy"))))
 
-    # Load wet lab data:
-    site_dataframe = pd.read_csv("wetlab_data/site_dataframe.csv")
-    particle_counts = np.array(site_dataframe["particle_count"])
+    # Get wetlab coherency fraction data:
+    ctl_cf_mean = np.load(os.path.join(wetlab_gp_path, "CTL_coherency_fraction_mean.npy"))
+    ctl_cf_sigma = np.sqrt(np.diag(np.load(os.path.join(wetlab_gp_path, "CTL_coherency_fraction_sigma.npy"))))
+    rd_cf_mean = np.load(os.path.join(wetlab_gp_path, "RD_coherency_fraction_mean.npy"))
+    rd_cf_sigma = np.sqrt(np.diag(np.load(os.path.join(wetlab_gp_path, "RD_coherency_fraction_sigma.npy"))))
+    return (
+        ctl_cf_mean,
+        ctl_cf_sigma,
+        ctl_speed_mean,
+        ctl_speed_sigma,
+        rd_cf_mean,
+        rd_cf_sigma,
+        rd_speed_mean,
+        rd_speed_sigma,
+    )
 
-    # Get scaled points to query:
-    regression_inputs = 375
-    scaled_regression_inputs = (regression_inputs - np.mean(particle_counts)) / np.std(particle_counts)
 
-    regression_dict = {}
-    for wetlab_metric in WETLAB_METRICS:
-        # Retrieve results of regression, and do error propagation on parameters:
-        regression_results = mixed_linear_model.MixedLMResults.load(f"wetlab_data/{wetlab_metric}.res")
-        wt_fit_target, wt_fit_se = get_fit_target(-0.5, regression_results, scaled_regression_inputs)
-        rd_fit_target, rd_fit_se = get_fit_target( 0.5, regression_results, scaled_regression_inputs)
-
-        # Need to convert speed back to µm/min:
-        if wetlab_metric == "mean_speed":
-            wt_fit_target /= 60
-            wt_fit_se /= 60
-            rd_fit_target /= 60
-            rd_fit_se /= 60
-
-        # Store in dictionary:
-        regression_dict[wetlab_metric] = {
-            "wt_mean": wt_fit_target,
-            "wt_stddev": wt_fit_se,
-            "rd_mean": rd_fit_target,
-            "rd_stddev": rd_fit_se
-        }
-    return (regression_dict,)
+@app.cell
+def _(pa_ctl_p_mean):
+    pa_ctl_p_mean.shape
+    return
 
 
 @app.cell
 def _(PARTICLE_DIRPATH, SS_DIRPATH, np, os):
     # Compare posterior means:
-    pa_ctl_p_mean = np.load(os.path.join(PARTICLE_DIRPATH, "mcmc_results", "wt_posterior_mean.npy"))
-    pa_rd_p_mean = np.load(os.path.join(PARTICLE_DIRPATH, "mcmc_results", "rd_posterior_mean.npy"))
+    pa_ctl_p_mean = np.load(os.path.join(PARTICLE_DIRPATH, "disc_cov_mcmc_results", "wt_posterior_mean.npy"))
+    pa_rd_p_mean = np.load(os.path.join(PARTICLE_DIRPATH, "disc_cov_mcmc_results", "rd_posterior_mean.npy"))
 
-    ss_ctl_p_mean = np.load(os.path.join(SS_DIRPATH, "mcmc_results", "wt_posterior_mean.npy"))
-    ss_rd_p_mean = np.load(os.path.join(SS_DIRPATH, "mcmc_results", "rd_posterior_mean.npy"))
+    ss_ctl_p_mean = np.load(os.path.join(SS_DIRPATH, "disc_cov_mcmc_results", "wt_posterior_mean.npy"))
+    ss_rd_p_mean = np.load(os.path.join(SS_DIRPATH, "disc_cov_mcmc_results", "rd_posterior_mean.npy"))
     return pa_ctl_p_mean, pa_rd_p_mean, ss_ctl_p_mean, ss_rd_p_mean
 
 
@@ -372,33 +422,36 @@ def _(
     PA_PALETTE,
     SS_PALETTE,
     TEXT_WIDTH,
+    ctl_cf_mean,
+    ctl_cf_sigma,
+    ctl_speed_mean,
+    ctl_speed_sigma,
     datetime,
     os,
     pa_ctl_p_mean,
     pa_rd_p_mean,
     plt,
-    regression_dict,
+    rd_cf_mean,
+    rd_cf_sigma,
+    rd_speed_mean,
+    rd_speed_sigma,
     ss_ctl_p_mean,
     ss_rd_p_mean,
 ):
     def plot_ctl_tradeoff(ax):
         # Plot scatter of fit:
         ax.scatter(
-            pa_ctl_p_mean[0, :, 2], pa_ctl_p_mean[3, :, 2],
+            pa_ctl_p_mean[0, :, 5], pa_ctl_p_mean[3, :, 5],
             s=2, alpha=0.5, color=PA_PALETTE, label="Particle"
         )
         ax.scatter(
-            ss_ctl_p_mean[0, :, 2], ss_ctl_p_mean[3, :, 2],
+            ss_ctl_p_mean[0, :, 5], ss_ctl_p_mean[3, :, 5],
             s=2, alpha=0.3, color=SS_PALETTE, label="Stick-slip"
         )
 
         # Plot target:
-        ctl_speed = regression_dict["mean_speed"]["wt_mean"]
-        ctl_speed_std = regression_dict["mean_speed"]["wt_stddev"]
-        ctl_coherency = regression_dict["coherency_fraction"]["wt_mean"]
-        ctl_coherency_std = regression_dict["coherency_fraction"]["wt_stddev"]
-        ax.scatter(ctl_speed, ctl_coherency, c='k', s=10, alpha=0.75, label="Control Fit Target")
-        ax.errorbar(ctl_speed, ctl_coherency, xerr=ctl_speed_std, yerr=ctl_coherency_std, c='k', alpha=0.75)
+        ax.scatter(ctl_speed_mean[5], ctl_cf_mean[5], c='k', s=10, alpha=0.75, label="Control Fit Target")
+        ax.errorbar(ctl_speed_mean[5], ctl_cf_mean[5], xerr=ctl_speed_sigma[5], yerr=ctl_cf_sigma[5], c='k', alpha=0.75)
 
         # Add labels:
         ax.text(0.98, 0.05, 'Control Posterior Predictions', ha='right', transform=ax.transAxes)
@@ -417,18 +470,14 @@ def _(
         )
 
         # Plot target:
-        rd_speed = regression_dict["mean_speed"]["rd_mean"]
-        rd_speed_std = regression_dict["mean_speed"]["rd_stddev"]
-        rd_coherency = regression_dict["coherency_fraction"]["rd_mean"]
-        rd_coherency_std = regression_dict["coherency_fraction"]["rd_stddev"]
-        ax.scatter(rd_speed, rd_coherency, c='k', s=10, alpha=0.75, label="RD Fit Target")
-        ax.errorbar(rd_speed, rd_coherency, xerr=rd_speed_std, yerr=rd_coherency_std, c='k', alpha=0.75)
+        ax.scatter(rd_speed_mean[5], rd_cf_mean[5], c='k', s=10, alpha=0.75, label="RD Fit Target")
+        ax.errorbar(rd_speed_mean[5], rd_cf_mean[5], xerr=rd_speed_sigma[5], yerr=rd_cf_sigma[5], c='k', alpha=0.75)
 
         # Add labels:
         ax.text(0.98, 0.05, 'RD Posterior Predictions', ha='right', transform=ax.transAxes)
         ax.set_xlabel("Speed")
         ax.set_ylabel("Coherency")
-        ax.legend()
+        ax.legend(loc="upper right")
 
     def plot_tradeoffs():
         fig, axs = plt.subplots(2, 1, figsize=(TEXT_WIDTH, 5), sharex=True, sharey=True)

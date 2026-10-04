@@ -35,6 +35,7 @@ int main(int argc, char** argv) {
     double matrixAdditionRate;
     double matrixTurnoverRate;
     double matrixSampleRate;
+    double patternSigma;
 
     // Cell behaviour parameters:
     CellParameters cellParams;
@@ -63,17 +64,12 @@ int main(int argc, char** argv) {
         ("gridSize", po::value<int>(&gridSize)->required(),
             "Defines number of cells in grid that defines the ECM & cell interaction neighbourhood."
         )
-        ("matrixTurnoverRate", po::value<double>(&matrixTurnoverRate)->required(),
-            "Stability of the matrix under reorientation by cell movement."
-        )
-        ("matrixAdditionRate", po::value<double>(&matrixAdditionRate)->required(),
-            "Stability of the matrix under reorientation by cell movement."
-        )
         ("matrixSampleRate", po::value<double>(&matrixSampleRate)->required(),
             "Rate of matrix sampling by cells."
         )
-        ("thereIsMatrixInteraction", po::value<bool>(&thereIsMatrixInteraction)->required(),
-            "Whether or not cells undergo interaction with the matrx."
+        // Repatterning parameters:
+        ("patternSigma", po::value<double>(&patternSigma)->required(),
+            "The standard deviation of the angular distribution of fibres in the existing pattern."
         )
         // Cell movement parameters:
         ("dt", po::value<double>(&cellParams.dt)->required(),
@@ -94,14 +90,14 @@ int main(int argc, char** argv) {
         ("actinAdvectionRate", po::value<double>(&cellParams.actinAdvectionRate)->required(),
             "Degree of polarisation at which cell angular concentration reaches half its saturation value."
         )
-        ("matrixAdvectionRate", po::value<double>(&cellParams.matrixAdvectionRate)->required(),
-            "Degree of polarisation at which cell angular concentration reaches half its saturation value."
-        )
         ("collisionAdvectionRate", po::value<double>(&cellParams.collisionAdvectionRate)->required(),
             "Degree of polarisation at which cell angular concentration reaches half its saturation value."
         )
         ("maximumSteadyStateActinFlow", po::value<double>(&cellParams.maximumSteadyStateActinFlow)->required(),
             "Degree of polarisation at which cell angular concentration reaches half its saturation value."
+        )
+        ("matrixCoupling", po::value<double>(&cellParams.matrixCoupling)->required(),
+            "The strength to which the diffusion of velocity is limited by a cell's fibre environment."
         )
         // Collision parameters:
         ("cellBodyRadius", po::value<double>(&cellParams.cellBodyRadius)->required(),
@@ -111,6 +107,9 @@ int main(int argc, char** argv) {
             "Degree of polarisation at which cell angular concentration reaches half its saturation value."
         )
         ("collisionFlowReductionRate", po::value<double>(&cellParams.collisionFlowReductionRate)->required(),
+            "Rate at which actin flow in the direction of a collision is reduced by a collision."
+        )
+        ("adhesionReductionRate", po::value<double>(&cellParams.adhesionReductionRate)->required(),
             "Rate at which actin flow in the direction of a collision is reduced by a collision."
         )
         // Shape parameters:
@@ -139,19 +138,6 @@ int main(int argc, char** argv) {
     if (!boostfs::exists(directoryPath)) {
         boostfs::create_directory(directoryPath);
     }
-
-    // // Generating folder hierarchy:
-    // const int moduloIndex{static_cast<int>(std::floor(jobArrayID / 1000))};
-    // const std::string hierarchyFolder{directoryPath + std::to_string(moduloIndex) + "/"};
-    // if (!boostfs::exists(hierarchyFolder)) {
-    //     boostfs::create_directory(hierarchyFolder);
-    // }
-
-    // // Generating subdirectory to store simulation results:
-    // const std::string subdirectoryPath{hierarchyFolder + std::to_string(jobArrayID) + "/"};
-    // if (!boostfs::exists(subdirectoryPath)) {
-    //     boostfs::create_directory(subdirectoryPath);
-    // }
 
     // Defining RNG generator for world seeds:
     std::mt19937 seedGenerator = std::mt19937(jobArrayID);
@@ -189,10 +175,8 @@ int main(int argc, char** argv) {
                 worldSize,
                 gridSize,
                 numberOfCells,
-                thereIsMatrixInteraction,
-                matrixTurnoverRate,
-                matrixAdditionRate,
                 matrixSampleRate,
+                patternSigma,
                 cellParams
             )
         };

@@ -53,7 +53,7 @@ def _():
     # Layout formatting:
     mpl.rcParams['figure.constrained_layout.hspace'] = 0.04
     mpl.rcParams['figure.constrained_layout.wspace'] = 0.04
-    return
+    return (mpl,)
 
 
 @app.cell
@@ -66,6 +66,7 @@ def _(datetime, os, subprocess):
     CONTROL_PALETTE = "#1A85FF"
     RD_PALETTE = "#D41159"
     PIXEL_SIZE = 0.3469 * 2  # Pixel size in µm
+    SIM_UNIT_SIZE = 0.3469   # Simulation distance unit in µm
     MM_UNIT = 1/25.4  # Millimeters in inches, for matplotlib
 
     TEXT_WIDTH = 135 * MM_UNIT
@@ -94,69 +95,74 @@ def _(datetime, os, subprocess):
         METADATA_DICTIONARY,
         OUT_DIRPATH,
         RD_PALETTE,
+        SIM_UNIT_SIZE,
         TEXT_WIDTH,
     )
 
 
 @app.cell
 def _(np, os):
-    EXPERIMENT_DIRPATH = "model_experiments/2026-05-31-collisions_shape"
-    mcmc_results = "wide_mcmc_results"
+    PARAMETER_DIMENSION = 12
+    EXPERIMENT_DIRPATH = "model_experiments/2026-10-02-collisions_shape"
+    # mcmc_results = "wide_mcmc_results"
+    hm_index = 2
+    mcmc_results = f"hm{hm_index}/disc_cov_mcmc_results"
+
+
     ctl_mcmc_chain = np.load(os.path.join(EXPERIMENT_DIRPATH, mcmc_results, "wt_mcmc_chain.npy"))
     rd_mcmc_chain = np.load(os.path.join(EXPERIMENT_DIRPATH, mcmc_results, "rd_mcmc_chain.npy"))
-    return EXPERIMENT_DIRPATH, ctl_mcmc_chain, mcmc_results, rd_mcmc_chain
+
+    ctl_likelihoods = np.load(os.path.join(EXPERIMENT_DIRPATH, mcmc_results, "wt_mcmc_likelihoods.npy"))
+    rd_likelihoods = np.load(os.path.join(EXPERIMENT_DIRPATH, mcmc_results, "rd_mcmc_likelihoods.npy"))
+    return (
+        EXPERIMENT_DIRPATH,
+        PARAMETER_DIMENSION,
+        ctl_mcmc_chain,
+        hm_index,
+        rd_mcmc_chain,
+    )
 
 
 @app.cell
-def _(ctl_mcmc_chain, mcmc_results, np, rd_mcmc_chain):
-    ctl_likelihoods = np.load(f"model_experiments/2026-05-31-collisions_shape/{mcmc_results}/wt_mcmc_likelihoods.npy")
-    rd_likelihoods = np.load(f"model_experiments/2026-05-31-collisions_shape/{mcmc_results}/rd_mcmc_likelihoods.npy")
-
-    THIN_FACTOR = 64
-
-    ctl_mle_idx = np.argsort(ctl_likelihoods[2048::THIN_FACTOR, :, 0].flatten())[-1024:]
-    rd_mle_idx = np.argsort(rd_likelihoods[2048::THIN_FACTOR, :, 0].flatten())[-1024:]
-
-    ctl_mle = ctl_mcmc_chain[2048::THIN_FACTOR, :, 0, :].reshape(-1, 11)[ctl_mle_idx, :]
-    rd_mle = rd_mcmc_chain[2048::THIN_FACTOR, :, 0, :].reshape(-1, 11)[rd_mle_idx, :]
-    return THIN_FACTOR, ctl_likelihoods, ctl_mle, rd_likelihoods, rd_mle
-
-
-@app.cell
-def _(
-    THIN_FACTOR,
-    ctl_likelihoods,
-    ctl_mcmc_chain,
-    np,
-    rd_likelihoods,
-    rd_mcmc_chain,
-):
-    distribution_size = len(ctl_likelihoods[2048::THIN_FACTOR, :, 0].flatten())
-    cutoff_95 = int(np.floor(distribution_size * 0.95))
-
-    ctl_ci95_idx = np.argsort(ctl_likelihoods[2048::THIN_FACTOR, :, 0].flatten())[-cutoff_95:]
-    rd_ci95_idx = np.argsort(rd_likelihoods[2048::THIN_FACTOR, :, 0].flatten())[-cutoff_95:]
-
-    ctl_ci95 = ctl_mcmc_chain[2048::THIN_FACTOR, :, 0, :].reshape(-1, 11)[ctl_ci95_idx, :]
-    rd_ci95 = rd_mcmc_chain[2048::THIN_FACTOR, :, 0, :].reshape(-1, 11)[rd_ci95_idx, :]
-    return ctl_ci95, rd_ci95
-
-
-@app.cell
-def _(ctl_likelihoods):
-    print(ctl_likelihoods[::2048, :, 0].flatten().shape)
+def _():
+    THIN_FACTOR = 32
     return
 
 
 @app.cell
-def _(ctl_mle, np):
-    print(ctl_mle.shape)
-    print(np.unique(ctl_mle, axis=0).shape)
+def _():
+    PARAMETER_SYMBOLS = [
+        "D^{\\ast}",
+        "K_A",
+        "K",
+        "\\tau",
+        "\\beta",
+        "\\alpha",
+        "R",
+        "r_{col}",
+        "\\alpha_{CIL}",
+        "k",
+        "r",
+        "\\rho_{AR}"
+    ]
+    return (PARAMETER_SYMBOLS,)
+
+
+@app.cell
+def _():
+    # distribution_size = len(ctl_likelihoods[2048::THIN_FACTOR, :, 0].flatten())
+    # cutoff_95 = int(np.floor(distribution_size * 0.95))
+
+    # ctl_ci95_idx = np.argsort(ctl_likelihoods[2048::THIN_FACTOR, :, 0].flatten())[-cutoff_95:]
+    # rd_ci95_idx = np.argsort(rd_likelihoods[2048::THIN_FACTOR, :, 0].flatten())[-cutoff_95:]
+
+    # ctl_ci95 = ctl_mcmc_chain[2048::THIN_FACTOR, :, 0, :].reshape(-1, PARAMETER_DIMENSION)[ctl_ci95_idx, :]
+    # rd_ci95 = rd_mcmc_chain[2048::THIN_FACTOR, :, 0, :].reshape(-1, PARAMETER_DIMENSION)[rd_ci95_idx, :]
     return
 
 
 @app.cell
-def _(EXPERIMENT_DIRPATH, json, os):
+def _(EXPERIMENT_DIRPATH, SIM_UNIT_SIZE, json, np, os):
     with open(os.path.join(EXPERIMENT_DIRPATH, "config.json")) as json_file:
         config_dict = json.load(json_file)
 
@@ -164,18 +170,65 @@ def _(EXPERIMENT_DIRPATH, json, os):
     parameter_list.remove("numberOfCells")
 
     parameter_scaling = [parameter_range[1] for parameter_range in config_dict["gridsearch_parameters"]]
-    parameter_scaling.pop(5);
+    parameter_scaling.pop(-1);
+
+    PARAM_CONVERSION = {
+        "cueDiffusionRate": 1,
+        "cueKa": 1,
+        "fluctuationAmplitude": SIM_UNIT_SIZE**2,
+        "fluctuationTimescale": 1,
+        "maximumSteadyStateActinFlow": SIM_UNIT_SIZE,
+        "actinAdvectionRate": 1,
+        "cellBodyRadius": SIM_UNIT_SIZE,
+        "collisionFlowReductionRate": 1,
+        "collisionAdvectionRate": 1,
+        "cellStiffness": 1 / SIM_UNIT_SIZE,
+        "surfaceStickiness": 1,
+        "adhesionReductionRate": 1
+    }
+
+    conversion_array = np.array(list(PARAM_CONVERSION.values()))
+    conversion_array = np.expand_dims(conversion_array, axis=1)
+    parameter_scaling *= conversion_array
     return parameter_list, parameter_scaling
+
+
+@app.cell
+def _(EXPERIMENT_DIRPATH, hm_index, np, os):
+    METRICS_TO_PLOT = [
+        "speeds",
+        "meander_ratios",
+        "ann_indices",
+        "coherency"
+    ]
+
+    # Get metrics:
+    def load_metrics():
+        metrics_dict = {}
+        for metric_name in METRICS_TO_PLOT:
+            metric_array = np.load(os.path.join(
+                EXPERIMENT_DIRPATH, "global_dataset", "summary_data", f"{metric_name}.npy"
+            ))
+            metrics_dict[metric_name] = np.nanmean(metric_array, axis=1)
+        return metrics_dict
+
+    metrics_dict = load_metrics()
+    sobol_inputs = np.load(os.path.join(EXPERIMENT_DIRPATH, f"hm{hm_index}", "sample_matrix.npy"))
+    return
 
 
 @app.cell
 def _(
     FULL_WIDTH,
     METADATA_DICTIONARY,
+    OUT_DIRPATH,
+    PARAMETER_DIMENSION,
     cc,
     datetime,
     np,
+    os,
     parameter_list,
+    plot_scatter_density,
     plt,
     scipy,
 ):
@@ -215,41 +268,40 @@ def _(
         ax.set_axis_off()
 
 
-    def plot_scatter_density(i, j, kde, mle, posterior_distribution, color, ax):
-        # Get evaluate KDE at posterior samples:
-        marginal_kde = kde.marginal([i, j])
-        densities = marginal_kde(posterior_distribution[:, [i, j]].T)
-        density_sort = np.argsort(densities)
+    # def plot_scatter_density(i, j, kde, posterior_distribution, color, ax):
+    #     # Get evaluate KDE at posterior samples:
+    #     marginal_kde = kde.marginal([i, j])
+    #     densities = marginal_kde(posterior_distribution[:, [i, j]].T)
+    #     density_sort = np.argsort(densities)
 
-        # Plot sample:
-        ax.scatter(
-            posterior_distribution[density_sort, i],
-            posterior_distribution[density_sort, j],
-            s=0.5, c=densities[density_sort],
-            cmap=cc.m_CET_L20, edgecolors="none"
-        )
-        ax.scatter(mle[:, i], mle[:, j], s=0.75, c="#F92A53", alpha=0.5, edgecolors="none")
-        ax.set_aspect("equal")
+    #     # Plot sample:
+    #     ax.scatter(
+    #         posterior_distribution[density_sort, i],
+    #         posterior_distribution[density_sort, j],
+    #         s=0.5, alpha=0.7, c=densities[density_sort],
+    #         cmap=cc.m_CET_L20, edgecolors="none"
+    #     )
+    #     ax.set_aspect("equal")
 
-        for axis in ['top','bottom','left','right']:
-            ax.spines[axis].set_linewidth(0.25)
-            ax.spines[axis].set_color(color)
+    #     for axis in ['top','bottom','left','right']:
+    #         ax.spines[axis].set_linewidth(0.25)
+    #         ax.spines[axis].set_color(color)
 
-        # ax.set_xticks([])
-        # ax.set_yticks([])
-        # ax.set_axis_off()
+    #     # ax.set_xticks([])
+    #     # ax.set_yticks([])
+    #     # ax.set_axis_off()
 
 
-    def global_jointplot(posterior_distribution, mle, title, image_filename, color):
+    def global_jointplot(posterior_distribution, title, image_filename, color):
         # Calculate global KDE:
         kde = scipy.stats.gaussian_kde(posterior_distribution.T, bw_method=0.33)
 
         # Set up subplots:
-        fig, axs = plt.subplots(11, 11, figsize=(FULL_WIDTH, FULL_WIDTH), sharex=True, sharey=True)
+        fig, axs = plt.subplots(PARAMETER_DIMENSION, PARAMETER_DIMENSION, figsize=(FULL_WIDTH, FULL_WIDTH), sharex=True, sharey=True)
 
         # Iterate through indices:
-        for i in range(11):
-            for j in range(11):
+        for i in range(PARAMETER_DIMENSION):
+            for j in range(PARAMETER_DIMENSION):
                 # Label diagonals:
                 if i == j:
                     axs[i, j].text(
@@ -264,6 +316,8 @@ def _(
                     axs[i, j].set_yticks([])
                     axs[i, j].set_xlim(0, 1)
                     axs[i, j].set_ylim(0, 1)
+                    # axs[i, j].set_xlim(-3, 0)
+                    # axs[i, j].set_ylim(-3, 0)
                     axs[i, j].set_aspect("equal")
                     axs[i, j].set_axis_off()
                     continue
@@ -274,7 +328,7 @@ def _(
                     continue
 
                 # Plot density scatter:
-                plot_scatter_density(i, j, kde, mle, posterior_distribution, color, axs[i, j])
+                plot_scatter_density(i, j, kde, posterior_distribution, color, axs[i, j])
 
         edging = 0.01
         fig.subplots_adjust(edging, edging, 1 - edging, 1 - edging, wspace=0.025, hspace=0.025)
@@ -282,19 +336,172 @@ def _(
 
         # Show in cell:
         METADATA_DICTIONARY["time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        # plt.savefig(
-        #     os.path.join(OUT_DIRPATH, f"{image_filename}.png"),
-        #     dpi=300, metadata=METADATA_DICTIONARY, transparent=True
-        # )
+        plt.savefig(
+            os.path.join(OUT_DIRPATH, f"{image_filename}.png"),
+            dpi=300, metadata=METADATA_DICTIONARY, transparent=True
+        )
         plt.show()
-    return (global_jointplot,)
+    return
 
 
 @app.cell
-def _(ctl_mcmc_chain, rd_mcmc_chain):
-    ctl_kde_posterior = ctl_mcmc_chain[2048::1024, :, 0, :].reshape(-1, 11)
-    rd_kde_posterior = rd_mcmc_chain[2048::1024, :, 0, :].reshape(-1, 11)
-    return ctl_kde_posterior, rd_kde_posterior
+def _(
+    CONTROL_PALETTE,
+    FULL_WIDTH,
+    METADATA_DICTIONARY,
+    OUT_DIRPATH,
+    PARAMETER_SYMBOLS,
+    RD_PALETTE,
+    datetime,
+    mpl,
+    np,
+    os,
+    parameter_scaling,
+    plt,
+    scipy,
+):
+    def format_tick(x, pos):
+        if abs(x) < 0.01 and x != 0:
+            return f"{x:.0e}".replace("e-0", "e-").replace("e+0", "e+")
+        return f"{x:g}"
+
+
+    def plot_scatter_density(i, j, kde, posterior_distribution, color, ax):
+        # Get evaluate KDE at posterior samples:
+        marginal_kde = kde.marginal([i, j])
+        densities = marginal_kde(posterior_distribution[:, [i, j]].T)
+        density_sort = np.argsort(densities)
+
+        if j < i:
+            color = RD_PALETTE
+        else:
+            color = CONTROL_PALETTE
+
+        # Plot sample:
+        ax.scatter(
+            posterior_distribution[density_sort, j],
+            posterior_distribution[density_sort, i],
+            s=0.5, alpha=0.4, edgecolors="none",
+            c=color
+
+            # c=densities[density_sort],
+            # cmap=cc.m_CET_L20
+        )
+        # ax.set_aspect("equal")
+
+        for axis in ['top','bottom','left','right']:
+            ax.spines[axis].set_linewidth(1)
+            ax.spines[axis].set_color(color)
+
+        ax.set_xlim(*parameter_scaling[j, :])
+        ax.set_ylim(*parameter_scaling[i, :])
+
+        ax.set_box_aspect(1)
+
+        # ax.set_xticks([])
+        # ax.set_yticks([])
+        # ax.set_axis_off()
+
+    def plot_posterior_histogram(i, posterior_distributions, ax):
+        bins = np.linspace(*parameter_scaling[i, :], 20)
+        ax.hist(posterior_distributions[0][:, i], bins=bins, color=CONTROL_PALETTE, histtype="step", density=True)
+        ax.hist(posterior_distributions[1][:, i], bins=bins, color=RD_PALETTE, histtype="step", density=True)
+        ax.set_xlim(*parameter_scaling[i, :])
+        ax.set_box_aspect(1)
+
+    def double_gridplot(posterior_distributions):
+        # Do scaling:
+        valrange = np.diff(parameter_scaling, axis=1)
+
+        posterior_distributions[0] *= np.squeeze(valrange)
+        posterior_distributions[0] += np.squeeze(parameter_scaling[:, 0])
+
+        posterior_distributions[1] *= np.squeeze(valrange)
+        posterior_distributions[1] += np.squeeze(parameter_scaling[:, 0])
+
+        print(posterior_distributions[1][:, 3].max())
+
+        # Calculate global KDE:
+        ctl_kde = scipy.stats.gaussian_kde(posterior_distributions[0].T, bw_method=0.33)
+        rd_kde = scipy.stats.gaussian_kde(posterior_distributions[1].T, bw_method=0.33)
+
+        # For testing:
+        PARAMETER_DIMENSION = 12
+
+        # Set up subplots:
+        fig, axs = plt.subplots(PARAMETER_DIMENSION, PARAMETER_DIMENSION, figsize=(FULL_WIDTH, FULL_WIDTH))
+
+        for ax in axs.flat:
+            ax.xaxis.set_major_formatter(mpl.ticker.FuncFormatter(format_tick))
+            ax.yaxis.set_major_formatter(mpl.ticker.FuncFormatter(format_tick))
+            ax.xaxis.set_major_locator(mpl.ticker.MaxNLocator(nbins=2, prune="both"))
+            ax.yaxis.set_major_locator(mpl.ticker.MaxNLocator(nbins=2, prune="both"))
+
+        # Iterate through indices:
+        for i in range(PARAMETER_DIMENSION):
+            for j in range(PARAMETER_DIMENSION):
+                # Plot comparative histograms:
+                if i == j:
+                    plot_posterior_histogram(i, posterior_distributions, axs[i, j])
+                elif j < i:
+                    # Lower triangle is RD:
+                    plot_scatter_density(i, j, ctl_kde, posterior_distributions[1], RD_PALETTE, axs[i, j])
+                else:
+                    # Upper triangle is CTL:
+                    plot_scatter_density(i, j, ctl_kde, posterior_distributions[0], CONTROL_PALETTE, axs[i, j])
+
+                # Set up axis ticks:
+                labelpad = 6
+                top = False; bottom = False
+                left = False; right = False
+                if i == 0:
+                    top = True
+                    axs[i, j].xaxis.set_label_position("top")
+                    axs[i, j].set_xlabel(f"${PARAMETER_SYMBOLS[j]}$", labelpad=labelpad)
+                    axs[i, j].set_xticks([])
+                if i == PARAMETER_DIMENSION - 1:
+                    bottom = True
+                    axs[i, j].set_xlabel(f"${PARAMETER_SYMBOLS[j]}$", labelpad=labelpad)
+
+                if j == 0:
+                    left = True
+                    axs[i, j].set_ylabel(f"${PARAMETER_SYMBOLS[i]}$", labelpad=labelpad)
+                if j == PARAMETER_DIMENSION - 1:
+                    right = True
+                    axs[i, j].yaxis.set_label_position("right")
+                    axs[i, j].set_ylabel(f"${PARAMETER_SYMBOLS[i]}$", labelpad=labelpad)
+                    axs[i, j].set_yticks([])
+
+                axs[i, j].tick_params(
+                    top=top, labeltop=top,
+                    bottom=bottom, labelbottom=bottom,
+                    right=right, labelright=right,
+                    left=left, labelleft=left,
+                    length=0, labelsize=5
+                )
+
+
+        edging = 0.08
+        fig.subplots_adjust(edging, edging, 1 - edging, 1 - edging, wspace=0.1, hspace=0.1)
+        # fig.text(0.01, 0.01, title, ha="left", va="baseline", fontsize=12, style="italic", color=color)
+
+        # Show in cell:
+        METADATA_DICTIONARY["time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        plt.savefig(
+            os.path.join(OUT_DIRPATH, f"posterior_scattergrid.png"),
+            dpi=300, metadata=METADATA_DICTIONARY, transparent=True
+        )
+        plt.show()
+    return double_gridplot, plot_scatter_density
+
+
+@app.cell
+def _(PARAMETER_DIMENSION, ctl_mcmc_chain, rd_mcmc_chain):
+    chain_length = ctl_mcmc_chain.shape[0]
+    quarter_index = int(chain_length // 4)
+    ctl_kde_posterior = ctl_mcmc_chain[quarter_index::256, :, 0, :].reshape(-1, PARAMETER_DIMENSION)
+    rd_kde_posterior = rd_mcmc_chain[quarter_index::256, :, 0, :].reshape(-1, PARAMETER_DIMENSION)
+    return ctl_kde_posterior, quarter_index, rd_kde_posterior
 
 
 @app.cell
@@ -304,73 +511,20 @@ def _(ctl_kde_posterior):
 
 
 @app.cell
-def _(ctl_mcmc_chain, np, rd_mcmc_chain):
-    ctl_covariance = np.cov(ctl_mcmc_chain[2048:, :, 0, :].reshape(-1, 11), rowvar=False)
-    ctl_precision = np.linalg.inv(ctl_covariance)
-
-    rd_covariance = np.cov(rd_mcmc_chain[2048:, :, 0, :].reshape(-1, 11), rowvar=False)
-    rd_precision = np.linalg.inv(rd_covariance)
-    return ctl_precision, rd_covariance, rd_precision
-
-
-@app.cell
-def _(ctl_precision, np, rd_covariance):
-    joint_eigvals, joint_eigenparameters = np.linalg.eigh(ctl_precision @ rd_covariance)
-    joint_eigvals = joint_eigvals[::-1]
-    joint_eigenparameters = joint_eigenparameters.T[::-1, :]
+def _(ctl_kde_posterior, double_gridplot, np, rd_kde_posterior):
+    double_gridplot([np.copy(ctl_kde_posterior), np.copy(rd_kde_posterior)])
     return
 
 
 @app.cell
-def _(ctl_precision, np, rd_precision):
-    ctl_eigvals, ctl_eigenparameters = np.linalg.eigh(ctl_precision)
-    ctl_eigvals = ctl_eigvals[::-1]
-    ctl_eigenparameters = ctl_eigenparameters.T[::-1, :]
-
-    rd_eigvals, rd_eigenparameters = np.linalg.eigh(rd_precision)
-    rd_eigvals = rd_eigvals[::-1]
-    rd_eigenparameters = rd_eigenparameters.T[::-1, :]
-    return ctl_eigenparameters, ctl_eigvals
-
-
-@app.cell
-def _(ctl_eigvals):
-    ctl_eigvals
+def _():
+    # global_jointplot(ctl_kde_posterior, "Control Fit Parameter Distribution", "scattergrid_control", CONTROL_PALETTE)
     return
 
 
 @app.cell
-def _(ctl_eigenparameters, np):
-    simplified_eigenparameters = np.copy(ctl_eigenparameters[-1, :])
-    simplified_eigenparameters[np.abs(simplified_eigenparameters) < 0.1] = 0
-    print(np.round(simplified_eigenparameters, 2))
-    return
-
-
-@app.cell
-def _(ctl_eigenparameters, ctl_kde_posterior, rd_kde_posterior):
-    ctl_reparams = ctl_kde_posterior @ ctl_eigenparameters
-    rd_reparams = rd_kde_posterior @ ctl_eigenparameters
-    return ctl_reparams, rd_reparams
-
-
-@app.cell
-def _(ctl_reparams, plt, rd_reparams):
-    plt.hist(ctl_reparams[:, 0], bins=25);
-    plt.hist(rd_reparams[:, 0], bins=25);
-    plt.show()
-    return
-
-
-@app.cell
-def _(CONTROL_PALETTE, ctl_kde_posterior, ctl_mle, global_jointplot):
-    global_jointplot(ctl_kde_posterior, ctl_mle, "Control Fit Parameter Distribution", "scattergrid_control", CONTROL_PALETTE)
-    return
-
-
-@app.cell
-def _(RD_PALETTE, global_jointplot, rd_kde_posterior, rd_mle):
-    global_jointplot(rd_kde_posterior, rd_mle, "RD Fit Parameter Distribution", "scattergrid_rd", RD_PALETTE)
+def _():
+    # global_jointplot(rd_kde_posterior, "RD Fit Parameter Distribution", "scattergrid_rd", RD_PALETTE)
     return
 
 
@@ -381,22 +535,24 @@ def _(
     FULL_WIDTH,
     METADATA_DICTIONARY,
     MaxNLocator,
+    OUT_DIRPATH,
+    PARAMETER_DIMENSION,
     RD_PALETTE,
-    ctl_ci95,
     ctl_mcmc_chain,
     datetime,
     np,
+    os,
     parameter_list,
     parameter_scaling,
     plt,
-    rd_ci95,
+    quarter_index,
     rd_mcmc_chain,
 ):
-    ctl_hist_posterior = ctl_mcmc_chain[8192:, :, 0, :].reshape(-1, 11)
-    rd_hist_posterior = rd_mcmc_chain[8192:, :, 0, :].reshape(-1, 11)
+    ctl_hist_posterior = ctl_mcmc_chain[quarter_index::64, :, 0, :].reshape(-1, PARAMETER_DIMENSION)
+    rd_hist_posterior = rd_mcmc_chain[quarter_index::64, :, 0, :].reshape(-1, PARAMETER_DIMENSION)
 
-    ctl_hist_posterior = ctl_ci95
-    rd_hist_posterior = rd_ci95
+    # ctl_hist_posterior = ctl_ci95
+    # rd_hist_posterior = rd_ci95
 
     def scale_parameter(x, index):
         scale_min, scale_max = parameter_scaling[index]
@@ -425,165 +581,206 @@ def _(
         count = 0
         for i in range(6):
             for j in range(2):
-                if count == 11:
+                if count == PARAMETER_DIMENSION:
                     axs[i, j].remove()
                     continue
                 plot_comparative_hist(count, axs[i, j])
-                if count == 1:
+                if count == 3:
                     axs[i, j].legend(fontsize=6)
                 count += 1
 
         fig.subplots_adjust(0.15, 0.05, 0.85, 0.95, wspace=0.15, hspace=0.55)
 
         METADATA_DICTIONARY["time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        # plt.savefig(
-        #     os.path.join(OUT_DIRPATH, "marginal_fit_comparison.png"),
-        #     dpi=300, metadata=METADATA_DICTIONARY, transparent=True
-        # )
+        plt.savefig(
+            os.path.join(OUT_DIRPATH, "marginal_fit_comparison.png"),
+            dpi=300, metadata=METADATA_DICTIONARY, transparent=True
+        )
         plt.show()
 
     plot_all_marginals()
-    return (scale_parameter,)
-
-
-@app.cell
-def _(
-    CONTROL_PALETTE,
-    FULL_HEIGHT,
-    FULL_WIDTH,
-    METADATA_DICTIONARY,
-    MaxNLocator,
-    RD_PALETTE,
-    ctl_mle,
-    datetime,
-    np,
-    parameter_list,
-    parameter_scaling,
-    plt,
-    rd_mle,
-    scale_parameter,
-):
-    def plot_mle_hist(index, ax):
-        bins = np.linspace(parameter_scaling[index][0], parameter_scaling[index][1], 30)
-        ax.xaxis.set_major_locator(MaxNLocator(3))
-        ax.yaxis.set_major_locator(MaxNLocator(3))
-        ax.hist(
-            scale_parameter(ctl_mle[:, index], index),
-            alpha=0.75, label="Control Fit",
-            color=CONTROL_PALETTE, histtype="step", density=True, bins=bins
-        )
-        ax.hist(
-            scale_parameter(rd_mle[:, index], index),
-            alpha=0.75, label="RD Fit",
-            color=RD_PALETTE, histtype="step", density=True, bins=bins
-        )
-        ax.set_xlim(*parameter_scaling[index])
-        ax.set_xlabel(parameter_list[index])
-
-    def plot_mle_marginals():
-        fig, axs = plt.subplots(6, 2, figsize=(FULL_WIDTH, FULL_HEIGHT))
-
-        count = 0
-        for i in range(6):
-            for j in range(2):
-                if count == 11:
-                    axs[i, j].remove()
-                    continue
-                plot_mle_hist(count, axs[i, j])
-                if count == 0:
-                    axs[i, j].legend(fontsize=6)
-                count += 1
-
-        fig.subplots_adjust(0.15, 0.05, 0.85, 0.95, wspace=0.15, hspace=0.55)
-        METADATA_DICTIONARY["time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        # plt.savefig(
-        #     os.path.join(OUT_DIRPATH, "marginal_fit_mle_comparison.png"),
-        #     dpi=300, metadata=METADATA_DICTIONARY, transparent=True
-        # )
-        plt.show()
-
-    plot_mle_marginals()
     return
 
 
 @app.cell
 def _(
-    CONTROL_PALETTE,
-    FULL_HEIGHT,
-    FULL_WIDTH,
     METADATA_DICTIONARY,
     OUT_DIRPATH,
-    RD_PALETTE,
-    ctl_mle,
+    PARAMETER_SYMBOLS,
+    TEXT_WIDTH,
+    ctl_kde_posterior,
     datetime,
     np,
     os,
-    parameter_list,
     plt,
-    rd_mle,
-    scale_parameter,
+    rd_kde_posterior,
 ):
-    def plot_violin(index, ax):
-        # Plot violins:
-        scaled_data = [
-            scale_parameter(ctl_mle[:, index], index),
-            scale_parameter(rd_mle[:, index], index)
-        ]
-        xy_data = np.stack(scaled_data, axis=1)
-        violin_parts = ax.violinplot(
-            xy_data,
-            positions=[0, 1],
-            widths=0.8,
-            bw_method="silverman",
-            showextrema=False
-        )
+    np_rng = np.random.default_rng(0)
 
-        for part_index, violin_part in enumerate(violin_parts['bodies']):
-            violin_part.set_facecolor([CONTROL_PALETTE, RD_PALETTE][part_index])
-            violin_part.set_edgecolor([CONTROL_PALETTE, RD_PALETTE][part_index])
-            violin_part.set_alpha(0.5)
+    def plot_delta_distribution(parameter_index, ax=None):
+        # Get uniform distance distribution:
+        sample_size = ctl_kde_posterior.shape[0]
+        uniform_a = np_rng.uniform(0, 1, sample_size)
+        uniform_b = np_rng.uniform(0, 1, sample_size)
+        uniform_delta = uniform_a - uniform_b
 
-        # Plot internal boxes:
-        low_quartiles, medians, high_quartiles = np.percentile(xy_data, [25, 50, 75], axis=0)
-        for p_index in range(2):
-            p_color = [CONTROL_PALETTE, RD_PALETTE][p_index]
-            ax.scatter(p_index, medians[p_index], marker='o', color=p_color, s=10)
-            ax.vlines(
-                p_index,
-                low_quartiles[p_index], high_quartiles[p_index],
-                color=p_color, linestyle='-', lw=1
-            )
+        # Get parameter distance distributiob:
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(TEXT_WIDTH, 2))
 
-        # Label xticks:
-        ax.set_xticks([0, 1], ["CTL", "RD"])
-        ax.set_ylabel(parameter_list[index])
+        delta_dist = rd_kde_posterior[:, parameter_index] - ctl_kde_posterior[:, parameter_index]
+        bins = np.linspace(-1, 1, 15)
+
+        # Plot null distribution:
+        ax.axvline(0, ls="--", c='k', alpha=0.25)
+        ax.hist(uniform_delta, bins=bins, color='k', alpha=0.25, density=True, label="Prior difference")
+
+        # Plot posterior distribution:
+        ax.axvline(np.quantile(delta_dist, 0.1), ls="--", c="gold", alpha=0.75, label="0.8 ETI")
+        ax.axvline(np.quantile(delta_dist, 0.9), ls="--", c="gold", alpha=0.75)
+        ax.axvline(np.mean(delta_dist), ls="--", c="tab:blue", alpha=0.5)
+        ax.hist(delta_dist, bins=bins, alpha=0.5, density=True, label="Posterior difference [CTL - RD]")
+        ax.set_xlim(-1, 1)
+
+        ax.set_xlabel(f"${PARAMETER_SYMBOLS[parameter_index]}$")
 
 
-    def plot_mle_violins():
-        fig, axs = plt.subplots(3, 4, figsize=(FULL_WIDTH, FULL_HEIGHT), sharex=True)
 
-        count = 0
-        for i in range(3):
-            for j in range(4):
-                # Remove corner plot:
-                if count == 11:
-                    axs[i, j].set_axis_off()
-                    continue
+    def plot_all_delta_distributions():
+        fig, axs = plt.subplots(6, 2, figsize=(TEXT_WIDTH, 7))
 
-                # Plot violins:
-                plot_violin(count, axs[i, j])
-                count += 1
+        parameter_index = 0
+        for i in range(6):
+            for j in range(2):
+                plot_delta_distribution(parameter_index, ax=axs[i, j])
+                if parameter_index == 0:
+                    axs[i, j].legend(
+                        loc='center right',
+                        bbox_to_anchor=(0.675, 0.96), fontsize=7,
+                        ncol=1, bbox_transform=fig.transFigure
+                    )
+                parameter_index += 1
 
-        fig.subplots_adjust(0.075, 0.025, 0.925, 0.975, wspace=0.5, hspace=0.075)
-
+        fig.subplots_adjust(0.15, 0.1, 0.85, 0.9, 0.2, 0.5)
         METADATA_DICTIONARY["time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         plt.savefig(
-            os.path.join(OUT_DIRPATH, "marginal_fit_mle_violins.png"),
+            os.path.join(OUT_DIRPATH, "parameter_delta_comparison.png"),
             dpi=300, metadata=METADATA_DICTIONARY, transparent=True
         )
         plt.show()
 
-    plot_mle_violins()
+    plot_all_delta_distributions()
+    return
+
+
+@app.cell
+def _():
+    # def plot_mle_hist(index, ax):
+    #     bins = np.linspace(parameter_scaling[index][0], parameter_scaling[index][1], 30)
+    #     ax.xaxis.set_major_locator(MaxNLocator(3))
+    #     ax.yaxis.set_major_locator(MaxNLocator(3))
+    #     ax.hist(
+    #         scale_parameter(ctl_mle[:, index], index),
+    #         alpha=0.75, label="Control Fit",
+    #         color=CONTROL_PALETTE, histtype="step", density=True, bins=bins
+    #     )
+    #     ax.hist(
+    #         scale_parameter(rd_mle[:, index], index),
+    #         alpha=0.75, label="RD Fit",
+    #         color=RD_PALETTE, histtype="step", density=True, bins=bins
+    #     )
+    #     ax.set_xlim(*parameter_scaling[index])
+    #     ax.set_xlabel(parameter_list[index])
+
+    # def plot_mle_marginals():
+    #     fig, axs = plt.subplots(6, 2, figsize=(FULL_WIDTH, FULL_HEIGHT))
+
+    #     count = 0
+    #     for i in range(6):
+    #         for j in range(2):
+    #             if count == PARAMETER_DIMENSION:
+    #                 axs[i, j].remove()
+    #                 continue
+    #             plot_mle_hist(count, axs[i, j])
+    #             if count == 0:
+    #                 axs[i, j].legend(fontsize=6)
+    #             count += 1
+
+    #     fig.subplots_adjust(0.15, 0.05, 0.85, 0.95, wspace=0.15, hspace=0.55)
+    #     METADATA_DICTIONARY["time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    #     plt.savefig(
+    #         os.path.join(OUT_DIRPATH, "marginal_fit_mle_comparison.png"),
+    #         dpi=300, metadata=METADATA_DICTIONARY, transparent=True
+    #     )
+    #     plt.show()
+
+    # plot_mle_marginals()
+    return
+
+
+@app.cell
+def _():
+    # def plot_violin(index, ax):
+    #     # Plot violins:
+    #     scaled_data = [
+    #         scale_parameter(ctl_hist_posterior[:, index], index),
+    #         scale_parameter(rd_hist_posterior[:, index], index)
+    #     ]
+    #     xy_data = np.stack(scaled_data, axis=1)
+    #     violin_parts = ax.violinplot(
+    #         xy_data,
+    #         positions=[0, 1],
+    #         widths=0.8,
+    #         bw_method="silverman",
+    #         showextrema=False
+    #     )
+
+    #     for part_index, violin_part in enumerate(violin_parts['bodies']):
+    #         violin_part.set_facecolor([CONTROL_PALETTE, RD_PALETTE][part_index])
+    #         violin_part.set_edgecolor([CONTROL_PALETTE, RD_PALETTE][part_index])
+    #         violin_part.set_alpha(0.5)
+
+    #     # Plot internal boxes:
+    #     low_quartiles, medians, high_quartiles = np.percentile(xy_data, [25, 50, 75], axis=0)
+    #     for p_index in range(2):
+    #         p_color = [CONTROL_PALETTE, RD_PALETTE][p_index]
+    #         ax.scatter(p_index, medians[p_index], marker='o', color=p_color, s=10)
+    #         ax.vlines(
+    #             p_index,
+    #             low_quartiles[p_index], high_quartiles[p_index],
+    #             color=p_color, linestyle='-', lw=1
+    #         )
+
+    #     # Label xticks:
+    #     ax.set_xticks([0, 1], ["CTL", "RD"])
+    #     ax.set_ylabel(parameter_list[index])
+
+
+    # def plot_mle_violins():
+    #     fig, axs = plt.subplots(3, 4, figsize=(FULL_WIDTH, FULL_HEIGHT), sharex=True)
+
+    #     count = 0
+    #     for i in range(3):
+    #         for j in range(4):
+    #             # Remove corner plot:
+    #             if count == 11:
+    #                 axs[i, j].set_axis_off()
+    #                 continue
+
+    #             # Plot violins:
+    #             plot_violin(count, axs[i, j])
+    #             count += 1
+
+    #     fig.subplots_adjust(0.075, 0.025, 0.925, 0.975, wspace=0.5, hspace=0.075)
+
+    #     METADATA_DICTIONARY["time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    #     plt.savefig(
+    #         os.path.join(OUT_DIRPATH, "marginal_fit_mle_violins.png"),
+    #         dpi=300, metadata=METADATA_DICTIONARY, transparent=True
+    #     )
+    #     plt.show()
+
+    # plot_mle_violins()
     return
 
 
@@ -594,24 +791,115 @@ def _():
 
 
 @app.cell
+def _():
+    # def get_basal_confluency(r, count):
+    #     return ((np.pi * r**2) * count) / (2048**2)
+    return
+
+
+@app.cell
+def _():
+    # print(get_basal_confluency(72.5, 300))
+    # print(get_basal_confluency(62.5, 300))
+    return
+
+
+@app.cell
 def _(EXPERIMENT_DIRPATH, np, os):
-    matrix_inference_dirpath = os.path.join(EXPERIMENT_DIRPATH, "mcmc_results", "matrix_inference")
-    wt_matrix_inference = np.load(os.path.join(matrix_inference_dirpath, "wt_mle_array.npy"))
-    rd_matrix_inference = np.load(os.path.join(matrix_inference_dirpath, "rd_mle_array.npy"))
-    return rd_matrix_inference, wt_matrix_inference
+    matrix_inference_dirpath = os.path.join(EXPERIMENT_DIRPATH, "cov_mcmc_results", "matrix_inference")
+    wt_matrix_inference = np.load(os.path.join(matrix_inference_dirpath, "wt_posterior_array.npy"))
+    rd_matrix_inference = np.load(os.path.join(matrix_inference_dirpath, "rd_posterior_array.npy"))
+
+    wt_ss_params = np.load(os.path.join(matrix_inference_dirpath, "wt_posterior.npy"))
+    rd_ss_params = np.load(os.path.join(matrix_inference_dirpath, "rd_posterior.npy"))
+
+    wt_inf_likelihood = np.load(os.path.join(matrix_inference_dirpath, "wt_likelihood.npy"))
+    rd_inf_likelihood = np.load(os.path.join(matrix_inference_dirpath, "rd_likelihood.npy"))
+    return (
+        rd_inf_likelihood,
+        rd_matrix_inference,
+        rd_ss_params,
+        wt_inf_likelihood,
+        wt_matrix_inference,
+        wt_ss_params,
+    )
 
 
 @app.cell
 def _(np):
-    advection_rates = np.linspace(0, 3, 50)
-    sample_rates = np.linspace(0.5, 15, 10)
-    cell_counts = np.linspace(300, 400, 3)
+    print("Setting up grid for inference...", flush=True)
+
+    CC_SAMPLE_COUNT = 10
+    SR_SAMPLE_COUNT = 10
+    ADV_SAMPLE_COUNT = 10
+
+    cell_counts = np.linspace(50, 300, CC_SAMPLE_COUNT)
+    sample_rates = np.linspace(0.5, 15, SR_SAMPLE_COUNT)
+    advection_rates = np.linspace(0, 3, ADV_SAMPLE_COUNT)
     return advection_rates, cell_counts
 
 
 @app.cell
-def _(wt_matrix_inference):
-    wt_matrix_inference.shape
+def _(
+    plt,
+    rd_inf_likelihood,
+    rd_matrix_inference,
+    wt_inf_likelihood,
+    wt_matrix_inference,
+):
+    plt.scatter(wt_matrix_inference[3, 5, 5, :], wt_inf_likelihood, s=1)
+    plt.scatter(rd_matrix_inference[3, 5, 5, :], rd_inf_likelihood, s=1)
+    return
+
+
+@app.cell
+def _(
+    CONTROL_PALETTE,
+    RD_PALETTE,
+    plt,
+    rd_matrix_inference,
+    wt_matrix_inference,
+):
+    plt.hist(wt_matrix_inference[4, 9, 9, :].flatten(), color=CONTROL_PALETTE, histtype="step", bins=100);
+    plt.hist(rd_matrix_inference[4, 9, 9, :].flatten(), color=RD_PALETTE, histtype="step", bins=100);
+    plt.show()
+    return
+
+
+@app.cell
+def _(cell_counts, get_basal_confluency, np, rd_ss_params, wt_ss_params):
+    wt_confluency_matrix = []
+    rd_confluency_matrix = []
+    for cell_count in cell_counts:
+        wt_confluency = get_basal_confluency(wt_ss_params[:, 6] * 50 + 30, cell_count)
+        rd_confluency = get_basal_confluency(rd_ss_params[:, 6] * 50 + 30, cell_count)
+        wt_confluency_matrix.append(wt_confluency)
+        rd_confluency_matrix.append(rd_confluency)
+
+    wt_confluency_matrix = np.stack(wt_confluency_matrix, axis=0)
+    rd_confluency_matrix = np.stack(rd_confluency_matrix, axis=0)
+    return
+
+
+@app.cell
+def _(
+    CONTROL_PALETTE,
+    RD_PALETTE,
+    cell_counts,
+    np,
+    plt,
+    rd_matrix_inference,
+    wt_matrix_inference,
+):
+    def quick_plot_coupling():
+        fig, ax = plt.subplots()
+        alpha_values = np.linspace(0.1, 1.0, 10)
+        for i in range(10):
+            ax.plot(cell_counts, np.mean(wt_matrix_inference[:, 9, i, :], axis=-1), alpha=alpha_values[i], c=CONTROL_PALETTE)
+            ax.plot(cell_counts, np.mean(rd_matrix_inference[:, 9, i, :], axis=-1), alpha=alpha_values[i], c=RD_PALETTE)
+        plt.show()
+
+    quick_plot_coupling()
     return
 
 

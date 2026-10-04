@@ -168,6 +168,7 @@ def main():
     # Loop through subiterations:
     order_parameters = []
     density_idr = []
+    mean_variances = []
 
     for seed in range(superiteration_number):
         # Read matrix into numpy:
@@ -176,6 +177,9 @@ def main():
         filepath = os.path.join(run_folderpath, filename)
         fibre_list = read_matrix_into_list(filepath)
         average_heading, fibre_count, angular_variance = format_fibre_list(fibre_list)
+
+        # Get mean angular variance in fibre sites:
+        mean_variances.append(np.mean(angular_variance))
 
         # Get order parameter across neighbourhood sizes:
         order_parameters.append(generate_order_parameter_scale_curve(average_heading))
@@ -198,6 +202,9 @@ def main():
 
     density_idr = np.array(density_idr)
     np.save(os.path.join(run_folderpath, "density_idr.npy"), density_idr)
+
+    mean_variances = np.array(mean_variances)
+    np.save(os.path.join(run_folderpath, "mean_variances.npy"), mean_variances)
 
 
 if __name__ == "__main__":

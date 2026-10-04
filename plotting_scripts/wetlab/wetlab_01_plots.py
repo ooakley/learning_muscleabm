@@ -39,10 +39,28 @@ def _():
 def _():
     import matplotlib as mpl
 
+    # Font formatting:
     mpl.rcParams['font.family'] = 'serif'
     mpl.rcParams['font.serif'] = "cmr10"
+    mpl.rcParams['font.size'] = 9
     mpl.rcParams["mathtext.fontset"] = "cm"
     mpl.rcParams['axes.unicode_minus'] = False
+    mpl.rcParams['axes.labelsize'] = 9
+
+    # Tick formating:
+    mpl.rcParams['xtick.major.size'] = 2
+    mpl.rcParams['xtick.major.pad'] = 1.5
+    mpl.rcParams['ytick.major.size'] = 2
+    mpl.rcParams['ytick.major.pad'] = 1.5
+    mpl.rcParams['xtick.labelsize'] = 7
+    mpl.rcParams['ytick.labelsize'] = 7
+
+    # Label formatting:
+    mpl.rcParams['axes.labelpad'] = 2.5
+
+    # Layout formatting:
+    mpl.rcParams['figure.constrained_layout.hspace'] = 0.04
+    mpl.rcParams['figure.constrained_layout.wspace'] = 0.04
     return
 
 
@@ -52,13 +70,19 @@ def _(datetime, subprocess):
     # A4 dimensions: 8.27 × 11.69 inches
     # Image dimensions: 160 x ? mm
     # Metadata: date, script, github branch id, og experiment source
-    OUT_DIRPATH = "plotting_scripts/out"
+    OUT_DIRPATH = "plotting_scripts/wetlab/out"
     CONTROL_PALETTE = "#1A85FF"
     RD_PALETTE = "#D41159"
     MINIMUM_FRAMES = 48
     PIXEL_SIZE = 0.3469 * 2  # Pixel size in µm
     SAMPLE_EXPERIMENT = "/camp/home/eloaklo/home/shared/eloaklo/analysed_data/OEO20260313"
     MM_UNIT = 1/25.4  # Millimeters in inches, for matplotlib
+
+    TEXT_WIDTH = 135 * MM_UNIT
+    TEXT_HEIGHT = 217 * MM_UNIT 
+
+    FULL_WIDTH = 170 * MM_UNIT
+    FULL_HEIGHT = TEXT_HEIGHT * 0.8
 
     # Get current commit hash:
     commit_hash = subprocess.run("git rev-parse --short HEAD", shell=True, capture_output=True)
@@ -75,11 +99,11 @@ def _(datetime, subprocess):
         CONTROL_PALETTE,
         METADATA_DICTIONARY,
         MINIMUM_FRAMES,
-        MM_UNIT,
         OUT_DIRPATH,
         PIXEL_SIZE,
         RD_PALETTE,
         SAMPLE_EXPERIMENT,
+        TEXT_WIDTH,
     )
 
 
@@ -214,10 +238,10 @@ def _(
     AnchoredSizeBar,
     CONTROL_PALETTE,
     METADATA_DICTIONARY,
-    MM_UNIT,
     OUT_DIRPATH,
     PIXEL_SIZE,
     RD_PALETTE,
+    TEXT_WIDTH,
     cc,
     datetime,
     fm,
@@ -227,7 +251,7 @@ def _(
     trajectory_array_list,
 ):
     def plot_trajectory_grid():
-        fig, axs = plt.subplots(2, 3, figsize=(160 * MM_UNIT, 97.5 * MM_UNIT), layout="constrained")
+        fig, axs = plt.subplots(2, 3, figsize=(TEXT_WIDTH, 3.5))
 
         # Set up fontprops for scalebar:
         fontprops = fm.FontProperties(size=7)
@@ -271,11 +295,15 @@ def _(
         axs[1, 1].set_xlabel("3.3x$10^3$ cells/well", labelpad=6.0)
         axs[1, 2].set_xlabel("1.6x$10^3$ cells/well", labelpad=6.0)
 
+        # Adjust layout:
+        edging = 0.02
+        fig.subplots_adjust(0.1, 0.1, 1 - 0.1, 1 - 0.1, hspace=0.05, wspace=0.05)
+
         # Add colorbar:
         fig.colorbar(
             image_object, ax=axs.flatten(),
             label="Time Elapsed (h)", ticks=[0, 12, 24],
-            fraction=0.1, shrink=0.8, pad=0.025
+            fraction=0.025, shrink=1.0
         )
 
         # Update metadata time:
@@ -292,10 +320,10 @@ def _(
     AnchoredSizeBar,
     CONTROL_PALETTE,
     METADATA_DICTIONARY,
-    MM_UNIT,
     OUT_DIRPATH,
     PIXEL_SIZE,
     RD_PALETTE,
+    TEXT_WIDTH,
     cc,
     datetime,
     fm,
@@ -305,7 +333,7 @@ def _(
     speed_array_list,
 ):
     def plot_speed_grid():
-        fig, axs = plt.subplots(2, 3, figsize=(160 * MM_UNIT, 97.5 * MM_UNIT), layout="constrained")
+        fig, axs = plt.subplots(2, 3, figsize=(TEXT_WIDTH, 3.5))
 
         # Set up fontprops for scalebar:
         fontprops = fm.FontProperties(size=7)
@@ -334,7 +362,7 @@ def _(
             # Add scalebar:
             scalebar = AnchoredSizeBar(
                 ax.transData,
-                100, '100 µm', 'upper right', 
+                100, '100 $\\mu$m', 'upper right', 
                 pad=1, color='white', frameon=False,
                 size_vertical=1, fontproperties=fontprops
             )
@@ -349,11 +377,15 @@ def _(
         axs[1, 1].set_xlabel("3.3x$10^3$ cells/well", labelpad=6.0)
         axs[1, 2].set_xlabel("1.6x$10^3$ cells/well", labelpad=6.0)
 
+        # Adjust layout:
+        edging = 0.02
+        fig.subplots_adjust(0.1, 0.1, 1 - 0.1, 1 - 0.1, hspace=0.05, wspace=0.05)
+
         # Add colorbar:
         fig.colorbar(
             image_object, ax=axs.flatten(),
-            label="Speed (µm/min)",
-            fraction=0.1, shrink=0.8, pad=0.025
+            label="Speed ($\\mu$m/min)",
+            fraction=0.025, shrink=1.0
         )
 
         # Update metadata time:
@@ -373,12 +405,12 @@ def _():
 
 @app.cell
 def _():
+    # Generate LDA plot of trajectories (just for fun):
     return
 
 
 @app.cell
 def _():
-    # Generate LDA plot of trajectories (just for fun):
     return
 
 
