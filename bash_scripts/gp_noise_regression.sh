@@ -2,55 +2,48 @@
 #SBATCH --job-name=gp_noise
 #SBATCH --partition=ncpu
 #SBATCH --time=12:00:00
-#SBATCH --ntasks=14
+#SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
 #SBATCH --mem-per-cpu=8G
+#SBATCH --array=0-11
+#SBATCH --output=logs/emulation/%x_%A_%a.out
 
-# Script inputs:
-usage="Usage: sbatch gp_noise_regression.sh <experiment_dirpath>"
+# Trains a GP of the log standard error of each model metric (one array task per metric)
+# on the sample matrix and summary data of an experiment folder. Usage, from the
+# repository root:
+#
+#     sbatch bash_scripts/gp_noise_regression.sh <experiment_dirpath>
+set -eo pipefail
+
+# --- Arguments ---
+usage="Usage: sbatch bash_scripts/gp_noise_regression.sh <experiment_dirpath>"
 experiment_dirpath=${1:?$usage}
 
 ml load uv
+# Lmod is not guaranteed to work with unset variables treated as errors, so only from here:
+set -u
 
-# Movement metrics:
-srun --ntasks 1 uv run python python_scripts/emulation/gp_noise_training.py \
-    --experiment_dirpath "$experiment_dirpath" \
-    --metric_name speeds &
-sleep 60
+metrics=(
+    # Movement metrics:
+    speeds
+    meander_ratios
+    ann_indices
+    coherency
+    interaction
+    order_parameters
+    # Centre of mass metrics:
+    com_speeds
+    com_meander_ratios
+    com_ann_indices
+    com_coherency
+    com_interaction
+    com_order_parameters
+)
+metric=${metrics[$SLURM_ARRAY_TASK_ID]}
 
-srun --ntasks 1 uv run python python_scripts/emulation/gp_noise_training.py \
-    --experiment_dirpath "$experiment_dirpath" \
-    --metric_name meander_ratios &
-srun --ntasks 1 uv run python python_scripts/emulation/gp_noise_training.py \
-    --experiment_dirpath "$experiment_dirpath" \
-    --metric_name ann_indices &
-srun --ntasks 1 uv run python python_scripts/emulation/gp_noise_training.py \
-    --experiment_dirpath "$experiment_dirpath" \
-    --metric_name coherency &
-srun --ntasks 1 uv run python python_scripts/emulation/gp_noise_training.py \
-    --experiment_dirpath "$experiment_dirpath" \
-    --metric_name interaction &
-srun --ntasks 1 uv run python python_scripts/emulation/gp_noise_training.py \
-    --experiment_dirpath "$experiment_dirpath" \
-    --metric_name order_parameters &
+export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
+export MKL_NUM_THREADS=$SLURM_CPUS_PER_TASK
 
-srun --ntasks 1 uv run python python_scripts/emulation/gp_noise_training.py \
+uv run --no-sync python python_scripts/emulation/gp_noise_training.py \
     --experiment_dirpath "$experiment_dirpath" \
-    --metric_name com_speeds &
-srun --ntasks 1 uv run python python_scripts/emulation/gp_noise_training.py \
-    --experiment_dirpath "$experiment_dirpath" \
-    --metric_name com_meander_ratios &
-srun --ntasks 1 uv run python python_scripts/emulation/gp_noise_training.py \
-    --experiment_dirpath "$experiment_dirpath" \
-    --metric_name com_ann_indices &
-srun --ntasks 1 uv run python python_scripts/emulation/gp_noise_training.py \
-    --experiment_dirpath "$experiment_dirpath" \
-    --metric_name com_coherency &
-srun --ntasks 1 uv run python python_scripts/emulation/gp_noise_training.py \
-    --experiment_dirpath "$experiment_dirpath" \
-    --metric_name com_interaction &
-srun --ntasks 1 uv run python python_scripts/emulation/gp_noise_training.py \
-    --experiment_dirpath "$experiment_dirpath" \
-    --metric_name com_order_parameters &
-
-wait
+    --metric_name "$metric"

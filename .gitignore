@@ -62,9 +62,18 @@ out*
 slurm*
 *Data
 model_experiments/*
-model_parameter_json/*/*.txt
-model_parameter_json/*/*.csv
-model_parameter_json/*/*.png
+configs/model_parameter_json/*/*.txt
+configs/model_parameter_json/*/*.csv
+configs/model_parameter_json/*/*.png
+# Simulation timings, written next to each simulation's config:
+sim_time.txt
+# Logs (e.g. from GNU parallel) and pickled outputs (e.g. PySR checkpoints):
+*.log
+*.pkl
+sr_experiments/
 img_tmp/*
 plotting_scripts/*/*/*.npz
-logs
+# SLURM logs, keeping the folders themselves as SLURM does not create them:
+logs/**
+!logs/**/
+!logs/**/.gitkeep

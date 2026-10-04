@@ -283,7 +283,7 @@ def _():
 @app.cell
 def _(OUTPUT_COLUMN_NAMES, interpolate_to_wetlab_frames, np, os, pd):
     # Read dataframe into memory:
-    dirpath = "model_parameter_json/matrix_test"
+    dirpath = "configs/model_parameter_json/matrix_test"
     filepath = os.path.join(dirpath, "positions_seed000.csv")
     trajectory_dataframe = pd.read_csv(
         filepath, index_col=None, header=None, names=OUTPUT_COLUMN_NAMES
@@ -304,7 +304,7 @@ def _(OUTPUT_COLUMN_NAMES, interpolate_to_wetlab_frames, np, os, pd):
 
 @app.cell
 def _(interpolated_array, plot_csv):
-    plot_csv(interpolated_array, "model_parameter_json/matrix_test/trajectory.png")
+    plot_csv(interpolated_array, "configs/model_parameter_json/matrix_test/trajectory.png")
     return
 
 

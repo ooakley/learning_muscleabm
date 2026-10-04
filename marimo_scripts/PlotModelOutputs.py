@@ -24,7 +24,7 @@ def _():
 
 @app.cell
 def _():
-    DATA_DIR_PATH = "model_parameter_json/matrix_test"
+    DATA_DIR_PATH = "configs/model_parameter_json/matrix_test"
     return (DATA_DIR_PATH,)
 
 

@@ -6,13 +6,21 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --mem-per-cpu=4G
 #SBATCH --array=0-3
-#SBATCH --output=logs/nn_train_%A_%a.out
+#SBATCH --output=logs/emulation/%x_%A_%a.out
 
-# Script inputs:
-usage="Usage: sbatch nn_regression.sh <experiment_dirpath>"
+# Cross-validates the baseline neural network regressor on each model metric (one array
+# task per metric). Usage, from the repository root:
+#
+#     sbatch bash_scripts/nn_regression.sh <experiment_dirpath>
+set -eo pipefail
+
+# --- Arguments ---
+usage="Usage: sbatch bash_scripts/nn_regression.sh <experiment_dirpath>"
 experiment_dirpath=${1:?$usage}
 
 ml load uv
+# Lmod is not guaranteed to work with unset variables treated as errors, so only from here:
+set -u
 
 metrics=(speeds meander_ratios ann_indices coherency)
 # metrics=(speeds)

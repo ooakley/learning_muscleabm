@@ -133,16 +133,20 @@ if [ "$first_stage_index" -le 3 ]; then
     done
 fi
 
-# SLURM does not create log folders, and a job whose log folder is missing fails at once:
-mkdir -p slurm_out logs
+# SLURM does not create log folders, and a job whose log folder is missing fails at once.
+# Each stage logs to the folder of its part of the codebase:
+mkdir -p logs/search logs/simulation logs/collation logs/emulation logs/inference
 
-# The training and MCMC jobs run with uv's --no-sync, so install the environment (including
-# the shared muscleabm package that the Python scripts import) before anything is queued:
+# The job scripts run with uv's --no-sync, so install the environment (including the
+# shared muscleabm package that the Python scripts import) before anything is queued:
 if [ "$dry_run" = true ]; then
     echo "Would run: uv sync"
 else
     if ! command -v uv > /dev/null && command -v ml > /dev/null; then
+        # Lmod is not guaranteed to work with unset variables treated as errors:
+        set +u
         ml load uv
+        set -u
     fi
     if ! command -v uv > /dev/null; then
         echo "uv not found: load it first (ml load uv), exiting..."
@@ -191,6 +195,12 @@ set_dependency () {
     fi
 }
 
+# sbatch arguments that send the log of a Python stage to the folder of its script's stage,
+# e.g. logs/search for python_scripts/search/generate_hm_sweep.py. Usage: log_argument <script>
+log_argument () {
+    echo "--output=logs/$(basename "$(dirname "$1")")/%x_%j.out"
+}
+
 # If a submission fails part-way, say how to cancel what is already queued:
 report_failure () {
     echo "Submission failed. Jobs already queued: ${submitted_job_ids[*]:-none}"
@@ -235,7 +245,7 @@ for wave in $(seq "$first_wave_id" $(( wave_count - 1 ))); do
         if [ ! -d "${wave_dirpath}/run_data" ]; then
             set_dependency afterok "$mcmc"
             generate=$(submit "generate" ${dependency[@]+"${dependency[@]}"} --job-name="hm${wave}_generate" \
-                "$python_stage_script" "$generate_python_script" \
+                "$(log_argument "$generate_python_script")" "$python_stage_script" "$generate_python_script" \
                 --experiment_dirpath "$experiment_dirpath" --hm_wave_id $(( wave - 1 )) \
                 --mcmc_dirname "$mcmc_dirname" --sample_count "$hm_sample_count" \
                 --burn_in_fraction "$burn_in_fraction")
@@ -268,7 +278,7 @@ for wave in $(seq "$first_wave_id" $(( wave_count - 1 ))); do
         # 4. Rebuild the global dataset, stopping the chain if too much of the wave failed:
         set_dependency afterok "$collate"
         collate_hm=$(submit "collate_hm" "${dependency[@]}" --job-name="hm${wave}_collate_hm" \
-            "$python_stage_script" "$collate_hm_python_script" \
+            "$(log_argument "$collate_hm_python_script")" "$python_stage_script" "$collate_hm_python_script" \
             --experiment_dirpath "$experiment_dirpath" --max_failed_fraction "$max_failed_fraction" \
             --required_hm_wave_id "$wave")
         submitted_job_ids+=("$collate_hm")
@@ -276,7 +286,7 @@ for wave in $(seq "$first_wave_id" $(( wave_count - 1 ))); do
         # 5. Test the previous wave's GP models against this wave's simulations (nothing waits on this):
         if [ "$run_validation" = true ] && [ "$wave" -gt 0 ]; then
             validate=$(submit "validate" "${dependency[@]}" --job-name="hm${wave}_validate" \
-                "$python_stage_script" "$validate_python_script" \
+                "$(log_argument "$validate_python_script")" "$python_stage_script" "$validate_python_script" \
                 --experiment_dirpath "$experiment_dirpath" --hm_wave_id $(( wave - 1 )) \
                 --gp_models_dirpath "${experiment_dirpath}/hm$(( wave - 1 ))/${gp_folder_name}")
             submitted_job_ids+=("$validate")

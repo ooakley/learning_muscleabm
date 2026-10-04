@@ -18,7 +18,7 @@ namespace po = boost::program_options;
 /*
 Hello! There are a lot of command line arguments - it's much easier to play around with the config file,
 and run the simulation with this handy python script (after compiling the code):
-python3 ./python_scripts/call_json_parameters.py --path_to_config ./example_config.json
+python3 ./python_scripts/simulation/call_json_parameters.py --path_to_config ./configs/example_config.json
 */
 
 int main(int argc, char** argv) {

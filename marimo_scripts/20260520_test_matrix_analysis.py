@@ -142,7 +142,7 @@ def _():
 
 @app.cell
 def _(format_fibre_list, os, read_matrix_into_list):
-    run_folderpath = "model_parameter_json/matrix_test"
+    run_folderpath = "configs/model_parameter_json/matrix_test"
     filename = "matrix_seed000.txt"
     filepath = os.path.join(run_folderpath, filename)
     fibre_list = read_matrix_into_list(filepath)
