@@ -9,6 +9,7 @@
         "gridSize": 128,
         "dt": 1,
         "patternSigma": 0,
+        "patternFibreCount": 0,
         "adhesionReductionRate": 0,
         "aspectRatio": 1,
         "matrixCoupling": 0,

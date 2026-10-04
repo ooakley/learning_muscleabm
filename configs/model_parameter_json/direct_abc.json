@@ -6,6 +6,7 @@
     "dt": 1,
     "matrixSampleRate": 0,
     "patternSigma": 0,
+    "patternFibreCount": 0,
     "aspectRatio": 1,
     "matrixCoupling": 0,
     "cellStiffness": 0.005,

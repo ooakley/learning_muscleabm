@@ -5,6 +5,7 @@
     "gridSize": 128,
     "dt": 1,
     "patternSigma": 0,
+    "patternFibreCount": 0,
     "aspectRatio": 1,
     "matrixCoupling": 2.0,
     "matrixSampleRate": 10,
@@ -21,6 +22,8 @@
     "collisionAdvectionRate": 0.1,
     "cellStiffness": 0.1,
     "surfaceStickiness": 10,
+    "summariseMatrixOutput": true,
+    "writeMatrixTimeseries": true,
     "jobArrayID": 2,
     "outputFolder": "configs/model_parameter_json/example_rd_csm_params"
 }

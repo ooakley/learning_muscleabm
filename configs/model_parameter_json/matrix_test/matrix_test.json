@@ -5,6 +5,7 @@
     "gridSize": 128,
     "dt": 1,
     "patternSigma": 0,
+    "patternFibreCount": 0,
     "aspectRatio": 1,
     "numberOfCells": 400,
     "cueDiffusionRate": 1.346598788131494,
