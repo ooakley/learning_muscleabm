@@ -23,7 +23,6 @@ public:
 
         // Collision parameters:
         double setCellBodyRadius,
-        double setAspectRatio,
         double setCollisionFlowReductionRate,
         double setAdhesionReductionRate,
 
@@ -84,12 +83,9 @@ public:
     void takeRandomStep();
 
 private:
-    // Randomness and seeding:
-    unsigned int cellSeed;
+    // Model infrastructure:
     int cellID;
     double dt;
-    std::mt19937 seedGenerator;
-    std::uniform_int_distribution<unsigned int> seedDistribution;
 
     // Movement parameters:
     double cueDiffusionRate;
@@ -102,7 +98,6 @@ private:
 
     // Collision parameters:
     double cellBodyRadius;
-    double cellAspectRatio; // Not used by the current collision model.
     double collisionFlowReductionRate;
     double adhesionReductionRate;
 
@@ -147,13 +142,9 @@ private:
     double finalCILEffectX;
     double finalCILEffectY;
 
-    // Generators for sampling noise in actin flow:
-    std::mt19937 generatorInfluence;
-    std::mt19937 generatorProtrusion;
-
-    // Generators for sampling matrix attachment points:
-    std::mt19937 generatorU1;
-    std::mt19937 generatorMatrixRadiusSampling;
+    // Random number generators, one per random process, each seeded from the cell seed:
+    std::mt19937 actinFlowGenerator; // Noise in actin flow magnitude and direction.
+    std::mt19937 attachmentPointGenerator; // Positions of matrix attachment points.
 
     // General distributions:
     std::uniform_real_distribution<double> uniformDistribution;

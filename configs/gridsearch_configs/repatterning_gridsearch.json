@@ -8,7 +8,6 @@
         "worldSize": 2048,
         "gridSize": 128,
         "dt": 1,
-        "aspectRatio": 1,
         "patternFibreCount": 100
     },
     "gridsearch_parameters": [

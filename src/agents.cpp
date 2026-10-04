@@ -23,7 +23,6 @@ CellAgent::CellAgent(
 
     // Collision parameters:
     double setCellBodyRadius,
-    double setAspectRatio,
     double setCollisionFlowReductionRate,
     double setAdhesionReductionRate,
 
@@ -38,8 +37,7 @@ CellAgent::CellAgent(
     double startX, double startY, double startHeading
     )
     // Model infrastructure:
-    : cellSeed{setCellSeed}
-    , cellID{setCellID}
+    : cellID{setCellID}
     , dt{setdt}
 
     // Movement parameters:
@@ -53,7 +51,6 @@ CellAgent::CellAgent(
 
     // Collision parameters:
     , cellBodyRadius{setCellBodyRadius}
-    , cellAspectRatio{setAspectRatio}
     , collisionFlowReductionRate{setCollisionFlowReductionRate}
     , adhesionReductionRate{setAdhesionReductionRate}
 
@@ -91,28 +88,16 @@ CellAgent::CellAgent(
     , finalCILEffectX{0}
     , finalCILEffectY{0}
 {
-    // Initialising randomness:
-    seedGenerator = std::mt19937(cellSeed);
-    seedDistribution = std::uniform_int_distribution<unsigned int>(0, UINT32_MAX);
-
-    // Initialising influence selector:
-    generatorInfluence = std::mt19937(seedDistribution(seedGenerator));
+    // Seed each generator with a successive draw from a generator seeded by the cell seed:
+    std::mt19937 seedGenerator(setCellSeed);
+    std::uniform_int_distribution<unsigned int> seedDistribution(0, UINT32_MAX);
+    actinFlowGenerator = std::mt19937(seedDistribution(seedGenerator));
+    attachmentPointGenerator = std::mt19937(seedDistribution(seedGenerator));
 
     // General Distributions:
     uniformDistribution = std::uniform_real_distribution<double>(0, 1);
     angleUniformDistribution = std::uniform_real_distribution<double>(-M_PI, M_PI);
     standardNormalDistribution = std::normal_distribution<double>(0, 1);
-
-    // Generators for matrix attachment point sampling:
-    generatorU1 = std::mt19937(seedDistribution(seedGenerator));
-
-    // Skip the seeds of since-removed generators, so that a given seed still reproduces
-    // earlier simulation outputs:
-    for (int i = 0; i < 4; ++i) {
-        seedDistribution(seedGenerator);
-    }
-
-    generatorMatrixRadiusSampling = std::mt19937(seedDistribution(seedGenerator));
 
     // Ensuring shape direction is direction-agnostic:
     shapeDirection = nematicAngleMod(shapeDirection);
@@ -248,14 +233,14 @@ void CellAgent::takeRandomStep() {
         gamma*(steadyState - flowMagnitude) + (effectiveAmplitude/(2*flowMagnitude))
     };
     double magnitudeUpdateDiffusion{
-        std::sqrt(fluctuationAmplitude)*standardNormalDistribution(generatorInfluence)
+        std::sqrt(fluctuationAmplitude)*standardNormalDistribution(actinFlowGenerator)
     };
 
     double angleUpdateDrift{
         gamma*std::sin(calculateAngularDistance(totalAdvectionDirection, flowDirection))
     };
     double angleUpdateDiffusion{
-        (standardNormalDistribution(generatorProtrusion) * std::sqrt(effectiveAmplitude)) / flowMagnitude
+        (standardNormalDistribution(actinFlowGenerator) * std::sqrt(effectiveAmplitude)) / flowMagnitude
     };
 
     // Apply update - in stochastic differential equations, randomly sampled terms are scaled by the
@@ -652,8 +637,8 @@ std::vector<double> CellAgent::sampleAttachmentPoint() {
     double actingCellY{getY()};
 
     // Sampling from random radius in cell area:
-    double samplePointDirection{angleUniformDistribution(generatorMatrixRadiusSampling)};
-    double samplePointRadius{std::sqrt(uniformDistribution(generatorU1)) * cellBodyRadius};
+    double samplePointDirection{angleUniformDistribution(attachmentPointGenerator)};
+    double samplePointRadius{std::sqrt(uniformDistribution(attachmentPointGenerator)) * cellBodyRadius};
 
     // Getting point in frame:
     double actingFrameX{std::cos(samplePointDirection) * samplePointRadius};

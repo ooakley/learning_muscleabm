@@ -9,7 +9,7 @@
 // Constructor:
 ECMField::ECMField(
     int setMatrixElements, double setPatternSigma, int setPatternFibreCount,
-    int setECMSeed
+    unsigned int setECMSeed
     )
     : patternSigma{setPatternSigma}
     , patternFibreCount{setPatternFibreCount}
@@ -25,20 +25,20 @@ ECMField::ECMField(
         fibreMatrix.push_back(rowConstruct);
     }
 
-    // Initialise the RNG for sampling fibres:
-    seedGenerator = std::mt19937(setECMSeed);
-    seedDistribution = std::uniform_int_distribution<unsigned int>(0, UINT32_MAX);
-    generatorFibreSampling = std::mt19937(seedDistribution(seedGenerator));
+    // Seed each generator with a successive draw from a generator seeded by the ECM seed:
+    std::mt19937 seedGenerator(setECMSeed);
+    std::uniform_int_distribution<unsigned int> seedDistribution(0, UINT32_MAX);
+    fibreSamplingGenerator = std::mt19937(seedDistribution(seedGenerator));
+    patterningGenerator = std::mt19937(seedDistribution(seedGenerator));
 
-    // Initialise the RNG for generating pattern:
-    generatorPatterning = std::mt19937(seedDistribution(seedGenerator));
+    // Distribution of background fibre headings:
     patternDistribution = std::normal_distribution<double>(0, patternSigma);
 
     // Pattern the fibre matrix with background fibres, with headings drawn from N(0, patternSigma):
     for (int i = 0; i < matrixElementCount; ++i) {
         for (int j = 0; j < matrixElementCount; ++j) {
             for (int n = 0; n < patternFibreCount; ++n) {
-                double sampledHeading{patternDistribution(generatorPatterning)};
+                double sampledHeading{patternDistribution(patterningGenerator)};
                 addToFibreMatrix(i, j, sampledHeading);
             }
         }
@@ -57,7 +57,7 @@ std::tuple<double, double> ECMField::sampleFibreMatrix(int i, int j) {
 
     // Return 1 density if fibers present:
     std::uniform_int_distribution<> indexDistribution(0, sampleSize-1);
-    int sampledIndex{indexDistribution(generatorFibreSampling)};
+    int sampledIndex{indexDistribution(fibreSamplingGenerator)};
     double sampledFibreHeading{fibreMatrix[i][j][sampledIndex]};
     while (sampledFibreHeading < 0) {sampledFibreHeading += M_PI;}
     while (sampledFibreHeading >= M_PI) {sampledFibreHeading -= M_PI;}

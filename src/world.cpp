@@ -13,7 +13,7 @@
 // Constructor and intialisation:
 World::World
 (
-    int setWorldSeed,
+    unsigned int setWorldSeed,
     double setWorldSideLength,
     int setECMElementCount,
     int setNumberOfCells,
@@ -32,33 +32,19 @@ World::World
     , cellParameters{setCellParameters}
     , collisionCellList{CollisionCellList(4, 2048)}
     , numberOfCells{setNumberOfCells}
-    , worldSeed{setWorldSeed}
 {
-    // Initialising randomness:
-    seedGenerator = std::mt19937(worldSeed);
-    seedDistribution = std::uniform_int_distribution<unsigned int>(0, UINT32_MAX);
-    std::cout << seedDistribution(seedGenerator) << "\n";
-
-    // Initialising generators for cell seeds:
-    shuffleGenerator = std::mt19937(seedDistribution(seedGenerator));
-    cellSeedGenerator = std::mt19937(seedDistribution(seedGenerator));
-
-    // Initialising generators for random selection of position and heading:
-    xPositionGenerator = std::mt19937(seedDistribution(seedGenerator));
-    yPositionGenerator = std::mt19937(seedDistribution(seedGenerator));
-    headingGenerator = std::mt19937(seedDistribution(seedGenerator));
-
-    // Skip the seeds of since-removed generators, so that a given seed still reproduces
-    // earlier simulation outputs:
-    seedDistribution(seedGenerator);
-    seedDistribution(seedGenerator);
-
-    // Initialising generator for random local sampling of environment by cells:
-    matrixSamplingGenerator = std::mt19937(seedDistribution(seedGenerator));
-
     // Distributions:
     positionDistribution = std::uniform_real_distribution<double>(0, worldSideLength);
     headingDistribution = std::uniform_real_distribution<double>(-M_PI, M_PI);
+    cellSeedDistribution = std::uniform_int_distribution<unsigned int>(0, UINT32_MAX);
+
+    // Seed each generator, and the ECM, with a successive draw from a generator seeded by the
+    // world seed:
+    std::mt19937 seedGenerator(setWorldSeed);
+    std::uniform_int_distribution<unsigned int> seedDistribution(0, UINT32_MAX);
+    cellInitialisationGenerator = std::mt19937(seedDistribution(seedGenerator));
+    cellOrderGenerator = std::mt19937(seedDistribution(seedGenerator));
+    attachmentCountGenerator = std::mt19937(seedDistribution(seedGenerator));
 
     // Initialise ECM:
     ecmField = ECMField(
@@ -135,7 +121,7 @@ void World::writeSummarisedMatrixToCSV(std::ofstream& matrixFile) {
 // Public simulation functions:
 void World::runSimulationStep() {
     // Shuffling acting order of cells:
-    std::shuffle(std::begin(cellAgentVector), std::end(cellAgentVector), shuffleGenerator);
+    std::shuffle(std::begin(cellAgentVector), std::end(cellAgentVector), cellOrderGenerator);
 
     // Looping through cells and running their behaviour:
     for (int i = 0; i < numberOfCells; ++i) {
@@ -164,10 +150,10 @@ void World::initialiseCellVector() {
 
 std::shared_ptr<CellAgent> World::initialiseCell(int setCellID) {
     // Generating positions and randomness:
-    const double startX{positionDistribution(xPositionGenerator)};
-    const double startY{positionDistribution(yPositionGenerator)};
-    const double startHeading{headingDistribution(headingGenerator)};
-    const unsigned int setCellSeed{seedDistribution(cellSeedGenerator)};
+    const double startX{positionDistribution(cellInitialisationGenerator)};
+    const double startY{positionDistribution(cellInitialisationGenerator)};
+    const double startHeading{headingDistribution(cellInitialisationGenerator)};
+    const unsigned int setCellSeed{cellSeedDistribution(cellInitialisationGenerator)};
 
     return std::make_shared<CellAgent>(
         // Defined behaviour parameters:
@@ -185,7 +171,6 @@ std::shared_ptr<CellAgent> World::initialiseCell(int setCellID) {
 
         // Collision parameters:
         cellParameters.cellBodyRadius,
-        cellParameters.aspectRatio,
         cellParameters.collisionFlowReductionRate,
         cellParameters.adhesionReductionRate,
 
@@ -210,17 +195,13 @@ void World::runCellStep(std::shared_ptr<CellAgent> actingCell) {
         matrixSampleCount = 0;
     } else {
         std::poisson_distribution<int> poissonDistribution(matrixSampleRate);
-        matrixSampleCount = poissonDistribution(matrixSamplingGenerator);
+        matrixSampleCount = poissonDistribution(attachmentCountGenerator);
     }
 
     std::vector<std::vector<double>> attachmentVector;
     for (int i = 0; i < matrixSampleCount; i++) {
         attachmentVector.push_back(actingCell->sampleAttachmentPoint());
     }
-
-    // Draw (and discard) one further attachment point, so that a given seed still reproduces
-    // earlier simulation outputs:
-    actingCell->sampleAttachmentPoint();
 
     // Set percepts of local matrix:
     if (matrixSampleCount == 0) {

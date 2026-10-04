@@ -13,7 +13,7 @@ public:
     // Constructor:
     ECMField(
         int setMatrixElements, double setPatternSigma, int setPatternFibreCount,
-        int setECMSeed
+        unsigned int setECMSeed
     );
     ECMField() = default;
 
@@ -26,13 +26,11 @@ public:
     void addToFibreMatrix(int i, int j, double heading);
 
 private:
-    // Necessary structures for reproducible random sampling:
-    std::mt19937 seedGenerator;
-    std::uniform_int_distribution<unsigned int> seedDistribution;
-    std::mt19937 generatorFibreSampling;
+    // Random number generators, one per random process, each seeded from the ECM seed:
+    std::mt19937 fibreSamplingGenerator; // Fibres sampled by cells at attachment points.
+    std::mt19937 patterningGenerator; // Headings of background fibres.
 
-    // RNG for generating pattern:
-    std::mt19937 generatorPatterning;
+    // Distribution of background fibre headings:
     std::normal_distribution<double> patternDistribution;
 
     // Initial pattern of matrix:

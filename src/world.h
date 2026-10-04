@@ -24,7 +24,6 @@ struct CellParameters {
 
     // Collision parameters:
     cellBodyRadius,
-    aspectRatio,
     collisionFlowReductionRate,
     adhesionReductionRate,
 
@@ -41,7 +40,7 @@ public:
     // Constructor and intialisation:
     World
     (
-        int setWorldSeed,
+        unsigned int setWorldSeed,
         double setWorldSideLength,
         int setECMElementCount,
         int setNumberOfCells,
@@ -82,24 +81,15 @@ private:
     // Cell population characteristics:
     int numberOfCells;
 
-    // Variables for initialising generators:
-    int worldSeed;
-    std::mt19937 seedGenerator;
-    std::uniform_int_distribution<unsigned int> seedDistribution;
+    // Random number generators, one per random process, each seeded from the world seed:
+    std::mt19937 cellInitialisationGenerator; // Initial position, heading and seed of each cell.
+    std::mt19937 cellOrderGenerator; // Order in which cells act in each timestep.
+    std::mt19937 attachmentCountGenerator; // Number of matrix attachment points of each cell.
 
-    // Generators for shuffling, cell positioning and cell rng seeding:
-    std::mt19937 shuffleGenerator;
-    std::mt19937 cellSeedGenerator;
-
-    std::mt19937 xPositionGenerator;
-    std::mt19937 yPositionGenerator;
-    std::mt19937 headingGenerator;
-
-    std::mt19937 matrixSamplingGenerator;
-
-    // Distributions for seeding position and initial heading:
+    // Distributions for initialising cells:
     std::uniform_real_distribution<double> positionDistribution;
     std::uniform_real_distribution<double> headingDistribution;
+    std::uniform_int_distribution<unsigned int> cellSeedDistribution;
 
     // Private member functions:
     // Initialisation Functions:
