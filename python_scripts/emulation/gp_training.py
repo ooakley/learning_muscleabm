@@ -193,7 +193,6 @@ def cross_validation(
         # Set up dataset:
         train_parameters = permuted_parameters[train_mask, :]
         train_target = permuted_target[train_mask]
-        train_sem = permuted_sem[train_mask]
     
         test_parameters = permuted_parameters[test_mask, :]
         test_target = permuted_target[test_mask]
@@ -400,7 +399,6 @@ def main():
     metric_mean = np.mean(output_metric)
     metric_std = np.std(output_metric)
     whitened_metric = (output_metric - metric_mean) / metric_std
-    whitened_sem = output_sem / metric_std
 
     # Save whitening transform:
     np.save(os.path.join(id_folderpath, "whiten_mean.npy"), metric_mean)

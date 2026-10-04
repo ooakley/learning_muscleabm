@@ -1,7 +1,7 @@
 [project]
 name = "learning-muscleabm"
 version = "0.1.0"
-description = "Add your description here"
+description = "Agent-based model of collective cell patterning in muscle development, with GP emulation and history matching against wet lab data."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -17,25 +17,32 @@ dependencies = [
     "gpflow>=2.5.2",
     "gplearn>=0.4.3",
     "gpytorch>=1.14.3",
+    "h5py>=3.15.1",
+    "imageio>=2.37.2",
     "graphlearning>=1.7.5",
     "jax>=0.10.1",
     "kmedoids>=0.5.4",
     "marimo>=0.18.1",
+    "matplotlib>=3.10.8",
     "numba>=0.63.1",
     "numpy<=2.3",
     "opencv-python>=4.13.0.90",
     "optax>=0.2.8",
     "pandas>=2.3.3",
+    "pillow>=12.1.0",
     "prinpy[neural]>=1.0.0",
     "psutil>=7.2.2",
     "pyro-ppl>=1.9.1",
     "pysr>=1.5.9",
     "scikit-image>=0.25.2",
+    "scikit-learn>=1.8.0",
     "scipy>=1.16.3",
     "seaborn>=0.13.2",
     "statsmodels>=0.14.6",
     "threadpoolctl>=3.6.0",
+    "tifffile>=2026.1.28",
     "torch>=2.9.1",
+    "tqdm>=4.67.1",
     "trimap>=1.1.5",
     "umap-learn>=0.5.11",
 ]
@@ -48,6 +55,21 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["muscleabm"]
+
+# Linting, with `uvx ruff check` (see the README). The rules are errors rather than style:
+# syntax errors, undefined or unused names, misused statements and invalid escapes.
+[tool.ruff]
+# With no paths, only the pipeline code is checked. The marimo notebooks and plotting apps
+# are checked when named, e.g. `uvx ruff check marimo_scripts`:
+extend-exclude = ["marimo_scripts", "plotting_scripts"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "W605"]
+
+[tool.ruff.lint.per-file-ignores]
+# marimo cells return the names they define, and end with a bare expression to display it:
+"marimo_scripts/*" = ["E7", "F401", "F811", "F841"]
+"plotting_scripts/**" = ["E7", "F401", "F811", "F841"]
 
 [tool.marimo.runtime]
 output_max_bytes = 30_000_000

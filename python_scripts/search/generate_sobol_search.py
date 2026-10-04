@@ -1,4 +1,10 @@
-"""Generates range of parameters to sample using low discrepancy Sobol sequences."""
+"""Generates range of parameters to sample using low discrepancy Sobol sequences.
+
+Creates the experiment folder, model_experiments/{date}-{experiment_name}, with the config
+at its root, and writes the sweep as its first history matching wave, in hm0/: the sample
+matrix, and one argument file per simulation in run_data/. bash_scripts/submit_hm_waves.sh
+then simulates and fits this wave, and generates the waves after it.
+"""
 import os
 import json
 import argparse
@@ -12,6 +18,9 @@ from muscleabm.sampling import COUNT_PARAMETER_NAME, JSONOutputManager
 
 # Define outputs folder:
 OUTPUTS_FOLDER = "model_experiments"
+
+# Folder of the first history matching wave, inside the experiment folder:
+FIRST_WAVE_FOLDER = "hm0"
 
 # Design points used by the MCMC likelihood:
 DEFAULT_DESIGN_COUNTS = [int(count) for count in np.linspace(50, 300, 11)]
@@ -49,7 +58,9 @@ def parse_arguments():
 
 
 def write_design_point_curves(config_dictionary, experiment_folderpath, curve_parameters, design_counts):
-    """Write one simulation per (parameter set, design count) into a sweep-style folder.
+    """Write one simulation per (parameter set, design count) as the experiment's first wave.
+
+    The config is saved in the experiment folder, and the sweep in its hm0 folder.
 
     curve_parameters: (n_curves, n_parameters - 1) unit-cube values, count column removed.
     design_counts:    integer cell counts simulated for every curve.
@@ -77,10 +88,11 @@ def write_design_point_curves(config_dictionary, experiment_folderpath, curve_pa
         raise ValueError(f"design_counts must lie within [{count_min}, {count_max}].")
 
     # Refuse to write over an existing sweep:
-    sample_matrix_filepath = os.path.join(experiment_folderpath, "sample_matrix.npy")
+    wave_folderpath = os.path.join(experiment_folderpath, FIRST_WAVE_FOLDER)
+    sample_matrix_filepath = os.path.join(wave_folderpath, "sample_matrix.npy")
     if os.path.exists(sample_matrix_filepath):
-        raise FileExistsError(f"{experiment_folderpath} already contains a sample matrix.")
-    os.makedirs(experiment_folderpath, exist_ok=True)
+        raise FileExistsError(f"{wave_folderpath} already contains a sample matrix.")
+    os.makedirs(wave_folderpath, exist_ok=True)
 
     # Build the full unit-cube matrix, re-inserting the count column:
     n_curves, n_counts = curve_parameters.shape[0], design_counts.shape[0]
@@ -93,14 +105,14 @@ def write_design_point_curves(config_dictionary, experiment_folderpath, curve_pa
 
     # Save the matrix (same name as a sweep) and what is needed to rebuild the curves:
     np.save(sample_matrix_filepath, sample_matrix)
-    np.save(os.path.join(experiment_folderpath, "curve_parameters.npy"), curve_parameters)
-    np.save(os.path.join(experiment_folderpath, "design_counts.npy"), design_counts)
+    np.save(os.path.join(wave_folderpath, "curve_parameters.npy"), curve_parameters)
+    np.save(os.path.join(wave_folderpath, "design_counts.npy"), design_counts)
     with open(os.path.join(experiment_folderpath, "config.json"), 'w') as output:
         json.dump(config_dictionary, output, indent=4)
 
     # Write the folder structure and argument files:
     print(f"Writing {n_curves} curves x {n_counts} counts = {sample_matrix.shape[0]} simulations...")
-    output_manager = JSONOutputManager(config_dictionary, experiment_folderpath)
+    output_manager = JSONOutputManager(config_dictionary, wave_folderpath)
     output_manager.generate_json_configs(sample_matrix, exact_counts=exact_counts)
     return sample_matrix
 
@@ -141,26 +153,29 @@ def main():
     if arguments.sobol_exponent is not None:
         config_dictionary["sample_exponent"] = arguments.sobol_exponent
 
-    if not os.path.exists(experiment_folderpath):
-        os.mkdir(experiment_folderpath)
+    # Refuse to write over an existing sweep:
+    wave_folderpath = os.path.join(experiment_folderpath, FIRST_WAVE_FOLDER)
+    sample_matrix_filepath = os.path.join(wave_folderpath, "sample_matrix.npy")
+    if os.path.exists(sample_matrix_filepath):
+        raise FileExistsError(f"{wave_folderpath} already contains a sample matrix.")
+    os.makedirs(wave_folderpath, exist_ok=True)
 
     # Generate random number generator for shuffling of variables:
     print("Generating samples...")
     sobol_sampler = qmc.Sobol(d=parameter_count, scramble=True, rng=GRIDSEARCH_SOBOL_SEED)
     sample_matrix = sobol_sampler.random_base2(m=config_dictionary["sample_exponent"])
 
-    # Save sample matrix:
-    sample_matrix_filepath = os.path.join(experiment_folderpath, "sample_matrix.npy")
+    # Save sample matrix, in the first wave's folder:
     np.save(sample_matrix_filepath, sample_matrix)
 
-    # Save gridsearch configuration space to folder:
+    # Save gridsearch configuration space to the experiment folder:
     output_config_path = os.path.join(experiment_folderpath, "config.json")
     with open(output_config_path, 'w') as output:
         json.dump(config_dictionary, output, indent=4)
 
     # Output matrix as nested set of folders with .json files:
     print("Generating folder structure and writing samples to .json files...")
-    output_manager = JSONOutputManager(config_dictionary, experiment_folderpath)
+    output_manager = JSONOutputManager(config_dictionary, wave_folderpath)
     output_manager.generate_json_configs(sample_matrix)
 
     return None

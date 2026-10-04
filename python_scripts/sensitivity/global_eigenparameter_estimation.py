@@ -99,7 +99,8 @@ def log_sammon_mapping(input_data, distance_matrix, n_components, batch_size=512
         normalised_transform = \
             log_transform / torch.linalg.norm(log_transform, dim=0, keepdims=True)
         similiarities = (normalised_transform.T @ normalised_transform)[axis_indices[0], axis_indices[1]]
-        axis_similarity = torch.sum(torch.abs(similiarities))
+        # Not currently part of the loss below:
+        axis_similarity = torch.sum(torch.abs(similiarities))  # noqa: F841
 
         # Get loading entropies:
         # --- Get entropies by transform dimension:

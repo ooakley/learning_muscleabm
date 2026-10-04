@@ -1,17 +1,8 @@
 import os
-import argparse
-import subprocess
 
 import numpy as np
 import pandas as pd
 
-import seaborn as sns
-import matplotlib as mpl
-
-import matplotlib.pyplot as plt
-
-from datetime import datetime
-import statsmodels.api as sm
 import statsmodels.formula.api as smf
 
 REGRESSANDS = [
