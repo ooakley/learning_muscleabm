@@ -73,10 +73,14 @@ private:
     int patternFibreCount;
 
     // Complex objects from our libraries:
-    std::vector<std::shared_ptr<CellAgent>> cellAgentVector;
+    std::vector<std::unique_ptr<CellAgent>> cellAgentVector;
     ECMField ecmField;
     CellParameters cellParameters;
     CollisionCellList collisionCellList;
+
+    // Buffers reused across cell steps, to avoid reallocating them:
+    std::vector<std::array<double, 2>> attachmentPoints;
+    std::vector<CellAgent*> localAgentBuffer;
 
     // Cell population characteristics:
     int numberOfCells;
@@ -94,10 +98,10 @@ private:
     // Private member functions:
     // Initialisation Functions:
     void initialiseCellVector();
-    std::shared_ptr<CellAgent> initialiseCell(int setCellID);
+    std::unique_ptr<CellAgent> initialiseCell(int setCellID);
 
     // Simulation functions:
-    void runCellStep(std::shared_ptr<CellAgent> actingCell);
+    void runCellStep(CellAgent& actingCell);
 
     // Calculating percepts for cells:
     double calculateCellDeltaTowardsECM(double ecmHeading, double cellHeading);

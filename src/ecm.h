@@ -20,7 +20,7 @@ public:
     // Getters:
     std::tuple<double, double> sampleFibreMatrix(int i, int j);
     std::tuple<double, double, double> summariseFibreMatrix(int i, int j) const;
-    std::deque<float> getFibreDeque(int i, int j) const;
+    const std::deque<float>& getFibreDeque(int i, int j) const;
 
     // Setters:
     void addToFibreMatrix(int i, int j, double heading);

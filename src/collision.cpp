@@ -1,73 +1,110 @@
 #include "collision.h"
 
-#include <unordered_map>
-
-using AgentPointer = std::shared_ptr<CellAgent>;
-using GridUnit = std::unordered_map<int, AgentPointer>;
-using CollisionRow = std::vector<GridUnit>;
-using CollisionMatrix = std::vector<CollisionRow>;
+#include <algorithm>
+#include <cmath>
 
 CollisionCellList::CollisionCellList(
-    int setCollisionElements, double fieldSize
+    double setFieldSize, double setInteractionRadius, int setNumberOfCells
 )
-    : collisionElements{setCollisionElements}
-    , lengthCollisionElement{fieldSize / setCollisionElements}
+    : fieldSize{setFieldSize}
+    , interactionRadius{setInteractionRadius}
+    , collisionElements{std::max(1, static_cast<int>(setFieldSize / setInteractionRadius))}
+    , lengthCollisionElement{setFieldSize / collisionElements}
+    , collisionMatrix(collisionElements * collisionElements)
+    , registeredRanges(setNumberOfCells)
 {
-    // Initialise the collision matrix:
-    for (int i = 0; i < collisionElements; ++i) {
-        CollisionRow rowConstruct{};
-        for (int j = 0; j < collisionElements; ++j) {
-            GridUnit emptyUnit;
-            rowConstruct.push_back(emptyUnit);
-        }
-        collisionMatrix.push_back(rowConstruct);
-    }
 }
 
-void CollisionCellList::addToCollisionMatrix(double x, double y, AgentPointer agentPointer) {
-    std::vector<int> indices{getIndexFromLocation(x, y)};
-    collisionMatrix[indices[0]][indices[1]].insert({agentPointer->getID(), agentPointer});
-}
+void CollisionCellList::addToCollisionMatrix(AgentPointer agentPointer) {
+    // Find the cell's segment, taking the image of the stadium point nearest the cell centre:
+    const double startX{agentPointer->getX()};
+    const double startY{agentPointer->getY()};
+    const double endX{takePeriodicModulus(agentPointer->getStadiumX(), startX)};
+    const double endY{takePeriodicModulus(agentPointer->getStadiumY(), startY)};
 
-void CollisionCellList::removeFromCollisionMatrix(double x, double y, AgentPointer agentPointer) {
-    std::vector<int> indices{getIndexFromLocation(x, y)};
-    collisionMatrix[indices[0]][indices[1]].erase(agentPointer->getID());
-}
-
-std::vector<AgentPointer> CollisionCellList::getLocalAgents(double x, double y) {
-    // Instantiante result accumulator:
-    std::vector<AgentPointer> localAgents{};
-    std::vector<int> indices{getIndexFromLocation(x, y)};
-
-    // Loop through neighbourhood:
-    for (int k = -1; k < 2; ++k) {
-        for (int l = -1; l < 2; ++l) {
-            int safeRow{rollOverIndex(indices[0] + k)};
-            int safeCol{rollOverIndex(indices[1] + l)};
-            for (auto& [agentID, pointer]: collisionMatrix[safeRow][safeCol]) {
-                localAgents.emplace_back(pointer);
-            }
+    // Register the cell in every grid element its capsule overlaps:
+    const auto [firstRow, lastRow] = getAxisRange(startY, endY);
+    const auto [firstColumn, lastColumn] = getAxisRange(startX, endX);
+    for (int row = firstRow; row <= lastRow; ++row) {
+        const int rowOffset{rollOverIndex(row) * collisionElements};
+        for (int column = firstColumn; column <= lastColumn; ++column) {
+            collisionMatrix[rowOffset + rollOverIndex(column)].push_back(agentPointer);
         }
     }
+    registeredRanges[static_cast<int>(agentPointer->getID())] = {firstRow, lastRow, firstColumn, lastColumn};
+}
 
-    return localAgents;
+void CollisionCellList::removeFromCollisionMatrix(AgentPointer agentPointer) {
+    const auto [firstRow, lastRow, firstColumn, lastColumn] =
+        registeredRanges[static_cast<int>(agentPointer->getID())];
+    for (int row = firstRow; row <= lastRow; ++row) {
+        const int rowOffset{rollOverIndex(row) * collisionElements};
+        for (int column = firstColumn; column <= lastColumn; ++column) {
+            std::vector<AgentPointer>& gridUnit{collisionMatrix[rowOffset + rollOverIndex(column)]};
+            auto agentIterator{std::find(gridUnit.begin(), gridUnit.end(), agentPointer)};
+            *agentIterator = gridUnit.back();
+            gridUnit.pop_back();
+        }
+    }
+}
+
+void CollisionCellList::getLocalAgents(
+    const CellAgent& actingAgent, std::vector<AgentPointer>& localAgents
+) const {
+    localAgents.clear();
+
+    // Collect the cells registered at the acting cell's centre and stadium point:
+    const std::array<std::array<double, 2>, 2> queryPoints{{
+        {actingAgent.getX(), actingAgent.getY()},
+        {actingAgent.getStadiumX(), actingAgent.getStadiumY()}
+    }};
+    for (const auto& [queryX, queryY] : queryPoints) {
+        const int row{getIndexFromPosition(queryY)};
+        const int column{getIndexFromPosition(queryX)};
+        const std::vector<AgentPointer>& gridUnit{collisionMatrix[row * collisionElements + column]};
+        localAgents.insert(localAgents.end(), gridUnit.begin(), gridUnit.end());
+    }
+
+    // Sort by ID and remove cells found at both points:
+    std::sort(
+        localAgents.begin(), localAgents.end(),
+        [](AgentPointer a, AgentPointer b) {return a->getID() < b->getID();}
+    );
+    localAgents.erase(std::unique(localAgents.begin(), localAgents.end()), localAgents.end());
 }
 
 int CollisionCellList::rollOverIndex(int index) const {
-    while (index < 0) {
-        index = index + collisionElements;
-    }
-    return index % collisionElements;
+    return ((index % collisionElements) + collisionElements) % collisionElements;
 }
 
-std::vector<int> CollisionCellList::getIndexFromLocation(double positionX, double positionY) {
-    // Get indices:
-    int xIndex{int(std::floor(positionX / lengthCollisionElement))};
-    int yIndex{int(std::floor(positionY / lengthCollisionElement))};
+int CollisionCellList::getIndexFromPosition(double position) const {
+    return rollOverIndex(static_cast<int>(std::floor(position / lengthCollisionElement)));
+}
 
-    // Note that the y index goes first here because of how we index matrices:
-    std::vector<int> positionIndex(2);
-    positionIndex[0] = yIndex;
-    positionIndex[1] = xIndex;
-    return positionIndex;
+double CollisionCellList::takePeriodicModulus(double queryPosition, double localPosition) const {
+    // Find the image of the query position nearest the local position:
+    double modulusPosition{queryPosition};
+    if (localPosition - queryPosition > (fieldSize / 2)) {
+        modulusPosition += fieldSize;
+    }
+    else if (localPosition - queryPosition < -(fieldSize / 2)) {
+        modulusPosition -= fieldSize;
+    }
+    return modulusPosition;
+}
+
+std::array<int, 2> CollisionCellList::getAxisRange(double start, double end) const {
+    // Grid elements covered along one axis by a segment widened by the interaction radius (with a
+    // small margin for rounding), before rolling over the periodic boundary:
+    const double margin{1e-3};
+    const double lower{std::min(start, end) - interactionRadius - margin};
+    const double upper{std::max(start, end) + interactionRadius + margin};
+    const int first{static_cast<int>(std::floor(lower / lengthCollisionElement))};
+    const int last{static_cast<int>(std::floor(upper / lengthCollisionElement))};
+
+    // Cover the whole axis once if the capsule spans it:
+    if (last - first + 1 >= collisionElements) {
+        return {0, collisionElements - 1};
+    }
+    return {first, last};
 }
