@@ -8,10 +8,9 @@
         "worldSize": 2048,
         "gridSize": 128,
         "dt": 1,
-        "thereIsMatrixInteraction": 1,
-        "aspectRatio": 1,
-        "matrixTurnoverRate": 0,
-        "matrixAdditionRate": 0
+        "patternSigma": 0,
+        "adhesionReductionRate": 0,
+        "aspectRatio": 1
     },
     "gridsearch_parameters": [
         ["cueDiffusionRate", [0.0001, 1.5]],
@@ -25,7 +24,7 @@
         ["collisionAdvectionRate", [0.0, 0.5]],
         ["cellStiffness", [0.1, 1.5]],
         ["surfaceStickiness", [0.1, 10]],
-        ["matrixAdvectionRate", [0, 3]],
+        ["matrixCoupling", [0, 15]],
         ["matrixSampleRate", [0.5, 15]],
         ["numberOfCells", [300, 400]]
     ]

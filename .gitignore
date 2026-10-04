@@ -73,6 +73,7 @@ sim_time.txt
 sr_experiments/
 img_tmp/*
 plotting_scripts/*/*/*.npz
-# SLURM logs, keeping the folder itself as SLURM does not create it:
-logs/*
-!logs/.gitkeep
+# SLURM logs, keeping the folders themselves as SLURM does not create them:
+logs/**
+!logs/**/
+!logs/**/.gitkeep
