@@ -255,6 +255,14 @@ void CellAgent::takeRandomStep() {
     // square root of dt.
     flowMagnitude += (magnitudeUpdateDrift * dt) + (magnitudeUpdateDiffusion*std::sqrt(dt));
     flowDirection += (angleUpdateDrift * dt) + (angleUpdateDiffusion*std::sqrt(dt));
+
+    // The update can overshoot the magnitude below zero. The flow vector is then the same as one
+    // of magnitude |r| along the opposite heading, so reflect to that: collisions decide whether
+    // the cell is moving towards a neighbour from its heading, assuming a positive magnitude.
+    if (flowMagnitude < 0) {
+        flowMagnitude = -flowMagnitude;
+        flowDirection += M_PI;
+    }
     flowDirection = angleMod(flowDirection);
 
     // Update flow direction and magnitude based on collisions:

@@ -181,6 +181,27 @@ TEST(MovementFlow, ZeroAdvectionKeepsTheCellFinite) {
     }, ::testing::ExitedWithCode(0), "");
 }
 
+TEST(MovementFlow, NoisyUpdatesNeverLeaveANegativeMagnitude) {
+    // A noisy update can overshoot the flow magnitude below zero. The flow vector r.(cos, sin)
+    // with r < 0 is the same as |r| along the opposite heading, which is how it must be held:
+    // collisions decide whether a cell is moving towards a neighbour from its heading alone.
+    CellSpec spec;
+    spec.fluctuationAmplitude = 2e-3;
+    spec.maximumSteadyStateActinFlow = 0.3;
+    auto cell{makeCell(spec)};
+    for (int step = 0; step < 5000; ++step) {
+        const double x{cell->getX()};
+        const double y{cell->getY()};
+        cell->takeRandomStep();
+        ASSERT_GE(cell->getActinFlowMagnitude(), 0) << "step " << step;
+        // The cell moves along its heading by its flow magnitude:
+        const double dx{minimalImage(x, cell->getX())};
+        const double dy{minimalImage(y, cell->getY())};
+        ASSERT_NEAR(dx, std::cos(cell->getActinFlowDirection()) * cell->getActinFlowMagnitude(), 1e-9);
+        ASSERT_NEAR(dy, std::sin(cell->getActinFlowDirection()) * cell->getActinFlowMagnitude(), 1e-9);
+    }
+}
+
 // --- Randomness ---
 
 class SeededCells : public ::testing::Test {
