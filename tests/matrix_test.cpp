@@ -1,6 +1,7 @@
 // Behavioural tests of the matrix: where cells sample and deposit fibres, what they sense from
 // them, the background pattern, and how fibres couple to a cell's actin flow.
 #include <cmath>
+#include <cstdlib>
 #include <vector>
 
 #include "gtest/gtest.h"
@@ -162,6 +163,27 @@ TEST(MatrixSensing, AlignedFibresGiveFullIntensityAndTheirAngle) {
         EXPECT_EQ(cell.getDirectionalIntensity(), 1.0 - 1e-4);  // Clamped below 1.
         EXPECT_NEAR(cell.getDirectionalInfluence(), expectedInfluence, 1e-6);
     }
+}
+
+TEST(MatrixSensing, PerpendicularFibresDoNotAbort) {
+    // Fibres exactly perpendicular to the cell are at +/-pi/2 from it, so the mean angle to them
+    // is exactly +/-pi/2, which a strict "< pi/2" assert rejected. Run in a subprocess, so that
+    // an abort fails only this test:
+    EXPECT_EXIT({
+        WorldSpec spec;
+        spec.matrixSampleRate = 20;
+        auto world{makeWorld(spec)};
+        fillMatrix(*world, {1.0});
+        // Find a cell heading at exactly pi/2 (as computed) from the fibres:
+        double cellHeading{1.0 - M_PI / 2};
+        while (std::abs(WorldTestAccess::cellDeltaTowardsECM(*world, 1.0, cellHeading)) != M_PI / 2) {
+            cellHeading = std::nextafter(cellHeading, 0.0);
+        }
+        CellAgent& cell{*WorldTestAccess::cells(*world)[0]};
+        Access::setFlow(cell, cellHeading, 1.0);
+        WorldTestAccess::runCellStep(*world, cell);
+        std::exit(std::abs(std::abs(cell.getDirectionalInfluence()) - M_PI / 2) < 1e-12 ? 0 : 1);
+    }, ::testing::ExitedWithCode(0), "");
 }
 
 TEST(MatrixSensing, IsotropicFibresGiveLowIntensity) {
