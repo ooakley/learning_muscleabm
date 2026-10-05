@@ -31,14 +31,17 @@ ECMField::ECMField(
     fibreSamplingGenerator = std::mt19937(seedDistribution(seedGenerator));
     patterningGenerator = std::mt19937(seedDistribution(seedGenerator));
 
-    // Distribution of background fibre headings:
-    patternDistribution = std::normal_distribution<double>(0, patternSigma);
+    // Distribution of background fibre headings (std::normal_distribution requires a positive
+    // spread, so a spread of 0 places every fibre at heading 0 without it):
+    if (patternSigma > 0) {
+        patternDistribution = std::normal_distribution<double>(0, patternSigma);
+    }
 
     // Pattern the fibre matrix with background fibres, with headings drawn from N(0, patternSigma):
     for (int i = 0; i < matrixElementCount; ++i) {
         for (int j = 0; j < matrixElementCount; ++j) {
             for (int n = 0; n < patternFibreCount; ++n) {
-                double sampledHeading{patternDistribution(patterningGenerator)};
+                double sampledHeading{patternSigma > 0 ? patternDistribution(patterningGenerator) : 0.0};
                 addToFibreMatrix(i, j, sampledHeading);
             }
         }

@@ -242,6 +242,17 @@ TEST(MatrixPattern, FibreCountAndSpread) {
     EXPECT_NEAR(sinSum / count, 0, 0.02);  // Centred on heading 0.
 }
 
+TEST(MatrixPattern, ZeroSpreadGivesAlignedFibres) {
+    // patternSigma = 0 (as in most configs) means every background fibre is at heading 0:
+    ECMField ecm(4, 0, 10, 1);
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            ASSERT_EQ(ecm.getFibreDeque(i, j).size(), 10u);
+            for (float heading : ecm.getFibreDeque(i, j)) {EXPECT_EQ(heading, 0);}
+        }
+    }
+}
+
 // --- Coupling of fibres to actin flow ---
 
 namespace {
