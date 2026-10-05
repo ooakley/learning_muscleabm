@@ -129,6 +129,23 @@ TEST(MatrixDeposition, SitesHoldAtMost500FibresDroppingTheOldest) {
     EXPECT_EQ(patterned.getFibreDeque(3, 3).size(), 500u);
 }
 
+TEST(MatrixSummary, OneFibreAndManyGiveTheSameHeadingRange) {
+    // A site's summarised heading is a nematic mean in (-pi/2, pi/2], however many fibres it has:
+    for (double heading : {0.2, 1.2, 1.9, 2.9}) {
+        ECMField ecm(2, 0.1, 0, 1);
+        ecm.addToFibreMatrix(0, 0, heading);
+        ecm.addToFibreMatrix(1, 1, heading);
+        ecm.addToFibreMatrix(1, 1, heading);
+        const auto [singleHeading, singleConcentration, singleCount] = ecm.summariseFibreMatrix(0, 0);
+        const auto [pairHeading, pairConcentration, pairCount] = ecm.summariseFibreMatrix(1, 1);
+        EXPECT_GT(singleHeading, -M_PI / 2);
+        EXPECT_LE(singleHeading, M_PI / 2);
+        EXPECT_NEAR(singleHeading, pairHeading, 1e-6) << "heading " << heading;
+        EXPECT_EQ(singleCount, 1);
+        EXPECT_EQ(pairCount, 2);
+    }
+}
+
 // --- Sensing ---
 
 TEST(MatrixSensing, AlignedFibresGiveFullIntensityAndTheirAngle) {

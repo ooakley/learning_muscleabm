@@ -72,7 +72,10 @@ std::tuple<double, double, double> ECMField::summariseFibreMatrix(int i, int j) 
         return {0, 0, 0};
     }
     if (fibreCount == 1) {
-        return {fibreMatrix[i][j][0], 1, 1};
+        // Map the fibre's heading from [0, pi) to (-pi/2, pi/2], the range of the mean below:
+        double heading{fibreMatrix[i][j][0]};
+        if (heading > M_PI / 2) {heading -= M_PI;}
+        return {heading, 1, 1};
     }
 
     // Accumulate cartesian components of the doubled (nematic) headings:
