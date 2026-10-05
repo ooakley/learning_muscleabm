@@ -116,6 +116,19 @@ TEST(MatrixDeposition, NoSamplingWithZeroRate) {
     EXPECT_EQ(cell.getDirectionalInfluence(), 0);
 }
 
+TEST(MatrixDeposition, SitesHoldAtMost500FibresDroppingTheOldest) {
+    ECMField ecm(4, 0.1, 0, 1);
+    for (int n = 0; n < 600; ++n) {ecm.addToFibreMatrix(1, 2, 0.001 * n);}
+    const auto& fibres{ecm.getFibreDeque(1, 2)};
+    ASSERT_EQ(fibres.size(), 500u);
+    EXPECT_FLOAT_EQ(fibres.front(), 0.001 * 100);
+    EXPECT_FLOAT_EQ(fibres.back(), 0.001 * 599);
+
+    // The background pattern is capped in the same way:
+    ECMField patterned(4, 0.1, 600, 1);
+    EXPECT_EQ(patterned.getFibreDeque(3, 3).size(), 500u);
+}
+
 // --- Sensing ---
 
 TEST(MatrixSensing, AlignedFibresGiveFullIntensityAndTheirAngle) {

@@ -107,7 +107,7 @@ void ECMField::addToFibreMatrix(int i, int j, double heading) {
     fibreMatrix[i][j].push_back(nematicHeading);
 
     // Age fibre unit:
-    if (fibreMatrix[i][j].size() >= 500) {
+    if (fibreMatrix[i][j].size() > maxFibresPerSite) {
         fibreMatrix[i][j].pop_front();
     }
 }
