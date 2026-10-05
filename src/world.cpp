@@ -337,8 +337,8 @@ std::tuple<double, double> World::rollPosition(std::tuple<double, double> positi
     }
 
     // Dealing with OOB past sidelength boundaries:
-    double newX{fmodf(xPosition, worldSideLength)};
-    double newY{fmodf(yPosition, worldSideLength)};
+    double newX{std::fmod(xPosition, worldSideLength)};
+    double newY{std::fmod(yPosition, worldSideLength)};
 
     return std::tuple<double, double>{newX, newY};
 }

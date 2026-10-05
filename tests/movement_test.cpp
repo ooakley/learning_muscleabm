@@ -52,6 +52,24 @@ TEST(MovementWrapping, WorldRollsPositionsIntoTheWorld) {
     }
 }
 
+TEST(MovementWrapping, WorldKeepsPositionsAtDoublePrecision) {
+    // Stepping a cell through the World must leave it exactly where stepping it on its own does:
+    // rolling the position with fmodf rounded it to float precision every step.
+    WorldSpec spec;
+    spec.cell.fluctuationAmplitude = 1e-3;
+    auto world{makeWorld(spec)};
+    CellAgent& cell{*WorldTestAccess::cells(*world)[0]};
+    WorldTestAccess::placeCell(*world, cell, 1234.56789123, 987.654321987, 1234.0, 987.0);
+    for (int step = 0; step < 20; ++step) {
+        CellAgent alone{cell};
+        alone.setLocalCellList({});
+        alone.takeRandomStep();
+        WorldTestAccess::runCellStep(*world, cell);
+        ASSERT_EQ(cell.getX(), alone.getX()) << "step " << step;
+        ASSERT_EQ(cell.getY(), alone.getY()) << "step " << step;
+    }
+}
+
 // --- Deterministic actin flow ---
 
 namespace {
