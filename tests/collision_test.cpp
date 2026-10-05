@@ -44,6 +44,27 @@ TEST(Collision, ThresholdIsSumOfRadii) {
     }
 }
 
+TEST(Collision, CellsWithZeroLengthSegmentsCollide) {
+    // Every cell starts with its rear at its centre, so its segment has zero length:
+    CellSpec spec;
+    spec.x = 500;
+    auto acting{makeCell(spec)};
+    spec.x = 560;
+    spec.id = 1;
+    auto local{makeCell(spec)};
+    ASSERT_EQ(local->getStadiumX(), local->getX());
+
+    Access::runCollisions(*acting, {local.get()});
+    EXPECT_EQ(acting->getCollisionNumber(), 1);
+    // A zero-length segment is a point: the distance to it is the distance to the centre.
+    const auto [colliding, closestX, closestY, distance, dotProduct] = Access::isPositionInStadium(
+        *acting, 500, 500, 560, 500, 560, 500, local->getEffectiveRadius()
+    );
+    EXPECT_TRUE(colliding);
+    EXPECT_EQ(closestX, 560);
+    EXPECT_EQ(distance, 60);
+}
+
 TEST(Collision, DetectedAcrossPeriodicBoundary) {
     // Cells at x = 10 and x = 2040 are 18 px apart through the boundary:
     auto acting{makeCellAt(10, 500, 0)};

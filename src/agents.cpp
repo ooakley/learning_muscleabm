@@ -675,9 +675,15 @@ std::tuple<bool, double, double, double, double> CellAgent::isPositionInStadium(
     double xStartToEnd{endX - startX};
     double yStartToEnd{endY - startY};
 
-    // Get scaled dot product:
+    // Get scaled dot product, treating a zero-length segment (a cell whose rear is at its centre)
+    // as its start point, instead of dividing by zero:
     double scaledDotProduct{xStartToSample*xStartToEnd + yStartToSample*yStartToEnd};
-    scaledDotProduct /= std::pow(xStartToEnd, 2) + std::pow(yStartToEnd, 2);
+    const double segmentLengthSquared{std::pow(xStartToEnd, 2) + std::pow(yStartToEnd, 2)};
+    if (segmentLengthSquared > 0) {
+        scaledDotProduct /= segmentLengthSquared;
+    } else {
+        scaledDotProduct = 0;
+    }
     double clampedDotProduct{std::clamp(scaledDotProduct, 0.0, 1.0)};
 
     // Determine closest point on segment:
