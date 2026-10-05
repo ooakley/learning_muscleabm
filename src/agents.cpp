@@ -192,19 +192,25 @@ void CellAgent::takeRandomStep() {
     // Get solution to cue concentration profile at cell front and cell back:
     double scaledAdvectionMagnitude{totalAdvectionMagnitude / (2 * cellBodyRadius)};
     double exponentialTerm{std::exp(-scaledAdvectionMagnitude / cueDiffusionRate)};
-    double cueConcentrationFront{
-        scaledAdvectionMagnitude /
-        (cueDiffusionRate*(1 - exponentialTerm))
-    };
-    double cueConcentrationBack{
-        scaledAdvectionMagnitude*exponentialTerm /
-        (cueDiffusionRate*(1 - exponentialTerm))
-    };
 
-    // Run concentration through Hill equation and find front/back activity differential:
-    double cueActivityFront{cueConcentrationFront / (cueKa + cueConcentrationFront)};
-    double cueActivityBack{cueConcentrationBack / (cueKa + cueConcentrationBack)};
-    double effectiveActinPolarisation{cueActivityFront - cueActivityBack};
+    // Without advection the profile is flat, so the front and back are equally active (the limit
+    // of the expressions below as advection goes to 0, where they would divide zero by zero):
+    double effectiveActinPolarisation{0};
+    if (exponentialTerm < 1) {
+        double cueConcentrationFront{
+            scaledAdvectionMagnitude /
+            (cueDiffusionRate*(1 - exponentialTerm))
+        };
+        double cueConcentrationBack{
+            scaledAdvectionMagnitude*exponentialTerm /
+            (cueDiffusionRate*(1 - exponentialTerm))
+        };
+
+        // Run concentration through Hill equation and find front/back activity differential:
+        double cueActivityFront{cueConcentrationFront / (cueKa + cueConcentrationFront)};
+        double cueActivityBack{cueConcentrationBack / (cueKa + cueConcentrationBack)};
+        effectiveActinPolarisation = cueActivityFront - cueActivityBack;
+    }
 
     // Correct for small advections:
     if (effectiveActinPolarisation < 0) {

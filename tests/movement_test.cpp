@@ -1,6 +1,7 @@
 // Behavioural tests of cell movement: wrapping at the periodic boundary, the deterministic actin
 // flow dynamics, randomness, and the state a cell reports.
 #include <cmath>
+#include <cstdlib>
 #include <vector>
 
 #include "gtest/gtest.h"
@@ -106,6 +107,25 @@ TEST(MovementFlow, WithNoSteadyStateFlowDecaysButStaysFinite) {
     }
     // Flow is held at the 1e-2 floor before each update, and decays by a factor (1 - 1/tau):
     EXPECT_NEAR(cell->getActinFlowMagnitude(), 1e-2 * (1 - 1 / spec.fluctuationTimescale), 1e-12);
+}
+
+TEST(MovementFlow, ZeroAdvectionKeepsTheCellFinite) {
+    // With no actin advection and no contact inhibition, the cue profile is flat. Computing its
+    // polarisation divided zero by zero, making the cell's flow and position NaN, which then
+    // tripped an assert in stick-slip. Run in a subprocess, so that an abort fails only this test:
+    EXPECT_EXIT({
+        CellSpec spec;
+        spec.actinAdvectionRate = 0;
+        spec.fluctuationAmplitude = 1e-3;
+        auto cell{makeCell(spec)};
+        bool finite{true};
+        for (int step = 0; step < 100; ++step) {
+            cell->takeRandomStep();
+            finite = finite && std::isfinite(cell->getX()) && std::isfinite(cell->getY())
+                && std::isfinite(cell->getActinFlowMagnitude()) && std::isfinite(cell->getStadiumX());
+        }
+        std::exit(finite ? 0 : 1);
+    }, ::testing::ExitedWithCode(0), "");
 }
 
 // --- Randomness ---
