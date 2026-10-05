@@ -36,6 +36,9 @@ struct CellParameters {
 };
 
 class World {
+    // Lets the behavioural tests set up and inspect internal state:
+    friend class WorldTestAccess;
+
 public:
     // Constructor and intialisation:
     World

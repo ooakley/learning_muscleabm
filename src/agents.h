@@ -6,6 +6,9 @@
 #include <vector>
 
 class CellAgent {
+    // Lets the behavioural tests set up and inspect internal state:
+    friend class CellAgentTestAccess;
+
 public:
     // Constructor and intialisation:
     CellAgent(
