@@ -70,6 +70,41 @@ TEST(MovementWrapping, WorldKeepsPositionsAtDoublePrecision) {
     }
 }
 
+TEST(MovementWrapping, SmallerWorldsWrapAtTheirOwnSize) {
+    // Cells and their rears must stay in the world, and wrap at its size, not at a fixed 2048 px:
+    // the rear only retracts, so a cell's extension grows by at most its step length each step,
+    // and a wrapping error shows up as a sudden jump in extension.
+    const double worldSize{1024};
+    WorldSpec spec;
+    spec.worldSize = worldSize;
+    spec.ecmElementCount = 32;
+    spec.numberOfCells = 40;
+    spec.matrixSampleRate = 5;
+    spec.cell.cellBodyRadius = 20;
+    spec.cell.fluctuationAmplitude = 1e-3;
+    auto world{makeWorld(spec)};
+    auto extension = [worldSize](const CellAgent& cell) {
+        return std::hypot(
+            minimalImage(cell.getStadiumX(), cell.getX(), worldSize),
+            minimalImage(cell.getStadiumY(), cell.getY(), worldSize)
+        );
+    };
+    std::vector<double> previousExtensions(spec.numberOfCells, 0);
+    for (int step = 0; step < 1000; ++step) {
+        world->runSimulationStep();
+        for (CellAgent* cell : WorldTestAccess::cells(*world)) {
+            for (double coordinate : {cell->getX(), cell->getY(), cell->getStadiumX(), cell->getStadiumY()}) {
+                ASSERT_GE(coordinate, 0) << "step " << step;
+                ASSERT_LT(coordinate, worldSize) << "step " << step;
+            }
+            const int id{static_cast<int>(cell->getID())};
+            ASSERT_LE(extension(*cell), previousExtensions[id] + std::abs(cell->getActinFlowMagnitude()) + 1e-6)
+                << "step " << step << ", cell " << id;
+            previousExtensions[id] = extension(*cell);
+        }
+    }
+}
+
 // --- Deterministic actin flow ---
 
 namespace {

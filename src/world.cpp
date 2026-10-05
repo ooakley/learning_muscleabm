@@ -166,6 +166,7 @@ std::unique_ptr<CellAgent> World::initialiseCell(int setCellID) {
     return std::make_unique<CellAgent>(
         // Defined behaviour parameters:
         setCellSeed, setCellID,
+        worldSideLength,
         cellParameters.dt,
 
         // Cell movement parameters:

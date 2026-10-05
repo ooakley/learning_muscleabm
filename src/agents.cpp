@@ -10,6 +10,7 @@
 CellAgent::CellAgent(
     // Defined behaviour parameters:
     unsigned int setCellSeed, int setCellID,
+    double setWorldSize,
     double setdt,
 
     // Movement parameters:
@@ -38,6 +39,7 @@ CellAgent::CellAgent(
     )
     // Model infrastructure:
     : cellID{setCellID}
+    , worldSize{setWorldSize}
     , dt{setdt}
 
     // Movement parameters:
@@ -267,15 +269,15 @@ void CellAgent::takeRandomStep() {
 
     // Roll position if out of bounds:
     if (x < 0) {
-        double remainder{std::fmod(-x, 2048)};
-        x = 2048. - remainder;
+        double remainder{std::fmod(-x, worldSize)};
+        x = worldSize - remainder;
     }
     if (y < 0) {
-        double remainder{std::fmod(-y, 2048)};
-        y = 2048. - remainder;
+        double remainder{std::fmod(-y, worldSize)};
+        y = worldSize - remainder;
     }
-    x = std::fmod(x, 2048);
-    y = std::fmod(y, 2048);
+    x = std::fmod(x, worldSize);
+    y = std::fmod(y, worldSize);
 
     // Update stadium positions and run relevant ODEs:
     runStickSlipLogic();
@@ -285,11 +287,11 @@ void CellAgent::takeRandomStep() {
 void CellAgent::runStickSlipLogic() {
     // Calculate extension of cell back:
     double xCellSpan{x - stadiumX};
-    if (xCellSpan < -1024) {xCellSpan += 2048;};
-    if (xCellSpan > 1024) {xCellSpan -= 2048;};
+    if (xCellSpan < -worldSize / 2) {xCellSpan += worldSize;};
+    if (xCellSpan > worldSize / 2) {xCellSpan -= worldSize;};
     double yCellSpan{y - stadiumY};
-    if (yCellSpan < -1024) {yCellSpan += 2048;};
-    if (yCellSpan > 1024) {yCellSpan -= 2048;};
+    if (yCellSpan < -worldSize / 2) {yCellSpan += worldSize;};
+    if (yCellSpan > worldSize / 2) {yCellSpan -= worldSize;};
 
     double stretchDistance{std::sqrt(
         std::pow(xCellSpan, 2) + 
@@ -373,15 +375,15 @@ void CellAgent::runStickSlipLogic() {
 
     // Roll position if out of bounds:
     if (stadiumX < 0) {
-        double remainder{std::fmod(-stadiumX, 2048)};
-        stadiumX = 2048. - remainder;
+        double remainder{std::fmod(-stadiumX, worldSize)};
+        stadiumX = worldSize - remainder;
     }
     if (stadiumY < 0) {
-        double remainder{std::fmod(-stadiumY, 2048)};
-        stadiumY = 2048. - remainder;
+        double remainder{std::fmod(-stadiumY, worldSize)};
+        stadiumY = worldSize - remainder;
     }
-    stadiumX = std::fmod(stadiumX, 2048);
-    stadiumY = std::fmod(stadiumY, 2048);
+    stadiumX = std::fmod(stadiumX, worldSize);
+    stadiumY = std::fmod(stadiumY, worldSize);
 
     if (std::isnan(stadiumX) or std::isnan(stadiumY)) {
         std::cout << "Error in NR iteration." << std::endl;
@@ -760,11 +762,11 @@ double CellAgent::nematicAngleMod(double angle) const {
 double CellAgent::takePeriodicModulus(double queryPosition, double localPosition) {
     // Find and apply relevant modulus:
     double modulusPosition{queryPosition};
-    if (localPosition - queryPosition > (2048 / 2)) {
-        modulusPosition += 2048;
+    if (localPosition - queryPosition > (worldSize / 2)) {
+        modulusPosition += worldSize;
     }
-    else if (localPosition - queryPosition < -(2048 / 2)) {
-        modulusPosition -= 2048;
+    else if (localPosition - queryPosition < -(worldSize / 2)) {
+        modulusPosition -= worldSize;
     }
 
     return modulusPosition;

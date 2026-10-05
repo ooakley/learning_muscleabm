@@ -14,6 +14,7 @@ constexpr double WORLD_SIZE{2048};
 struct CellSpec {
     unsigned int seed{0};
     int id{0};
+    double worldSize{WORLD_SIZE};
     double dt{1};
     double cueDiffusionRate{0.01};
     double cueKa{1};
@@ -35,7 +36,7 @@ struct CellSpec {
 
 inline std::unique_ptr<CellAgent> makeCell(const CellSpec& spec) {
     return std::make_unique<CellAgent>(
-        spec.seed, spec.id, spec.dt,
+        spec.seed, spec.id, spec.worldSize, spec.dt,
         spec.cueDiffusionRate, spec.cueKa, spec.fluctuationAmplitude, spec.fluctuationTimescale,
         spec.actinAdvectionRate, spec.collisionAdvectionRate, spec.maximumSteadyStateActinFlow,
         spec.cellBodyRadius, spec.collisionFlowReductionRate, spec.adhesionReductionRate,
