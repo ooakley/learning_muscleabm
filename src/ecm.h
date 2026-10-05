@@ -10,6 +10,9 @@ using FibreMatrix = std::vector<FibreRow>;
 
 class ECMField{
 public:
+    // Fibres held at each site; once full, adding a fibre drops the oldest:
+    static constexpr std::size_t maxFibresPerSite{500};
+
     // Constructor:
     ECMField(
         int setMatrixElements, double setPatternSigma, int setPatternFibreCount,

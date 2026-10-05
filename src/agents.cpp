@@ -10,6 +10,7 @@
 CellAgent::CellAgent(
     // Defined behaviour parameters:
     unsigned int setCellSeed, int setCellID,
+    double setWorldSize,
     double setdt,
 
     // Movement parameters:
@@ -38,6 +39,7 @@ CellAgent::CellAgent(
     )
     // Model infrastructure:
     : cellID{setCellID}
+    , worldSize{setWorldSize}
     , dt{setdt}
 
     // Movement parameters:
@@ -192,19 +194,25 @@ void CellAgent::takeRandomStep() {
     // Get solution to cue concentration profile at cell front and cell back:
     double scaledAdvectionMagnitude{totalAdvectionMagnitude / (2 * cellBodyRadius)};
     double exponentialTerm{std::exp(-scaledAdvectionMagnitude / cueDiffusionRate)};
-    double cueConcentrationFront{
-        scaledAdvectionMagnitude /
-        (cueDiffusionRate*(1 - exponentialTerm))
-    };
-    double cueConcentrationBack{
-        scaledAdvectionMagnitude*exponentialTerm /
-        (cueDiffusionRate*(1 - exponentialTerm))
-    };
 
-    // Run concentration through Hill equation and find front/back activity differential:
-    double cueActivityFront{cueConcentrationFront / (cueKa + cueConcentrationFront)};
-    double cueActivityBack{cueConcentrationBack / (cueKa + cueConcentrationBack)};
-    double effectiveActinPolarisation{cueActivityFront - cueActivityBack};
+    // Without advection the profile is flat, so the front and back are equally active (the limit
+    // of the expressions below as advection goes to 0, where they would divide zero by zero):
+    double effectiveActinPolarisation{0};
+    if (exponentialTerm < 1) {
+        double cueConcentrationFront{
+            scaledAdvectionMagnitude /
+            (cueDiffusionRate*(1 - exponentialTerm))
+        };
+        double cueConcentrationBack{
+            scaledAdvectionMagnitude*exponentialTerm /
+            (cueDiffusionRate*(1 - exponentialTerm))
+        };
+
+        // Run concentration through Hill equation and find front/back activity differential:
+        double cueActivityFront{cueConcentrationFront / (cueKa + cueConcentrationFront)};
+        double cueActivityBack{cueConcentrationBack / (cueKa + cueConcentrationBack)};
+        effectiveActinPolarisation = cueActivityFront - cueActivityBack;
+    }
 
     // Correct for small advections:
     if (effectiveActinPolarisation < 0) {
@@ -247,6 +255,14 @@ void CellAgent::takeRandomStep() {
     // square root of dt.
     flowMagnitude += (magnitudeUpdateDrift * dt) + (magnitudeUpdateDiffusion*std::sqrt(dt));
     flowDirection += (angleUpdateDrift * dt) + (angleUpdateDiffusion*std::sqrt(dt));
+
+    // The update can overshoot the magnitude below zero. The flow vector is then the same as one
+    // of magnitude |r| along the opposite heading, so reflect to that: collisions decide whether
+    // the cell is moving towards a neighbour from its heading, assuming a positive magnitude.
+    if (flowMagnitude < 0) {
+        flowMagnitude = -flowMagnitude;
+        flowDirection += M_PI;
+    }
     flowDirection = angleMod(flowDirection);
 
     // Update flow direction and magnitude based on collisions:
@@ -261,15 +277,15 @@ void CellAgent::takeRandomStep() {
 
     // Roll position if out of bounds:
     if (x < 0) {
-        double remainder{std::fmod(-x, 2048)};
-        x = 2048. - remainder;
+        double remainder{std::fmod(-x, worldSize)};
+        x = worldSize - remainder;
     }
     if (y < 0) {
-        double remainder{std::fmod(-y, 2048)};
-        y = 2048. - remainder;
+        double remainder{std::fmod(-y, worldSize)};
+        y = worldSize - remainder;
     }
-    x = std::fmod(x, 2048);
-    y = std::fmod(y, 2048);
+    x = std::fmod(x, worldSize);
+    y = std::fmod(y, worldSize);
 
     // Update stadium positions and run relevant ODEs:
     runStickSlipLogic();
@@ -279,11 +295,11 @@ void CellAgent::takeRandomStep() {
 void CellAgent::runStickSlipLogic() {
     // Calculate extension of cell back:
     double xCellSpan{x - stadiumX};
-    if (xCellSpan < -1024) {xCellSpan += 2048;};
-    if (xCellSpan > 1024) {xCellSpan -= 2048;};
+    if (xCellSpan < -worldSize / 2) {xCellSpan += worldSize;};
+    if (xCellSpan > worldSize / 2) {xCellSpan -= worldSize;};
     double yCellSpan{y - stadiumY};
-    if (yCellSpan < -1024) {yCellSpan += 2048;};
-    if (yCellSpan > 1024) {yCellSpan -= 2048;};
+    if (yCellSpan < -worldSize / 2) {yCellSpan += worldSize;};
+    if (yCellSpan > worldSize / 2) {yCellSpan -= worldSize;};
 
     double stretchDistance{std::sqrt(
         std::pow(xCellSpan, 2) + 
@@ -367,15 +383,15 @@ void CellAgent::runStickSlipLogic() {
 
     // Roll position if out of bounds:
     if (stadiumX < 0) {
-        double remainder{std::fmod(-stadiumX, 2048)};
-        stadiumX = 2048. - remainder;
+        double remainder{std::fmod(-stadiumX, worldSize)};
+        stadiumX = worldSize - remainder;
     }
     if (stadiumY < 0) {
-        double remainder{std::fmod(-stadiumY, 2048)};
-        stadiumY = 2048. - remainder;
+        double remainder{std::fmod(-stadiumY, worldSize)};
+        stadiumY = worldSize - remainder;
     }
-    stadiumX = std::fmod(stadiumX, 2048);
-    stadiumY = std::fmod(stadiumY, 2048);
+    stadiumX = std::fmod(stadiumX, worldSize);
+    stadiumY = std::fmod(stadiumY, worldSize);
 
     if (std::isnan(stadiumX) or std::isnan(stadiumY)) {
         std::cout << "Error in NR iteration." << std::endl;
@@ -675,9 +691,15 @@ std::tuple<bool, double, double, double, double> CellAgent::isPositionInStadium(
     double xStartToEnd{endX - startX};
     double yStartToEnd{endY - startY};
 
-    // Get scaled dot product:
+    // Get scaled dot product, treating a zero-length segment (a cell whose rear is at its centre)
+    // as its start point, instead of dividing by zero:
     double scaledDotProduct{xStartToSample*xStartToEnd + yStartToSample*yStartToEnd};
-    scaledDotProduct /= std::pow(xStartToEnd, 2) + std::pow(yStartToEnd, 2);
+    const double segmentLengthSquared{std::pow(xStartToEnd, 2) + std::pow(yStartToEnd, 2)};
+    if (segmentLengthSquared > 0) {
+        scaledDotProduct /= segmentLengthSquared;
+    } else {
+        scaledDotProduct = 0;
+    }
     double clampedDotProduct{std::clamp(scaledDotProduct, 0.0, 1.0)};
 
     // Determine closest point on segment:
@@ -748,11 +770,11 @@ double CellAgent::nematicAngleMod(double angle) const {
 double CellAgent::takePeriodicModulus(double queryPosition, double localPosition) {
     // Find and apply relevant modulus:
     double modulusPosition{queryPosition};
-    if (localPosition - queryPosition > (2048 / 2)) {
-        modulusPosition += 2048;
+    if (localPosition - queryPosition > (worldSize / 2)) {
+        modulusPosition += worldSize;
     }
-    else if (localPosition - queryPosition < -(2048 / 2)) {
-        modulusPosition -= 2048;
+    else if (localPosition - queryPosition < -(worldSize / 2)) {
+        modulusPosition -= worldSize;
     }
 
     return modulusPosition;

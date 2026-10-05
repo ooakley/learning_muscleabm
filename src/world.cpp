@@ -166,6 +166,7 @@ std::unique_ptr<CellAgent> World::initialiseCell(int setCellID) {
     return std::make_unique<CellAgent>(
         // Defined behaviour parameters:
         setCellSeed, setCellID,
+        worldSideLength,
         cellParameters.dt,
 
         // Cell movement parameters:
@@ -247,7 +248,8 @@ void World::runCellStep(CellAgent& actingCell) {
         } else {
             // Retrieve direction:
             double deltaHeadingDirection{std::atan2(averagedDeltaHeadingY, averagedDeltaHeadingX)};
-            assert(std::abs(deltaHeadingDirection) < (M_PI/2));
+            // Each sampled angle lies in [-pi/2, pi/2], so their mean can be exactly +/-pi/2:
+            assert(std::abs(deltaHeadingDirection) <= (M_PI/2));
             actingCell.setDirectionalInfluence(deltaHeadingDirection);
 
             // Retrieve nematic order parameter:
@@ -337,8 +339,8 @@ std::tuple<double, double> World::rollPosition(std::tuple<double, double> positi
     }
 
     // Dealing with OOB past sidelength boundaries:
-    double newX{fmodf(xPosition, worldSideLength)};
-    double newY{fmodf(yPosition, worldSideLength)};
+    double newX{std::fmod(xPosition, worldSideLength)};
+    double newY{std::fmod(yPosition, worldSideLength)};
 
     return std::tuple<double, double>{newX, newY};
 }
