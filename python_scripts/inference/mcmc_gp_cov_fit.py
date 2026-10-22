@@ -70,11 +70,6 @@ def parse_arguments():
         help='Which posterior to sample. Run once per phenotype to sample both in parallel.'
     )
     parser.add_argument(
-        '--no_calibration', action='store_true',
-        help='Set the latent calibration ratio of every metric to 1, so that the GP latent '
-             'covariance is used as is, without reading it from cv_metrics.json.'
-    )
-    parser.add_argument(
         '--experimental_lengthscales', type=float, nargs='*', default=None,
         help='Replace the GP latent covariance across design counts with the outer product of its '
              'pointwise standard deviations and a fixed correlation kernel, whose lengthscale comes '
@@ -108,8 +103,7 @@ def parse_arguments():
 class MetricInferenceManager:
 
     def __init__(
-            self, gp_models_dirpath, metric_name, metric_data, dimension,
-            no_calibration=False, correlation_matrix=None
+            self, gp_models_dirpath, metric_name, metric_data, dimension, correlation_matrix=None
         ):
         # Folder holding this metric's trained GP model and its diagnostics:
         id_folderpath = os.path.join(gp_models_dirpath, metric_name)
@@ -133,32 +127,6 @@ class MetricInferenceManager:
             self.metric_std = float(np.load(whiten_std_filepath))
         else:
             print(f"No saved whitening transform for {metric_name}, recomputing from summary data.", flush=True)
-
-        # The latent calibration ratio multiplies the latent covariance:
-        if no_calibration:
-            # Use the GP latent covariance as is:
-            self.fold_calibration_ratios = None
-            self.calibration_ratio = 1.0
-            print(f"{metric_name} latent calibration ratio: 1.0 (calibration disabled)", flush=True)
-        else:
-            # Load the ratio from the cross-validation metrics of the training script,
-            # averaged over folds:
-            cv_filepath = os.path.join(id_folderpath, "cv_metrics.json")
-            with open(cv_filepath) as cv_fstream:
-                cv_dict = json.load(cv_fstream)
-            if "lcr" not in cv_dict or len(cv_dict["lcr"]) == 0:
-                raise KeyError(f"No latent calibration ratio ('lcr') found in {cv_filepath}.")
-            self.fold_calibration_ratios = np.array(cv_dict["lcr"])
-            self.calibration_ratio = float(np.mean(self.fold_calibration_ratios))
-            if not np.isfinite(self.calibration_ratio) or self.calibration_ratio <= 0:
-                raise ValueError(
-                    f"Latent calibration ratio for {metric_name} is {self.calibration_ratio}, "
-                    "it must be positive to scale a covariance matrix."
-                )
-            print(
-                f"{metric_name} latent calibration ratio: {self.calibration_ratio} "
-                f"(folds: {np.round(self.fold_calibration_ratios, 3)})", flush=True
-            )
 
         # Do necessary calculations for inverse whitening of SEM estimates:
         nan_mask = np.any(np.isnan(metric_data), axis=1)
@@ -225,8 +193,8 @@ class MetricInferenceManager:
                 )
             gp_std = np.sqrt(np.diagonal(gp_cov, axis1=-2, axis2=-1))
             gp_cov = gp_std[..., :, None] * gp_std[..., None, :] * self.correlation_matrix
-        # Unwhiten the latent covariance, and rescale it by the latent calibration ratio:
-        scaled_cov =  gp_cov * (self.metric_std ** 2) * self.calibration_ratio
+        # Unwhiten the latent covariance:
+        scaled_cov =  gp_cov * (self.metric_std ** 2)
         return scaled_mean, scaled_cov
 
     def estimate(self, input):
@@ -612,7 +580,7 @@ def print_covariance_ratios(label, mc_distribution, inference_managers, target_d
     """Print a simple estimate of the experimental variance relative to the GP latent variance.
 
     Uses the diagonals of the covariances actually fed to the likelihood: the experimental
-    covariance (including structural uncertainty), and the calibrated GP latent covariance
+    covariance (including structural uncertainty), and the GP latent covariance
     averaged over a few samples from the cold chain after burn-in.
     """
     # Take evenly spaced samples from the cold chain after burn-in:
@@ -753,7 +721,7 @@ def main():
         model_metric = np.load(metric_filepath)[wave_mask, :]
         inference_manager = MetricInferenceManager(
             args.gp_models_dirpath, metric_name, model_metric, parameter_matrix.shape[1],
-            no_calibration=args.no_calibration, correlation_matrix=correlation_matrices[metric_name]
+            correlation_matrix=correlation_matrices[metric_name]
         )
         inference_managers[metric_name] = inference_manager
     
@@ -767,23 +735,18 @@ def main():
     else:
         target_data, file_prefix, label = rd_data, "rd", "RD"
 
-    # Record which GP models and calibration ratios these results were generated with:
-    calibration_dict = {
+    # Record which GP models and settings these results were generated with:
+    settings_dict = {
         "experiment_dirpath": args.experiment_dirpath,
         "hm_wave_id": args.hm_wave_id,
         "gp_models_dirpath": args.gp_models_dirpath,
         "burn_in_fraction": args.burn_in_fraction,
         "adaptive_proposals": args.adaptive_proposals,
-        "calibration_applied": not args.no_calibration,
         "gp_covariance": "full" if experimental_lengthscales is None else "outer_product",
-        "experimental_lengthscales": experimental_lengthscales,
-        "latent_calibration_ratios": {
-            metric_name: inference_manager.calibration_ratio
-            for metric_name, inference_manager in inference_managers.items()
-        }
+        "experimental_lengthscales": experimental_lengthscales
     }
-    with open(os.path.join(mcmc_dirpath, f"{file_prefix}_gp_calibration.json"), 'w') as output:
-        json.dump(calibration_dict, output, indent=4)
+    with open(os.path.join(mcmc_dirpath, f"{file_prefix}_mcmc_settings.json"), 'w') as output:
+        json.dump(settings_dict, output, indent=4)
 
     # # Estimate likelihood of parameters from Sobol' search:
     # print("Estimating likelihood of gridsearch parameters...", flush=True)

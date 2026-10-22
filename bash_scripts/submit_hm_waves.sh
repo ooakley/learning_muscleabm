@@ -14,10 +14,14 @@
 # This runs waves first_wave_id (default 0) up to wave_count - 1. For each wave it submits:
 #
 #     generate  ->  simulate  ->  collate  ->  collate_hm  ->  train  ->  mcmc
+#                                    |              |            \-> cross_validate (and the Sobol' indices of the GP models)
 #                                    |              \-> delete_run_data (if the config's delete_run_data is set)
 #                                    \-> validate (tests the previous wave's GP models, if run_validation is set)
 #
 # Each job waits for the one before it, and the posterior of one wave generates the next.
+# train fits the full GP models, which are all the MCMC needs, so the MCMC does not wait for
+# their cross-validation. A wave's validate job also waits for the previous wave's
+# cross_validate, to compare with its metrics.
 # Wave 0 is never generated here: run the Sobol' search first, as it creates the experiment
 # folder itself. A later wave is generated unless its folder already exists.
 #
@@ -26,7 +30,8 @@
 # so a chain can only be picked back up from that wave's train or mcmc stage.
 #
 # To pick a chain back up after a failure, give the wave and the stage to restart from
-# (generate, simulate, collate, train or mcmc). first_stage only applies to the first wave:
+# (generate, simulate, collate, train or mcmc; train includes cross_validate). first_stage only
+# applies to the first wave:
 #
 #     bash bash_scripts/submit_hm_waves.sh model_experiments/2026-10-02-collisions_shape \
 #         configs/history_matching_configs/default.json 2 train
@@ -34,6 +39,9 @@
 # To print the sbatch commands without submitting anything:
 #
 #     DRY_RUN=true bash bash_scripts/submit_hm_waves.sh <experiment_dirpath> <hm_config_path>
+#
+# To rerun only a wave's cross-validation, submit the training script by hand (see the comment
+# at the top of bash_scripts/gp_regression.sh).
 set -euo pipefail
 
 # --- Arguments ---
@@ -48,8 +56,8 @@ dry_run=${DRY_RUN:-false}
 # --- Stage scripts ---
 # Each is called as: sbatch <script> <experiment_dirpath> <hm_wave_id>
 # (the simulation script also gets the simulations per array task, the training script the
-# GP models folder name and the GP settings, and the MCMC script the GP models folder and
-# the burn-in fraction).
+# GP models folder name, the GP settings and the stage to run, and the MCMC script the GP
+# models folder and the burn-in fraction).
 simulate_script="bash_scripts/gridsearch.sh"
 collate_script="bash_scripts/collate_gridsearch_data.sh"
 train_script="bash_scripts/gp_regression.sh"
@@ -161,15 +169,16 @@ else
     done
 fi
 
-# GP training uses every wave in the global dataset, so an earlier wave cannot be retrained
-# while a later wave has summary data:
+# Each wave is drawn from the posterior of the GP models of the wave before it, so an earlier
+# wave's models cannot be retrained while a later wave, drawn from their old posterior, has
+# summary data:
 if [ "$first_stage_index" -le 3 ]; then
     for later_summary_dirpath in "${experiment_dirpath}"/hm*/summary_data; do
         later_wave_dirname=$(basename "$(dirname "$later_summary_dirpath")")
         later_wave_id=${later_wave_dirname#hm}
         if [[ "$later_wave_id" =~ ^[0-9]+$ ]] && [ "$later_wave_id" -gt "$first_wave_id" ] \
                 && [ -n "$(ls -A "$later_summary_dirpath" 2>/dev/null)" ]; then
-            echo "hm${later_wave_id} already has summary data, so the GP models of hm${first_wave_id} would be trained on it too."
+            echo "hm${later_wave_id} already has summary data, and was drawn from the posterior of the GP models that restarting hm${first_wave_id} from ${first_stage} would replace."
             echo "Start from hm${later_wave_id} or later, or move its summary_data folder away first, exiting..."
             exit 1
         fi
@@ -222,17 +231,27 @@ submit () {
     echo "$job_id"
 }
 
-# Set the sbatch arguments for waiting on a job, or none if that job was not submitted.
-# Usage: set_dependency <afterok|afterany> <job_id>
+# Set the sbatch arguments for waiting on one or more jobs, skipping any that were not
+# submitted (given as ""), or none if no job was. Every dependency given must be met.
+# Usage: set_dependency <afterok|afterany> <job_id> [<afterok|afterany> <job_id> ...]
 dependency=()
 set_dependency () {
-    local dependency_type=$1
-    local job_id=$2
+    local dependency_list=""
+    local wait_until_ok=false
     dependency=()
-    if [ -n "$job_id" ]; then
-        dependency=("--dependency=${dependency_type}:${job_id}")
-        # Dependents are cancelled, not left queued forever, if the job they wait for fails:
-        if [ "$dependency_type" = "afterok" ]; then
+    while [ "$#" -gt 0 ]; do
+        if [ -n "$2" ]; then
+            dependency_list="${dependency_list:+${dependency_list},}${1}:${2}"
+            if [ "$1" = "afterok" ]; then
+                wait_until_ok=true
+            fi
+        fi
+        shift 2
+    done
+    if [ -n "$dependency_list" ]; then
+        dependency=("--dependency=${dependency_list}")
+        # Dependents are cancelled, not left queued forever, if a job they wait for fails:
+        if [ "$wait_until_ok" = true ]; then
             dependency+=("--kill-on-invalid-dep=yes")
         fi
     fi
@@ -270,7 +289,7 @@ get_simulation_count () {
 }
 
 # --- Submission ---
-mcmc=""
+mcmc=""; cross_validate=""
 for wave in $(seq "$first_wave_id" $(( wave_count - 1 ))); do
     echo "Wave ${wave}:"
     wave_dirpath="${experiment_dirpath}/hm${wave}"
@@ -281,7 +300,8 @@ for wave in $(seq "$first_wave_id" $(( wave_count - 1 ))); do
     if [ "$wave" -eq "$first_wave_id" ]; then
         start_index=$first_stage_index
     fi
-    generate=""; simulate=""; collate=""; collate_hm=""; train=""
+    previous_cross_validate=$cross_validate
+    generate=""; simulate=""; collate=""; collate_hm=""; train=""; cross_validate=""
 
     # 1. Generate the wave from the posterior of the previous one, unless it already exists:
     if [ "$start_index" -le 0 ]; then
@@ -326,7 +346,8 @@ for wave in $(seq "$first_wave_id" $(( wave_count - 1 ))); do
             --required_hm_wave_id "$wave")
         submitted_job_ids+=("$collate_hm")
 
-        # 5. Test the previous wave's GP models against this wave's simulations (nothing waits on this).
+        # 5. Test the previous wave's GP models against this wave's simulations (nothing waits on this),
+        #    once their cross-validation has finished too, if it was submitted in this chain.
         #    In the first wave submitted, those models were trained by an earlier submission, so
         #    check they exist (waves trained before the folder was named trained_models have
         #    their models in a pll_gp_models_... folder instead):
@@ -338,7 +359,8 @@ for wave in $(seq "$first_wave_id" $(( wave_count - 1 ))); do
             run_wave_validation=false
         fi
         if [ "$run_wave_validation" = true ] && [ "$wave" -gt 0 ]; then
-            validate=$(submit "validate" "${dependency[@]}" --job-name="hm${wave}_validate" \
+            set_dependency afterok "$collate" afterany "$previous_cross_validate"
+            validate=$(submit "validate" ${dependency[@]+"${dependency[@]}"} --job-name="hm${wave}_validate" \
                 "$(log_argument "$validate_python_script")" "$python_stage_script" "$validate_python_script" \
                 --experiment_dirpath "$experiment_dirpath" --hm_wave_id $(( wave - 1 )) \
                 --gp_models_dirpath "$previous_gp_models_dirpath")
@@ -356,15 +378,24 @@ for wave in $(seq "$first_wave_id" $(( wave_count - 1 ))); do
         fi
     fi
 
-    # 7. Train the GP models on the global dataset:
     if [ "$start_index" -le 3 ]; then
+        # 7. Train the full GP models on the global dataset:
         set_dependency afterok "$collate_hm"
         train=$(submit "train" ${dependency[@]+"${dependency[@]}"} --job-name="hm${wave}_train" \
-            "$train_script" "$experiment_dirpath" "$wave" "$gp_folder_name" "${gp_training_arguments[@]}")
+            "$train_script" "$experiment_dirpath" "$wave" "$gp_folder_name" "${gp_training_arguments[@]}" \
+            --stage full)
         submitted_job_ids+=("$train")
+
+        # 8. Cross-validate them, and estimate their Sobol' indices (only the next wave's
+        #    validation waits on this):
+        set_dependency afterok "$train"
+        cross_validate=$(submit "cross_validate" "${dependency[@]}" --job-name="hm${wave}_cross_validate" \
+            "$train_script" "$experiment_dirpath" "$wave" "$gp_folder_name" "${gp_training_arguments[@]}" \
+            --stage cross_validation)
+        submitted_job_ids+=("$cross_validate")
     fi
 
-    # 8. Sample the posterior of both phenotypes:
+    # 9. Sample the posterior of both phenotypes:
     set_dependency afterok "$train"
     mcmc=$(submit "mcmc" ${dependency[@]+"${dependency[@]}"} --job-name="hm${wave}_mcmc" \
         "$mcmc_script" "$experiment_dirpath" "$wave" "$gp_models_dirpath" "$burn_in_fraction")
