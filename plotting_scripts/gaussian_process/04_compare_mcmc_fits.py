@@ -105,7 +105,7 @@ def _(np, os):
     PARAMETER_DIMENSION = 12
     EXPERIMENT_DIRPATH = "model_experiments/2026-10-02-collisions_shape"
     # mcmc_results = "wide_mcmc_results"
-    hm_index = 2
+    hm_index = 3
     mcmc_results = f"hm{hm_index}/disc_cov_mcmc_results"
 
 

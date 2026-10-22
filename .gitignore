@@ -65,6 +65,7 @@ model_experiments/*
 configs/model_parameter_json/*/*.txt
 configs/model_parameter_json/*/*.csv
 configs/model_parameter_json/*/*.png
+model_parameter_json/*
 # Simulation timings, written next to each simulation's config:
 sim_time.txt
 # Logs (e.g. from GNU parallel) and pickled outputs (e.g. PySR checkpoints):
