@@ -13,11 +13,16 @@
 # This runs waves first_wave_id (default 0) up to wave_count - 1. For each wave it submits:
 #
 #     generate  ->  simulate  ->  collate  ->  collate_hm  ->  train  ->  mcmc
+#                                    |              \-> delete_run_data (if delete_run_data is set)
 #                                    \-> validate (tests the previous wave's GP models)
 #
 # Each job waits for the one before it, and the posterior of one wave generates the next.
 # Wave 0 is never generated here: run the Sobol' search first, as it creates the experiment
-# folder itself. A later wave is generated unless its run_data folder already exists.
+# folder itself. A later wave is generated unless its folder already exists.
+#
+# To save space, each wave's run_data folder is deleted once the wave is in the global
+# dataset (set delete_run_data below). Its simulations then cannot be rerun or recollated,
+# so a chain can only be picked back up from that wave's train or mcmc stage.
 #
 # To pick a chain back up after a failure, give the wave and the stage to restart from
 # (generate, simulate, collate, train or mcmc). first_stage only applies to the first wave:
@@ -53,6 +58,8 @@ python_stage_script="bash_scripts/run_python_stage.sh"
 generate_python_script="python_scripts/search/generate_hm_sweep.py"
 collate_hm_python_script="python_scripts/collation/collate_hm.py"
 validate_python_script="python_scripts/inference/validate_wave.py"
+# Deletes a wave's run_data folder:
+delete_run_data_script="bash_scripts/delete_run_data.sh"
 
 # --- History matching config ---
 # Read and checked by muscleabm/history_matching.py, so that a mistake stops the submission.
@@ -92,6 +99,10 @@ array_task_limit=90
 max_failed_fraction=0.1
 # Test each wave's GP models against the simulations of the next wave:
 run_validation=true
+# Delete each wave's run_data folder once the wave has passed the check of failed simulations
+# and is in the global dataset (if it fails the check, run_data is kept so the failed
+# simulations can be rerun):
+delete_run_data=true
 
 # --- Checks ---
 stage_names=(generate simulate collate train mcmc)
@@ -118,7 +129,8 @@ if [ ! -f "${experiment_dirpath}/config.json" ]; then
     exit 1
 fi
 for stage_script in "$simulate_script" "$collate_script" "$train_script" "$mcmc_script" "$python_stage_script" \
-        "$generate_python_script" "$collate_hm_python_script" "$validate_python_script"; do
+        "$generate_python_script" "$collate_hm_python_script" "$validate_python_script" \
+        "$delete_run_data_script"; do
     if [ ! -f "$stage_script" ]; then
         echo "Stage script ${stage_script} not found: run this from the repository root, exiting..."
         exit 1
@@ -127,13 +139,20 @@ done
 
 # The first wave either exists already, or is generated from the chains of the wave before it:
 first_wave_dirpath="${experiment_dirpath}/hm${first_wave_id}"
-if [ ! -d "${first_wave_dirpath}/run_data" ]; then
+if [ -d "$first_wave_dirpath" ]; then
+    # Simulating and collating need the wave's run data, which may have been deleted:
+    if [ "$first_stage_index" -le 2 ] && [ ! -d "${first_wave_dirpath}/run_data" ]; then
+        echo "Cannot start hm${first_wave_id} from ${first_stage}: ${first_wave_dirpath}/run_data does not exist" \
+            "(it is deleted once the wave is in the global dataset). Start from train or mcmc, exiting..."
+        exit 1
+    fi
+else
     if [ "$first_wave_id" -eq 0 ]; then
         echo "No hm0 found in ${experiment_dirpath}: generate the initial Sobol' search first, exiting..."
         exit 1
     fi
     if [ "$first_stage_index" -gt 0 ]; then
-        echo "Cannot start from ${first_stage}: ${first_wave_dirpath}/run_data does not exist, exiting..."
+        echo "Cannot start from ${first_stage}: ${first_wave_dirpath} does not exist, exiting..."
         exit 1
     fi
     previous_mcmc_dirpath="${experiment_dirpath}/hm$(( first_wave_id - 1 ))/${mcmc_dirname}"
@@ -269,7 +288,7 @@ for wave in $(seq "$first_wave_id" $(( wave_count - 1 ))); do
 
     # 1. Generate the wave from the posterior of the previous one, unless it already exists:
     if [ "$start_index" -le 0 ]; then
-        if [ ! -d "${wave_dirpath}/run_data" ]; then
+        if [ ! -d "$wave_dirpath" ]; then
             set_dependency afterok "$mcmc"
             generate=$(submit "generate" ${dependency[@]+"${dependency[@]}"} --job-name="hm${wave}_generate" \
                 "$(log_argument "$generate_python_script")" "$python_stage_script" "$generate_python_script" \
@@ -328,9 +347,17 @@ for wave in $(seq "$first_wave_id" $(( wave_count - 1 ))); do
                 --gp_models_dirpath "$previous_gp_models_dirpath")
             submitted_job_ids+=("$validate")
         fi
+
+        # 6. Delete the wave's run data, now that it is in the global dataset (nothing waits on this):
+        if [ "$delete_run_data" = true ]; then
+            set_dependency afterok "$collate_hm"
+            delete=$(submit "delete_run_data" "${dependency[@]}" --job-name="hm${wave}_delete_run_data" \
+                "$delete_run_data_script" "$experiment_dirpath" "$wave")
+            submitted_job_ids+=("$delete")
+        fi
     fi
 
-    # 6. Train the GP models on the global dataset:
+    # 7. Train the GP models on the global dataset:
     if [ "$start_index" -le 3 ]; then
         set_dependency afterok "$collate_hm"
         train=$(submit "train" ${dependency[@]+"${dependency[@]}"} --job-name="hm${wave}_train" \
@@ -338,7 +365,7 @@ for wave in $(seq "$first_wave_id" $(( wave_count - 1 ))); do
         submitted_job_ids+=("$train")
     fi
 
-    # 7. Sample the posterior of both phenotypes:
+    # 8. Sample the posterior of both phenotypes:
     set_dependency afterok "$train"
     mcmc=$(submit "mcmc" ${dependency[@]+"${dependency[@]}"} --job-name="hm${wave}_mcmc" \
         "$mcmc_script" "$experiment_dirpath" "$wave" "$gp_models_dirpath")

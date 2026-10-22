@@ -81,9 +81,12 @@ History matching fits the simulator to the wet lab data in waves. Each wave simu
    | Simulate | `gridsearch.sh` | `simulation/call_json_parameters.py`, `simulation/site_analysis.py` | Simulation outputs and metrics, in `run_data/` |
    | Collate | `collate_gridsearch_data.sh` | `collation/collate_site_analyses.py` | `summary_data/` |
    | Collate waves | `run_python_stage.sh` | `collation/collate_hm.py` | Every wave so far, in the experiment's `global_dataset/` |
+   | Delete run data | `delete_run_data.sh` | | Deletes `run_data/`, once the wave is in `global_dataset/` |
    | Validate (from wave 1) | `run_python_stage.sh` | `inference/validate_wave.py` | The previous wave's GPs tested on this wave, in their models folder in `hm{n-1}/` |
    | Train | `gp_regression.sh` | `emulation/gp_training.py` | GP models, in `trained_models/` |
    | MCMC | `mcmc_fit.sh` | `inference/mcmc_gp_cov_fit.py` | Posterior chains, in `disc_cov_mcmc_results/` |
+
+   To save space on the cluster, each wave's `run_data/` is deleted once the wave has passed the check of failed simulations and is in the global dataset; set `delete_run_data=false` in `submit_hm_waves.sh` to keep it. A wave whose `run_data/` is deleted can only be restarted from its train or MCMC step.
 
    To print the jobs without submitting them, set `DRY_RUN=true`. To restart a chain after a failure, give the wave and step to restart from; the comment at the top of `submit_hm_waves.sh` describes both.
 
