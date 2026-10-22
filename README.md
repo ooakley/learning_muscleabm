@@ -86,7 +86,7 @@ History matching fits the simulator to the wet lab data in waves. Each wave simu
    | Train | `gp_regression.sh` | `emulation/gp_training.py` | GP models, in `trained_models/` |
    | MCMC | `mcmc_fit.sh` | `inference/mcmc_gp_cov_fit.py` | Posterior chains, in `disc_cov_mcmc_results/` |
 
-   To save space on the cluster, each wave's `run_data/` is deleted once the wave has passed the check of failed simulations and is in the global dataset; set `delete_run_data=false` in `submit_hm_waves.sh` to keep it. A wave whose `run_data/` is deleted can only be restarted from its train or MCMC step.
+   To save space on the cluster, each wave's `run_data/` is deleted once the wave has passed the check of failed simulations and is in the global dataset; set `delete_run_data` to `false` in the history matching config to keep it. A wave whose `run_data/` is deleted can only be restarted from its train or MCMC step.
 
    To print the jobs without submitting them, set `DRY_RUN=true`. To restart a chain after a failure, give the wave and step to restart from; the comment at the top of `submit_hm_waves.sh` describes both.
 
@@ -129,7 +129,7 @@ Each job script describes its arguments at its top.
 
 `configs/` holds the simulation configs: `gridsearch_configs/` for parameter sweeps (passed to `python_scripts/search/generate_sobol_search.py`), and `model_parameter_json/` for single simulations (passed to `python_scripts/simulation/call_json_parameters.py`), whose outputs are written next to them. `example_config.json` is another single simulation config.
 
-`history_matching_configs/` holds the configs of history matching runs, passed to `bash_scripts/submit_hm_waves.sh`. Each sets the number of waves, the size of each wave after the first (split equally between the phenotypes), the MCMC temperature each wave's samples are drawn from, and the GP architecture and training settings. The GPs train for a fixed number of optimiser steps (`training_steps`), not epochs, so that later waves, with more data, are not trained for longer. `default.json` holds the settings the pipeline used before (its 3840 steps are 15 epochs of a 2^17 simulation first wave), and `muscleabm/history_matching.py` describes each setting.
+`history_matching_configs/` holds the configs of history matching runs, passed to `bash_scripts/submit_hm_waves.sh`. Each sets the number of waves, the size of each wave after the first (split equally between the phenotypes), the MCMC temperature each wave's samples are drawn from and the burn-in, the simulations run by each array task and how many tasks run at once, the fraction of failed simulations that stops the chain, whether to validate each wave's GPs and delete its run data, and the GP architecture and training settings. The GPs train for a fixed number of optimiser steps (`training_steps`), not epochs, so that later waves, with more data, are not trained for longer. `default.json` holds the settings the pipeline used before (its 3840 steps are 15 epochs of a 2^17 simulation first wave), and `muscleabm/history_matching.py` describes each setting.
 
 ## Linting
 
