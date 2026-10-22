@@ -175,6 +175,11 @@ class ModelManager:
                 self.scheduler.step()
 
     def save(self, id_folderpath, save_optimiser=True):
+        # Clear the linear operators gpytorch caches from the last forward pass, which it does
+        # whenever the mode is set (the model is already in training mode). After a full-size
+        # batch, the cache holds an object that cannot be pickled, so saving failed:
+        self.model.train()
+
         # Save model components:
         os.makedirs(id_folderpath, exist_ok=True)
         model_filepath = os.path.join(id_folderpath, "model.pth")
