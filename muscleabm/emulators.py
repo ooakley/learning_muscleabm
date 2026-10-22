@@ -1,4 +1,5 @@
 """Deep kernel GP emulators of the model metrics, and the tools for saving and loading them."""
+import copy
 import os
 import pickle
 import sys
@@ -9,11 +10,13 @@ import torch
 
 import numpy as np
 
+from torch.nn.utils import parametrize
+from torch.nn.utils.parametrizations import spectral_norm
 from torch.utils.data import TensorDataset, DataLoader
 
 
 class DeepInputTransformation(torch.nn.Module):
-    def __init__(self, dimension, hidden_layer_count=2, hidden_layer_neuron_count=16):
+    def __init__(self, dimension, hidden_layer_count=2, hidden_layer_neuron_count=16, spectral_normalisation=False):
         # Run general initialisation of the nn.Module base class:
         super().__init__()
 
@@ -37,6 +40,14 @@ class DeepInputTransformation(torch.nn.Module):
         with torch.no_grad():
             self.apply(self.initialise)
 
+        # Divide the weights of every linear layer by their largest singular value, estimated by
+        # a power iteration on each forward pass in training mode, bounding how far the network
+        # can stretch distances between inputs before the kernel sees them:
+        if spectral_normalisation:
+            for layer_index, layer in enumerate(self.mlp):
+                if isinstance(layer, torch.nn.Linear):
+                    self.mlp[layer_index] = spectral_norm(layer)
+
     def forward(self, x):
         return self.mlp.forward(x)
 
@@ -46,7 +57,10 @@ class DeepInputTransformation(torch.nn.Module):
 
 
 class SparseGPModel(gpytorch.models.ApproximateGP):
-    def __init__(self, inducing_points, dimensions, hidden_layer_count=2, hidden_layer_neuron_count=16):
+    def __init__(
+        self, inducing_points, dimensions, hidden_layer_count=2, hidden_layer_neuron_count=16,
+        spectral_normalisation=False
+    ):
         # Set up distribution:
         variational_distribution = gpytorch.variational.CholeskyVariationalDistribution(
             inducing_points.size(0)
@@ -63,7 +77,7 @@ class SparseGPModel(gpytorch.models.ApproximateGP):
 
         # Instantiate input transform:
         self.input_transform = DeepInputTransformation(
-            dimensions, hidden_layer_count, hidden_layer_neuron_count
+            dimensions, hidden_layer_count, hidden_layer_neuron_count, spectral_normalisation
         )
 
         # Define mean and additive covariance functions:
@@ -102,6 +116,42 @@ _main_to_emulators_pickle.Unpickler = _MainToEmulatorsUnpickler
 _main_to_emulators_pickle.load = lambda file, **kwargs: _MainToEmulatorsUnpickler(file, **kwargs).load()
 
 
+def _without_parametrizations(model):
+    """The model, or if any of its linear layers are parametrized (spectrally normalised), a copy
+    of it with those layers replaced by plain linear layers.
+
+    torch cannot save a parametrized module whole, only its state_dict. The plain layers hold the
+    weights the model uses in evaluation mode, so the copy gives the same predictions, and loads
+    with load_torch_object like any other model. (torch's remove_parametrizations cannot be used
+    on the copy, as it edits the parametrized class, which the copy shares with the model.)
+    """
+    if not any(parametrize.is_parametrized(module) for module in model.modules()):
+        return model
+    model_copy = copy.deepcopy(model)
+    parametrized_layers = [
+        (parent, layer_name, layer)
+        for parent in model_copy.modules()
+        for layer_name, layer in parent.named_children()
+        if parametrize.is_parametrized(layer)
+    ]
+    for parent, layer_name, layer in parametrized_layers:
+        if not isinstance(layer, torch.nn.Linear):
+            raise TypeError(f"Cannot save parametrized {type(layer).__name__} layers, only linear layers.")
+        # In evaluation mode, the weight is computed without a further power iteration:
+        layer.eval()
+        with torch.no_grad():
+            weight = layer.weight
+            plain_layer = torch.nn.Linear(
+                layer.in_features, layer.out_features, bias=layer.bias is not None,
+                device=weight.device, dtype=weight.dtype
+            )
+            plain_layer.weight.copy_(weight)
+            if layer.bias is not None:
+                plain_layer.bias.copy_(layer.bias)
+        setattr(parent, layer_name, plain_layer)
+    return model_copy
+
+
 def load_torch_object(filepath):
     """Load a model, likelihood or optimiser saved whole with torch.save."""
     return torch.load(filepath, weights_only=False, pickle_module=_main_to_emulators_pickle)
@@ -109,12 +159,16 @@ def load_torch_object(filepath):
 
 class ModelManager:
 
-    def __init__(self, inducing_points, learning_rate, hidden_layer_count=2, hidden_layer_neuron_count=16):
+    def __init__(
+        self, inducing_points, learning_rate, hidden_layer_count=2, hidden_layer_neuron_count=16,
+        spectral_normalisation=False
+    ):
         # Set up model:
         inducing_points = torch.tensor(inducing_points)
         self.likelihood = gpytorch.likelihoods.GaussianLikelihood()
         self.model = SparseGPModel(
-            inducing_points, inducing_points.shape[1], hidden_layer_count, hidden_layer_neuron_count
+            inducing_points, inducing_points.shape[1], hidden_layer_count, hidden_layer_neuron_count,
+            spectral_normalisation
         )
 
         # The default noise constraint sets the minimum too high,
@@ -204,7 +258,7 @@ class ModelManager:
         # Save model components:
         os.makedirs(id_folderpath, exist_ok=True)
         model_filepath = os.path.join(id_folderpath, "model.pth")
-        torch.save(self.model, model_filepath)
+        torch.save(_without_parametrizations(self.model), model_filepath)
         likelihood_filepath = os.path.join(id_folderpath, "likelihood.pth")
         torch.save(self.likelihood, likelihood_filepath)
         # The optimiser state is about twice the size of the model, and is only
@@ -214,6 +268,8 @@ class ModelManager:
             torch.save(self.optimizer, optimiser_filepath)
 
     def load(self, id_folderpath):
+        # Spectrally normalised layers are loaded as plain linear layers (see
+        # _without_parametrizations), so training a loaded model no longer normalises them:
         self.model = load_torch_object(os.path.join(id_folderpath, "model.pth"))
         self.likelihood = load_torch_object(os.path.join(id_folderpath, "likelihood.pth"))
         optimiser_filepath = os.path.join(id_folderpath, "optimiser.pth")

@@ -15,6 +15,7 @@
         "hidden_layer_neuron_count": 64,
         "learning_rate": 0.01,
         "deep_kernel_learning_rate": 0.003,
-        "batch_size": 512
+        "batch_size": 512,
+        "spectral_normalisation": false
     }
 }
