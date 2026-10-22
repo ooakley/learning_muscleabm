@@ -11,12 +11,40 @@ import torch
 import numpy as np
 
 from torch.nn.utils import parametrize
-from torch.nn.utils.parametrizations import spectral_norm
 from torch.utils.data import TensorDataset, DataLoader
+
+# Settings of the residual (DUE) deep kernel, used when a model is built with due=True. The
+# residual branch is contractive, Lip(g) < 1, so the warp x + g(x) is invertible and
+# bi-Lipschitz (Behrmann et al. 2019, https://arxiv.org/abs/1811.00995, Theorem 1 and
+# Lemma 2), which stops the warp collapsing distinct inputs together (van Amersfoort et al.
+# 2021, https://arxiv.org/abs/2102.11409). Each linear layer's spectral norm is capped at the
+# coefficient, and the activation is 1-Lipschitz:
+DUE_SPECTRAL_COEFFICIENT = 0.95
+DUE_ACTIVATION = torch.nn.ELU
+
+
+class SpectralCap(torch.nn.Module):
+    """Parametrization capping a weight's spectral norm at a coefficient: W / max(1, sigma / c).
+
+    This is the rule of Behrmann et al. 2019 (their Equation 2), but with the exact spectral norm
+    rather than a power iteration estimate, which is cheap for layers this small, so the cap holds
+    at every step.
+    """
+
+    def __init__(self, coefficient):
+        super().__init__()
+        self.coefficient = coefficient
+
+    def forward(self, weight):
+        sigma = torch.linalg.matrix_norm(weight, ord=2)
+        return weight / torch.clamp(sigma / self.coefficient, min=1.0)
 
 
 class DeepInputTransformation(torch.nn.Module):
-    def __init__(self, dimension, hidden_layer_count=2, hidden_layer_neuron_count=16, spectral_normalisation=False):
+    def __init__(
+        self, dimension, hidden_layer_count=2, hidden_layer_neuron_count=16,
+        activation=torch.nn.SiLU, spectral_cap=None
+    ):
         # Run general initialisation of the nn.Module base class:
         super().__init__()
 
@@ -31,7 +59,7 @@ class DeepInputTransformation(torch.nn.Module):
         input_count = dimension
         for _ in range(self.hl_count):
             layers.append(torch.nn.Linear(input_count, self.hl_neuron_count))
-            layers.append(torch.nn.SiLU())
+            layers.append(activation())
             input_count = self.hl_neuron_count
         layers.append(torch.nn.Linear(input_count, dimension))
         self.mlp = torch.nn.Sequential(*layers)
@@ -40,13 +68,11 @@ class DeepInputTransformation(torch.nn.Module):
         with torch.no_grad():
             self.apply(self.initialise)
 
-        # Divide the weights of every linear layer by their largest singular value, estimated by
-        # a power iteration on each forward pass in training mode, bounding how far the network
-        # can stretch distances between inputs before the kernel sees them:
-        if spectral_normalisation:
-            for layer_index, layer in enumerate(self.mlp):
+        # Cap the spectral norm of every linear layer, if set:
+        if spectral_cap is not None:
+            for layer in self.mlp:
                 if isinstance(layer, torch.nn.Linear):
-                    self.mlp[layer_index] = spectral_norm(layer)
+                    parametrize.register_parametrization(layer, "weight", SpectralCap(spectral_cap))
 
     def forward(self, x):
         return self.mlp.forward(x)
@@ -56,10 +82,29 @@ class DeepInputTransformation(torch.nn.Module):
             torch.nn.init.xavier_normal_(m.weight)
 
 
+class ResidualInputTransformation(torch.nn.Module):
+    """One residual block, x + g(x), around a deep input transformation with capped spectral norms.
+
+    With ELU (Lipschitz constant 1) and every linear layer capped at DUE_SPECTRAL_COEFFICIENT,
+    Lip(g) <= DUE_SPECTRAL_COEFFICIENT ** (hidden_layer_count + 1), so distances between inputs
+    are scaled by a factor between 1 - Lip(g) and 1 + Lip(g) (Behrmann et al. 2019, Lemma 2).
+    """
+
+    def __init__(self, dimension, hidden_layer_count=2, hidden_layer_neuron_count=16):
+        super().__init__()
+        self.branch = DeepInputTransformation(
+            dimension, hidden_layer_count, hidden_layer_neuron_count,
+            activation=DUE_ACTIVATION, spectral_cap=DUE_SPECTRAL_COEFFICIENT
+        )
+
+    def forward(self, x):
+        return x + self.branch(x)
+
+
 class SparseGPModel(gpytorch.models.ApproximateGP):
     def __init__(
         self, inducing_points, dimensions, hidden_layer_count=2, hidden_layer_neuron_count=16,
-        spectral_normalisation=False
+        due=False
     ):
         # Set up distribution:
         variational_distribution = gpytorch.variational.CholeskyVariationalDistribution(
@@ -75,10 +120,15 @@ class SparseGPModel(gpytorch.models.ApproximateGP):
         # Inherit rest of init logic from approximate GP:
         super().__init__(variational_strategy)
 
-        # Instantiate input transform:
-        self.input_transform = DeepInputTransformation(
-            dimensions, hidden_layer_count, hidden_layer_neuron_count, spectral_normalisation
-        )
+        # Instantiate input transform, with a residual connection if set:
+        if due:
+            self.input_transform = ResidualInputTransformation(
+                dimensions, hidden_layer_count, hidden_layer_neuron_count
+            )
+        else:
+            self.input_transform = DeepInputTransformation(
+                dimensions, hidden_layer_count, hidden_layer_neuron_count
+            )
 
         # Define mean and additive covariance functions:
         self.mean_module = gpytorch.means.ConstantMean()
@@ -117,11 +167,11 @@ _main_to_emulators_pickle.load = lambda file, **kwargs: _MainToEmulatorsUnpickle
 
 
 def _without_parametrizations(model):
-    """The model, or if any of its linear layers are parametrized (spectrally normalised), a copy
+    """The model, or if any of its linear layers are parametrized (spectrally capped), a copy
     of it with those layers replaced by plain linear layers.
 
     torch cannot save a parametrized module whole, only its state_dict. The plain layers hold the
-    weights the model uses in evaluation mode, so the copy gives the same predictions, and loads
+    capped weights the model uses, so the copy gives the same predictions, and loads
     with load_torch_object like any other model. (torch's remove_parametrizations cannot be used
     on the copy, as it edits the parametrized class, which the copy shares with the model.)
     """
@@ -137,8 +187,6 @@ def _without_parametrizations(model):
     for parent, layer_name, layer in parametrized_layers:
         if not isinstance(layer, torch.nn.Linear):
             raise TypeError(f"Cannot save parametrized {type(layer).__name__} layers, only linear layers.")
-        # In evaluation mode, the weight is computed without a further power iteration:
-        layer.eval()
         with torch.no_grad():
             weight = layer.weight
             plain_layer = torch.nn.Linear(
@@ -161,14 +209,13 @@ class ModelManager:
 
     def __init__(
         self, inducing_points, learning_rate, hidden_layer_count=2, hidden_layer_neuron_count=16,
-        spectral_normalisation=False
+        due=False
     ):
         # Set up model:
         inducing_points = torch.tensor(inducing_points)
         self.likelihood = gpytorch.likelihoods.GaussianLikelihood()
         self.model = SparseGPModel(
-            inducing_points, inducing_points.shape[1], hidden_layer_count, hidden_layer_neuron_count,
-            spectral_normalisation
+            inducing_points, inducing_points.shape[1], hidden_layer_count, hidden_layer_neuron_count, due
         )
 
         # The default noise constraint sets the minimum too high,
@@ -268,8 +315,8 @@ class ModelManager:
             torch.save(self.optimizer, optimiser_filepath)
 
     def load(self, id_folderpath):
-        # Spectrally normalised layers are loaded as plain linear layers (see
-        # _without_parametrizations), so training a loaded model no longer normalises them:
+        # Spectrally capped layers are loaded as plain linear layers (see
+        # _without_parametrizations), so training a loaded model no longer caps them:
         self.model = load_torch_object(os.path.join(id_folderpath, "model.pth"))
         self.likelihood = load_torch_object(os.path.join(id_folderpath, "likelihood.pth"))
         optimiser_filepath = os.path.join(id_folderpath, "optimiser.pth")

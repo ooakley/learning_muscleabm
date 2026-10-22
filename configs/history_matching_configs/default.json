@@ -16,6 +16,6 @@
         "learning_rate": 0.01,
         "deep_kernel_learning_rate": 0.003,
         "batch_size": 512,
-        "spectral_normalisation": false
+        "due": false
     }
 }

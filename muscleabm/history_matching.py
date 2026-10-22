@@ -27,7 +27,7 @@ A history matching config is a .json file of the form:
             "learning_rate": 0.01,
             "deep_kernel_learning_rate": 0.003,
             "batch_size": 512,
-            "spectral_normalisation": false
+            "due": false
         }
     }
 
@@ -50,8 +50,10 @@ delete_run_data:   whether to delete each wave's run_data folder, to save space,
 gaussian_process:  architecture and training settings of the GP emulators. They train for
                    a fixed number of optimiser steps (minibatches), so that a wave's models
                    train for as long as the first wave's, however large the dataset has grown.
-                   spectral_normalisation (true or false) sets the spectral norm of every
-                   linear layer of the deep kernel to 1.
+                   due (true or false) adds a residual connection around the deep kernel
+                   network, warping x to x + g(x), with g contractive (ELU activations and
+                   spectral norms capped at 0.95), so that the warp is invertible and
+                   bi-Lipschitz, as in DUE (van Amersfoort et al. 2021).
 
 Each wave's models are saved to its MODELS_DIRNAME folder, and each metric's model folder
 records the settings it was trained with in training_config.json.
@@ -90,8 +92,12 @@ GP_SETTINGS = [
      "Learning rate of the GP (variational parameters, inducing locations, kernel and likelihood)."),
     ("deep_kernel_learning_rate", float, 0.003, "Learning rate of the deep kernel network."),
     ("batch_size", int, 512, "Batch size for training and inference."),
-    ("spectral_normalisation", boolean, False,
-     "Spectrally normalise every linear layer of the deep kernel network (true or false)."),
+    # The coefficient and activation of the residual deep kernel are set by DUE_SPECTRAL_COEFFICIENT
+    # and DUE_ACTIVATION in muscleabm/emulators.py:
+    ("due", boolean, False,
+     "Add a residual connection around the deep kernel network, x + g(x), with ELU activations "
+     "and every linear layer's spectral norm capped at 0.95, so the warp is invertible and "
+     "bi-Lipschitz (true or false). hidden_layer_count and hidden_layer_neuron_count set g."),
 ]
 
 

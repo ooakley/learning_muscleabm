@@ -10,7 +10,7 @@ import torch
 import numpy as np
 
 from muscleabm.datasets import GLOBAL_DATASET_FOLDER, load_gridsearch_data
-from muscleabm.emulators import ModelManager, run_inference
+from muscleabm.emulators import DUE_ACTIVATION, DUE_SPECTRAL_COEFFICIENT, ModelManager, run_inference
 from muscleabm.history_matching import MODELS_DIRNAME, GPSettings
 from muscleabm.sensitivity import run_sobol_index_inference
 
@@ -22,10 +22,10 @@ torch.set_default_dtype(torch.float64)
 K_FOLD_COUNT = 8
 
 # The GP architecture and training settings (training steps, inducing points, deep kernel
-# layers and neurons, learning rates, batch size and spectral normalisation) are command line
-# arguments, with defaults in muscleabm/history_matching.py. Every model trains for the same
-# number of optimiser steps, however large the dataset, so that models of later waves are not
-# trained for longer.
+# layers and neurons, learning rates, batch size and whether the deep kernel is residual, as in
+# DUE) are command line arguments, with defaults in muscleabm/history_matching.py. Every model
+# trains for the same number of optimiser steps, however large the dataset, so that models of
+# later waves are not trained for longer.
 
 
 def parse_arguments():
@@ -79,7 +79,7 @@ class DeepKernelModelManager(ModelManager):
         super().__init__(
             inducing_points, learning_rate,
             gp_settings.hidden_layer_count, gp_settings.hidden_layer_neuron_count,
-            gp_settings.spectral_normalisation
+            gp_settings.due
         )
 
         # Split the model parameters into the deep kernel network and everything else:
@@ -398,7 +398,9 @@ def main():
         "deep_kernel_learning_rate": gp_settings.deep_kernel_learning_rate,
         "num_layers": gp_settings.hidden_layer_count,
         "num_neurons": gp_settings.hidden_layer_neuron_count,
-        "spectral_normalisation": gp_settings.spectral_normalisation,
+        "due": gp_settings.due,
+        "due_spectral_coefficient": DUE_SPECTRAL_COEFFICIENT,
+        "due_activation": DUE_ACTIVATION.__name__,
         "batch_size": gp_settings.batch_size,
         "original_row_count": int(original_row_count),
         "valid_row_count": int(parameter_matrix.shape[0]),
