@@ -3,7 +3,7 @@
     "wave_size": 32768,
     "temperature_index": 1,
     "gaussian_process": {
-        "epochs": 15,
+        "training_steps": 3840,
         "inducing_point_count": 512,
         "hidden_layer_count": 2,
         "hidden_layer_neuron_count": 32,

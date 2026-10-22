@@ -58,8 +58,7 @@ validate_python_script="python_scripts/inference/validate_wave.py"
 # Read and checked by muscleabm/history_matching.py, so that a mistake stops the submission.
 # It prints, one per line: wave_count, wave_size, samples_per_phenotype (half of wave_size),
 # temperature_index, gp_folder_name (the folder the GP models are saved to inside each wave
-# folder, named after the GP settings) and gp_training_arguments (the GP settings, as
-# arguments of gp_training.py):
+# folder) and gp_training_arguments (the GP settings, as arguments of gp_training.py):
 if [ ! -f "$hm_config_path" ]; then
     echo "No history matching config found at ${hm_config_path}, exiting..."
     exit 1
@@ -312,8 +311,9 @@ for wave in $(seq "$first_wave_id" $(( wave_count - 1 ))); do
         submitted_job_ids+=("$collate_hm")
 
         # 5. Test the previous wave's GP models against this wave's simulations (nothing waits on this).
-        #    In the first wave submitted, those models were trained by an earlier submission,
-        #    perhaps with other GP settings, so check they are where these settings put them:
+        #    In the first wave submitted, those models were trained by an earlier submission, so
+        #    check they exist (waves trained before the folder was named trained_models have
+        #    their models in a pll_gp_models_... folder instead):
         previous_gp_models_dirpath="${experiment_dirpath}/hm$(( wave - 1 ))/${gp_folder_name}"
         run_wave_validation=$run_validation
         if [ "$run_validation" = true ] && [ "$wave" -eq "$first_wave_id" ] && [ "$wave" -gt 0 ] \
