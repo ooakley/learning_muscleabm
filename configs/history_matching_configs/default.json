@@ -2,6 +2,12 @@
     "wave_count": 6,
     "wave_size": 32768,
     "temperature_index": 1,
+    "burn_in_fraction": 0.25,
+    "max_failed_fraction": 0.1,
+    "simulations_per_task": 64,
+    "array_task_limit": 90,
+    "run_validation": true,
+    "delete_run_data": true,
     "gaussian_process": {
         "training_steps": 3840,
         "inducing_point_count": 512,

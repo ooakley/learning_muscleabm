@@ -13,6 +13,12 @@ A history matching config is a .json file of the form:
         "wave_count": 4,
         "wave_size": 32768,
         "temperature_index": 1,
+        "burn_in_fraction": 0.25,
+        "max_failed_fraction": 0.1,
+        "simulations_per_task": 64,
+        "array_task_limit": 90,
+        "run_validation": true,
+        "delete_run_data": true,
         "gaussian_process": {
             "training_steps": 3840,
             "inducing_point_count": 512,
@@ -29,6 +35,17 @@ wave_size:         simulations in each wave after wave 0, drawn equally from the
                    of each phenotype (wave 0's size is set by the Sobol' search config).
 temperature_index: temperature of the MCMC chains that each wave's samples are drawn from
                    (0 is the cold chain).
+burn_in_fraction:  fraction of each MCMC chain discarded as burn-in, both when sampling
+                   the posterior and when drawing the next wave from it.
+max_failed_fraction: the chain stops if more than this fraction of a wave's simulations
+                   failed (for any metric).
+simulations_per_task: simulations run by each array task of the simulation job.
+array_task_limit:  simulation array tasks allowed to run at once.
+run_validation:    whether to test each wave's GP models against the simulations of the
+                   next wave.
+delete_run_data:   whether to delete each wave's run_data folder, to save space, once the
+                   wave has passed the check of failed simulations and is in the global
+                   dataset. Its simulations then cannot be rerun or recollated.
 gaussian_process:  architecture and training settings of the GP emulators. They train for
                    a fixed number of optimiser steps (minibatches), so that a wave's models
                    train for as long as the first wave's, however large the dataset has grown.
@@ -42,8 +59,9 @@ import sys
 # Phenotypes whose posteriors each wave is drawn from (as in generate_hm_sweep.py):
 PHENOTYPE_COUNT = 2
 
-# Folder, inside each wave folder, that the wave's GP models are saved to:
+# Folders, inside each wave folder, that the wave's GP models and MCMC chains are saved to:
 MODELS_DIRNAME = "trained_models"
+MCMC_DIRNAME = "disc_cov_mcmc_results"
 
 # GP settings, with their types and defaults. The defaults are those gp_training.py uses
 # when run without a config:
@@ -107,6 +125,22 @@ def _check_number(path, value, setting_type, minimum):
     return setting_type(value)
 
 
+def _check_fraction(path, value, include_zero):
+    """Check a config value is a fraction: in (0, 1), or in [0, 1] if include_zero."""
+    value = _check_number(path, value, float, 0)
+    if include_zero and value > 1:
+        raise ConfigError("{} must be between 0 and 1, got {!r}.".format(path, value))
+    if not include_zero and not 0 < value < 1:
+        raise ConfigError("{} must be strictly between 0 and 1, got {!r}.".format(path, value))
+    return value
+
+
+def _check_bool(path, value):
+    if not isinstance(value, bool):
+        raise ConfigError("{} must be true or false, got {!r}.".format(path, value))
+    return value
+
+
 def _check_keys(path, dictionary, expected_keys):
     if not isinstance(dictionary, dict):
         raise ConfigError("{} must be a JSON object.".format(path))
@@ -126,11 +160,21 @@ def load_config(config_path):
     except (OSError, ValueError) as error:
         raise ConfigError("Could not read {}: {}".format(config_path, error))
 
-    _check_keys("The config", config, ["wave_count", "wave_size", "temperature_index", "gaussian_process"])
+    _check_keys("The config", config, [
+        "wave_count", "wave_size", "temperature_index", "burn_in_fraction", "max_failed_fraction",
+        "simulations_per_task", "array_task_limit", "run_validation", "delete_run_data",
+        "gaussian_process",
+    ])
     checked = {
         "wave_count": _check_number("wave_count", config["wave_count"], int, 1),
         "wave_size": _check_number("wave_size", config["wave_size"], int, PHENOTYPE_COUNT),
         "temperature_index": _check_number("temperature_index", config["temperature_index"], int, 0),
+        "burn_in_fraction": _check_fraction("burn_in_fraction", config["burn_in_fraction"], False),
+        "max_failed_fraction": _check_fraction("max_failed_fraction", config["max_failed_fraction"], True),
+        "simulations_per_task": _check_number("simulations_per_task", config["simulations_per_task"], int, 1),
+        "array_task_limit": _check_number("array_task_limit", config["array_task_limit"], int, 1),
+        "run_validation": _check_bool("run_validation", config["run_validation"]),
+        "delete_run_data": _check_bool("delete_run_data", config["delete_run_data"]),
     }
     if checked["wave_size"] % PHENOTYPE_COUNT != 0:
         raise ConfigError(
@@ -158,6 +202,13 @@ SHELL_SETTINGS = [
     "wave_size",
     "samples_per_phenotype",  # wave_size / PHENOTYPE_COUNT
     "temperature_index",
+    "burn_in_fraction",
+    "max_failed_fraction",
+    "simulations_per_task",
+    "array_task_limit",
+    "run_validation",  # true or false
+    "delete_run_data",  # true or false
+    "mcmc_dirname",  # MCMC_DIRNAME
     "gp_folder_name",  # MODELS_DIRNAME
     "gp_training_arguments",  # GPSettings.to_arguments(), space separated
 ]
@@ -171,6 +222,13 @@ def to_lines(config):
         str(config["wave_size"]),
         str(config["wave_size"] // PHENOTYPE_COUNT),
         str(config["temperature_index"]),
+        str(config["burn_in_fraction"]),
+        str(config["max_failed_fraction"]),
+        str(config["simulations_per_task"]),
+        str(config["array_task_limit"]),
+        str(config["run_validation"]).lower(),
+        str(config["delete_run_data"]).lower(),
+        MCMC_DIRNAME,
         MODELS_DIRNAME,
         " ".join(gp_settings.to_arguments()),
     ]

@@ -10,12 +10,12 @@
 
 # Runs the simulations of one history matching wave. Usage, from the repository root:
 #
-#     sbatch bash_scripts/gridsearch.sh <experiment_dirpath> <hm_wave_id>
+#     sbatch bash_scripts/gridsearch.sh <experiment_dirpath> <hm_wave_id> <simulations_per_task>
 #
-# Each array task runs simulations_per_task simulations, so the array needs
-# ceil(simulation count / simulations_per_task) tasks. Override the range above
-# for a wave of a different size, e.g. sbatch --array=1-16%100 bash_scripts/gridsearch.sh <...> 1
-# (submit_hm_waves.sh does this itself, and expects the same simulations_per_task).
+# Each array task runs simulations_per_task simulations (set by the history matching
+# config, e.g. 64), so the array needs ceil(simulation count / simulations_per_task) tasks.
+# Override the range above for a wave of a different size, e.g.
+# sbatch --array=1-16%100 bash_scripts/gridsearch.sh <...> 1 64 (submit_hm_waves.sh does this itself).
 #
 # An array task fails if any of its simulations or their analyses failed. The failed
 # simulations have no speeds.npy, so they are collated as NaN, and rerunning the task
@@ -23,13 +23,13 @@
 set -eo pipefail
 
 # --- Arguments ---
-usage="Usage: sbatch bash_scripts/gridsearch.sh <experiment_dirpath> <hm_wave_id>"
+usage="Usage: sbatch bash_scripts/gridsearch.sh <experiment_dirpath> <hm_wave_id> <simulations_per_task>"
 experiment_dirpath=${1:?$usage}
 hm_wave_id=${2:?$usage}
+simulations_per_task=${3:?$usage}
 experiment_dirpath=${experiment_dirpath%/}
 
 # --- Settings ---
-simulations_per_task=64
 parallel_job_count=16
 
 ml load uv parallel Boost/1.81.0-GCC-12.2.0 CMake/3.24.3-GCCcore-12.2.0 OpenMPI/4.1.4-GCC-12.2.0

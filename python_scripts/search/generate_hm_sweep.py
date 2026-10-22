@@ -10,6 +10,7 @@ import argparse
 
 import numpy as np
 
+from muscleabm.history_matching import MCMC_DIRNAME
 from muscleabm.sampling import COUNT_PARAMETER_NAME, JSONOutputManager
 
 # Phenotypes, in the order their samples are written, and the chain file of each:
@@ -36,7 +37,7 @@ def parse_arguments():
              "the hm0 folder. The new wave is written to the next folder, e.g. hm1."
     )
     parser.add_argument(
-        "--mcmc_dirname", default="disc_cov_mcmc_results",
+        "--mcmc_dirname", default=MCMC_DIRNAME,
         help="Folder inside the wave folder containing the WT and RD chains."
     )
     parser.add_argument(

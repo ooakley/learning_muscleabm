@@ -10,6 +10,7 @@ import numpy as np
 
 from muscleabm.datasets import DISCREPANCY_FRACTIONS, GLOBAL_DATASET_FOLDER, MODEL_METRICS, WETLAB_METRICS
 from muscleabm.emulators import ModelManager
+from muscleabm.history_matching import MCMC_DIRNAME
 
 # Set up parallelism across metrics:
 from concurrent.futures import ThreadPoolExecutor
@@ -757,7 +758,7 @@ def main():
         inference_managers[metric_name] = inference_manager
     
     # Set up save dirpath"
-    mcmc_dirpath = os.path.join(wave_dirpath, "disc_cov_mcmc_results")
+    mcmc_dirpath = os.path.join(wave_dirpath, MCMC_DIRNAME)
     os.makedirs(mcmc_dirpath, exist_ok=True)
 
     # Select the target data and the file prefix for the requested phenotype:
