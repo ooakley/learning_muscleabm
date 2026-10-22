@@ -127,54 +127,80 @@ class ModelManager:
             {'params': self.likelihood.parameters()},
         ], lr=learning_rate)
 
-        # Learning rate schedule, stepped after every epoch if set:
+        # Learning rate schedule, if set: stepped after every epoch by train, and after every
+        # optimiser step by train_steps:
         self.scheduler = None
 
         self.loss_history = []
 
-    def train_epoch(self, dataloader, num_data):
-        # Ensure parameters are trainable:
+    def _training_step(self, mll, x_batch, y_batch):
+        """One optimiser step on a minibatch."""
+        self.optimizer.zero_grad()
+        output_distribution = self.model(x_batch)
+        loss = -mll(output_distribution, y_batch)
+        loss.backward()
+        self.optimizer.step()
+
+        # Ensure inducing points don't go out of bounds (implicitly
+        # imposing constraints with transforms degrades performance):
+        with torch.no_grad():
+            inducing_points = self.model.variational_strategy.inducing_points.detach()
+            self.model.variational_strategy.inducing_points[inducing_points > 1] = 1
+            self.model.variational_strategy.inducing_points[inducing_points < 0] = 0
+
+        self.loss_history.append(loss.detach().numpy())
+        return loss
+
+    def _prepare_training(self, x, y):
+        # Ensure parameters are trainable, and set up the dataset and loss:
         self.model.train()
         self.likelihood.train()
-
-        # Set up loss:
-        mll = gpytorch.mlls.PredictiveLogLikelihood(self.likelihood, self.model, num_data=num_data)
-
-        # Run through entire dataset:
-        for batch_index, (x_batch, y_batch) in enumerate(dataloader):
-            self.optimizer.zero_grad()
-            output_distribution = self.model(x_batch)
-            loss = -mll(output_distribution, y_batch)
-            loss.backward()
-
-            # Step through optimisers:
-            self.optimizer.step()
-            if (batch_index + 1) % 32 == 0:
-                print(batch_index + 1, loss.item(), flush=True)
-
-            # Ensure inducing points don't go out of bounds (implicitly
-            # imposing constraints with transforms degrades performance):
-            with torch.no_grad():
-                inducing_points = self.model.variational_strategy.inducing_points.detach()
-                self.model.variational_strategy.inducing_points[inducing_points > 1] = 1
-                self.model.variational_strategy.inducing_points[inducing_points < 0] = 0
-
-            self.loss_history.append(loss.detach().numpy())
+        dataset = TensorDataset(torch.tensor(x), torch.tensor(y))
+        mll = gpytorch.mlls.PredictiveLogLikelihood(self.likelihood, self.model, num_data=len(y))
+        return dataset, mll
 
     def train(self, x, y, batch_size, epochs=1):
-        # Convert datasets to pytorch:
-        x_tensor = torch.tensor(x)
-        y_tensor = torch.tensor(y)
-        dataset = TensorDataset(x_tensor, y_tensor)
-
+        """Train for a number of passes through the data."""
+        dataset, mll = self._prepare_training(x, y)
         for epoch_index in range(epochs):
             print(f"Training epoch {epoch_index + 1}...")
             dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-            self.train_epoch(dataloader, len(y))
+            for batch_index, (x_batch, y_batch) in enumerate(dataloader):
+                loss = self._training_step(mll, x_batch, y_batch)
+                if (batch_index + 1) % 32 == 0:
+                    print(batch_index + 1, loss.item(), flush=True)
             if self.scheduler is not None:
                 self.scheduler.step()
 
+    def train_steps(self, x, y, batch_size, step_count):
+        """Train for a number of optimiser steps, whatever the size of the data.
+
+        Minibatches are drawn from shuffled passes through the data, reshuffled each time the
+        data runs out, and training stops after step_count steps, part-way through a pass if
+        need be.
+        """
+        dataset, mll = self._prepare_training(x, y)
+        steps_per_epoch = -(-len(y) // batch_size)
+        print(f"Training for {step_count} steps ({step_count / steps_per_epoch:.2f} epochs)...")
+        step_index = 0
+        while step_index < step_count:
+            dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+            for x_batch, y_batch in dataloader:
+                loss = self._training_step(mll, x_batch, y_batch)
+                if self.scheduler is not None:
+                    self.scheduler.step()
+                step_index += 1
+                if step_index % 32 == 0:
+                    print(step_index, loss.item(), flush=True)
+                if step_index == step_count:
+                    break
+
     def save(self, id_folderpath, save_optimiser=True):
+        # Clear the linear operators gpytorch caches from the last forward pass, which it does
+        # whenever the mode is set (the model is already in training mode). After a full-size
+        # batch, the cache holds an object that cannot be pickled, so saving failed:
+        self.model.train()
+
         # Save model components:
         os.makedirs(id_folderpath, exist_ok=True)
         model_filepath = os.path.join(id_folderpath, "model.pth")

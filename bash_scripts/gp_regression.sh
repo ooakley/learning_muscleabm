@@ -14,11 +14,10 @@
 #     sbatch bash_scripts/gp_regression.sh <experiment_dirpath> <hm_wave_id> [gp_models_dirname] [GP settings...]
 #
 # The models are saved to the latest wave in the global dataset, inside the GP models
-# folder if given (or given as ""), or else a folder named after the GP settings. hm_wave_id
-# is only reported: it takes the same arguments as the other stage scripts of
-# submit_hm_waves.sh. Any further arguments set the GP architecture and training settings
-# (e.g. --epochs 15 --hidden_layer_count 2), which otherwise take the defaults in
-# muscleabm/history_matching.py.
+# folder if given, or trained_models/ if not (or given as ""). hm_wave_id is only reported: it
+# takes the same arguments as the other stage scripts of submit_hm_waves.sh. Any further
+# arguments set the GP architecture and training settings (e.g. --training_steps 3840
+# --hidden_layer_count 2), which otherwise take the defaults in muscleabm/history_matching.py.
 set -eo pipefail
 
 # --- Arguments ---

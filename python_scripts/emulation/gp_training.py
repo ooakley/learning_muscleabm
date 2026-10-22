@@ -1,4 +1,5 @@
 import argparse
+import math
 import os
 import json
 import sys
@@ -10,7 +11,7 @@ import numpy as np
 
 from muscleabm.datasets import GLOBAL_DATASET_FOLDER, load_gridsearch_data
 from muscleabm.emulators import ModelManager, run_inference
-from muscleabm.history_matching import GPSettings
+from muscleabm.history_matching import MODELS_DIRNAME, GPSettings
 from muscleabm.sensitivity import run_sobol_index_inference
 
 sys.stdout.reconfigure(line_buffering=True)
@@ -20,9 +21,10 @@ torch.set_default_dtype(torch.float64)
 
 K_FOLD_COUNT = 8
 
-# The GP architecture and training settings (epochs, inducing points, deep kernel layers
-# and neurons, learning rates and batch size) are command line arguments, with defaults in
-# muscleabm/history_matching.py.
+# The GP architecture and training settings (training steps, inducing points, deep kernel
+# layers and neurons, learning rates and batch size) are command line arguments, with defaults
+# in muscleabm/history_matching.py. Every model trains for the same number of optimiser steps,
+# however large the dataset, so that models of later waves are not trained for longer.
 
 
 def parse_arguments():
@@ -33,9 +35,8 @@ def parse_arguments():
     )
     parser.add_argument('--metric_name', type=str)
     parser.add_argument(
-        '--gp_models_dirname', type=str, default=None,
-        help='Folder, inside the latest wave folder, to save the models to. Defaults to a name '
-             'built from the GP settings.'
+        '--gp_models_dirname', type=str, default=MODELS_DIRNAME,
+        help='Folder, inside the latest wave folder, to save the models to.'
     )
     GPSettings.add_arguments(parser)
     args = parser.parse_args()
@@ -88,14 +89,15 @@ class DeepKernelModelManager(ModelManager):
         ]
 
         # Set up optimisation - Adam seems to work best (need to properly test this).
-        # The scheduler below decays each group from its own initial learning rate:
+        # The scheduler below decays each group from its own initial learning rate, over the
+        # optimiser steps of training:
         self.optimizer = torch.optim.Adam([
             {'params': gp_parameters, 'lr': learning_rate},
             {'params': self.likelihood.parameters(), 'lr': learning_rate},
             {'params': deep_kernel_parameters, 'lr': deep_kernel_learning_rate},
         ])
         self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            self.optimizer, T_max=gp_settings.epochs
+            self.optimizer, T_max=gp_settings.training_steps
         )
 
 
@@ -210,7 +212,7 @@ def cross_validation(
         whitened_test_noise = (test_sem / train_std) ** 2
 
         # Train model:
-        model_manager.train(train_parameters, whitened_train, gp_settings.batch_size, epochs=gp_settings.epochs)
+        model_manager.train_steps(train_parameters, whitened_train, gp_settings.batch_size, gp_settings.training_steps)
 
         # Save this fold's model, whitening transform and loss history, so that further
         # held-out diagnostics can be computed later without retraining:
@@ -359,13 +361,22 @@ def main():
     print(f"Inducing points shape: {inducing_points.shape}...")
 
     # Set up save directories:
-    gp_models_dirname = args.gp_models_dirname
-    if gp_models_dirname is None:
-        gp_models_dirname = gp_settings.models_dirname
-    gp_folderpath = os.path.join(wave_dirpath, gp_models_dirname)
+    gp_folderpath = os.path.join(wave_dirpath, args.gp_models_dirname)
     os.makedirs(gp_folderpath, exist_ok=True)
     id_folderpath = os.path.join(gp_folderpath, args.metric_name)
     os.makedirs(id_folderpath, exist_ok=True)
+
+    # The folder name does not depend on the GP settings, so say if this replaces models
+    # trained with other settings:
+    previous_config_filepath = os.path.join(id_folderpath, "training_config.json")
+    if os.path.exists(previous_config_filepath):
+        with open(previous_config_filepath) as previous_config_fstream:
+            previous_settings = json.load(previous_config_fstream).get("gp_settings")
+        if previous_settings != gp_settings.to_dict():
+            print(
+                f"Warning: replacing the models in {id_folderpath}, trained with other GP settings: "
+                f"{previous_settings}"
+            )
 
     # Record the settings these models were trained with:
     training_dict = {
@@ -375,7 +386,10 @@ def main():
         "wave_row_counts": [int(wave_row_count) for wave_row_count in wave_row_counts],
         "latest_wave_id": latest_wave_id,
         "metric_name": args.metric_name,
-        "num_epochs": gp_settings.epochs,
+        "gp_settings": gp_settings.to_dict(),
+        "training_steps": gp_settings.training_steps,
+        # Passes through the data that training_steps works out to, for the full model:
+        "training_epochs": gp_settings.training_steps / math.ceil(parameter_matrix.shape[0] / gp_settings.batch_size),
         "k_fold_count": K_FOLD_COUNT,
         "inducing_point_count": gp_settings.inducing_point_count,
         "learning_rate": gp_settings.learning_rate,
@@ -406,7 +420,7 @@ def main():
 
     # Train the model:
     print("Training model...")
-    model_manager.train(parameter_matrix, whitened_metric, gp_settings.batch_size, epochs=gp_settings.epochs)
+    model_manager.train_steps(parameter_matrix, whitened_metric, gp_settings.batch_size, gp_settings.training_steps)
     print("Saving model...")
     model_manager.save(id_folderpath)
 
