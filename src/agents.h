@@ -6,11 +6,15 @@
 #include <vector>
 
 class CellAgent {
+    // Lets the behavioural tests set up and inspect internal state:
+    friend class CellAgentTestAccess;
+
 public:
     // Constructor and intialisation:
     CellAgent(
         // Defined behaviour parameters:
         unsigned int setCellSeed, int setCellID,
+        double setWorldSize,
         double setdt,
 
         // Movement parameters:
@@ -86,6 +90,7 @@ public:
 private:
     // Model infrastructure:
     int cellID;
+    double worldSize; // Side length of the periodic world.
     double dt;
 
     // Movement parameters:

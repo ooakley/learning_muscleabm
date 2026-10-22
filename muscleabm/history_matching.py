@@ -14,7 +14,7 @@ A history matching config is a .json file of the form:
         "wave_size": 32768,
         "temperature_index": 1,
         "gaussian_process": {
-            "epochs": 15,
+            "training_steps": 3840,
             "inducing_point_count": 512,
             "hidden_layer_count": 2,
             "hidden_layer_neuron_count": 32,
@@ -29,7 +29,12 @@ wave_size:         simulations in each wave after wave 0, drawn equally from the
                    of each phenotype (wave 0's size is set by the Sobol' search config).
 temperature_index: temperature of the MCMC chains that each wave's samples are drawn from
                    (0 is the cold chain).
-gaussian_process:  architecture and training settings of the GP emulators.
+gaussian_process:  architecture and training settings of the GP emulators. They train for
+                   a fixed number of optimiser steps (minibatches), so that a wave's models
+                   train for as long as the first wave's, however large the dataset has grown.
+
+Each wave's models are saved to its MODELS_DIRNAME folder, and each metric's model folder
+records the settings it was trained with in training_config.json.
 """
 import json
 import sys
@@ -37,11 +42,17 @@ import sys
 # Phenotypes whose posteriors each wave is drawn from (as in generate_hm_sweep.py):
 PHENOTYPE_COUNT = 2
 
+# Folder, inside each wave folder, that the wave's GP models are saved to:
+MODELS_DIRNAME = "trained_models"
+
 # GP settings, with their types and defaults. The defaults are those gp_training.py uses
 # when run without a config:
 GP_SETTINGS = [
     # (name, type, default, help)
-    ("epochs", int, 15, "Training epochs, for the full model and each cross-validation fold."),
+    # 3840 steps is 15 epochs of a 2^17 simulation first wave at batch size 512:
+    ("training_steps", int, 3840,
+     "Optimiser steps (minibatches) for the full model and each cross-validation fold, "
+     "whatever the dataset size."),
     ("inducing_point_count", int, 512, "Inducing points of the sparse variational GP."),
     ("hidden_layer_count", int, 2, "Hidden layers of the deep kernel network."),
     ("hidden_layer_neuron_count", int, 32, "Neurons in each hidden layer of the deep kernel network."),
@@ -58,13 +69,6 @@ class GPSettings:
     def __init__(self, **settings):
         for name, setting_type, default, _ in GP_SETTINGS:
             setattr(self, name, setting_type(settings.get(name, default)))
-
-    @property
-    def models_dirname(self):
-        """Folder, inside a wave folder, that models trained with these settings are saved to."""
-        return "pll_gp_models_e{}_ip{}_l{}_n{}".format(
-            self.epochs, self.inducing_point_count, self.hidden_layer_count, self.hidden_layer_neuron_count
-        )
 
     def to_dict(self):
         return {name: getattr(self, name) for name, _, _, _ in GP_SETTINGS}
@@ -154,7 +158,7 @@ SHELL_SETTINGS = [
     "wave_size",
     "samples_per_phenotype",  # wave_size / PHENOTYPE_COUNT
     "temperature_index",
-    "gp_folder_name",  # GPSettings.models_dirname
+    "gp_folder_name",  # MODELS_DIRNAME
     "gp_training_arguments",  # GPSettings.to_arguments(), space separated
 ]
 
@@ -167,7 +171,7 @@ def to_lines(config):
         str(config["wave_size"]),
         str(config["wave_size"] // PHENOTYPE_COUNT),
         str(config["temperature_index"]),
-        gp_settings.models_dirname,
+        MODELS_DIRNAME,
         " ".join(gp_settings.to_arguments()),
     ]
     return "\n".join(lines)
