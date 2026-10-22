@@ -83,7 +83,8 @@ History matching fits the simulator to the wet lab data in waves. Each wave simu
    | Collate waves | `run_python_stage.sh` | `collation/collate_hm.py` | Every wave so far, in the experiment's `global_dataset/` |
    | Delete run data | `delete_run_data.sh` | | Deletes `run_data/`, once the wave is in `global_dataset/` |
    | Validate (from wave 1) | `run_python_stage.sh` | `inference/validate_wave.py` | The previous wave's GPs tested on this wave, in their models folder in `hm{n-1}/` |
-   | Train | `gp_regression.sh` | `emulation/gp_training.py` | GP models, in `trained_models/` |
+   | Train | `gp_regression.sh --stage full` | `emulation/gp_training.py` | GP models trained on every wave so far, in `trained_models/` |
+   | Cross-validate (alongside the MCMC) | `gp_regression.sh --stage cross_validation` | `emulation/gp_training.py` | Cross-validation models and metrics, and the Sobol' indices of the GP models, in `trained_models/` |
    | MCMC | `mcmc_fit.sh` | `inference/mcmc_gp_cov_fit.py` | Posterior chains, in `disc_cov_mcmc_results/` |
 
    To save space on the cluster, each wave's `run_data/` is deleted once the wave has passed the check of failed simulations and is in the global dataset; set `delete_run_data` to `false` in the history matching config to keep it. A wave whose `run_data/` is deleted can only be restarted from its train or MCMC step.
