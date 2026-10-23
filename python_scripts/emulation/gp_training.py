@@ -3,6 +3,7 @@ import math
 import os
 import json
 import sys
+import types
 
 import gpytorch
 import torch
@@ -10,7 +11,9 @@ import torch
 import numpy as np
 
 from muscleabm.datasets import GLOBAL_DATASET_FOLDER, load_gridsearch_data
-from muscleabm.emulators import ModelManager, run_inference
+from muscleabm.emulators import (
+    DUE_ACTIVATION, DUE_SPECTRAL_COEFFICIENT, ModelManager, load_torch_object, run_inference
+)
 from muscleabm.history_matching import MODELS_DIRNAME, GPSettings
 from muscleabm.sensitivity import run_sobol_index_inference
 
@@ -22,9 +25,18 @@ torch.set_default_dtype(torch.float64)
 K_FOLD_COUNT = 8
 
 # The GP architecture and training settings (training steps, inducing points, deep kernel
-# layers and neurons, learning rates and batch size) are command line arguments, with defaults
-# in muscleabm/history_matching.py. Every model trains for the same number of optimiser steps,
-# however large the dataset, so that models of later waves are not trained for longer.
+# layers and neurons, learning rates, batch size and whether the deep kernel is residual, as in
+# DUE) are command line arguments, with defaults in muscleabm/history_matching.py. Every model
+# trains for the same number of optimiser steps, however large the dataset, so that models of
+# later waves are not trained for longer.
+#
+# Training runs in two stages, which can be run as separate jobs (--stage), so that the MCMC,
+# which only needs the full model, does not wait for the cross-validation:
+#     full:             the model trained on every row, its predictions and diagnostics;
+#     cross_validation: the cross-validation models and metrics, and the Sobol' indices of the
+#                       full model (which must already be saved).
+# --stage all (the default) runs both, one after the other.
+STAGES = ("all", "full", "cross_validation")
 
 
 def parse_arguments():
@@ -36,7 +48,18 @@ def parse_arguments():
     parser.add_argument('--metric_name', type=str)
     parser.add_argument(
         '--gp_models_dirname', type=str, default=MODELS_DIRNAME,
-        help='Folder, inside the latest wave folder, to save the models to.'
+        help='Folder, inside the wave folder, to save the models to.'
+    )
+    parser.add_argument(
+        '--hm_wave_id', type=int, default=None,
+        help='History matching wave to train the models for, and save them to: they train on the rows '
+             'of the global dataset from this wave and the waves before it. Defaults to the latest '
+             'wave in the global dataset.'
+    )
+    parser.add_argument(
+        '--stage', type=str, default="all", choices=STAGES,
+        help='Train the full model (full), run the cross-validation and the Sobol\' indices of the '
+             'saved full model (cross_validation), or both (all).'
     )
     GPSettings.add_arguments(parser)
     args = parser.parse_args()
@@ -77,7 +100,8 @@ class DeepKernelModelManager(ModelManager):
         deep_kernel_learning_rate = gp_settings.deep_kernel_learning_rate
         super().__init__(
             inducing_points, learning_rate,
-            gp_settings.hidden_layer_count, gp_settings.hidden_layer_neuron_count
+            gp_settings.hidden_layer_count, gp_settings.hidden_layer_neuron_count,
+            gp_settings.due
         )
 
         # Split the model parameters into the deep kernel network and everything else:
@@ -115,7 +139,8 @@ def run_warp_inference(model_manager, inputs, batch_size=512):
 
 def cross_validation(
         parameter_matrix, output_metric, output_sem, replicate_counts, inducing_points,
-        valid_indices, original_row_count, wave_indices, wave_row_indices, id_folderpath, gp_settings
+        valid_indices, original_row_count, wave_indices, wave_row_indices, id_folderpath, gp_settings,
+        run_record
     ):
     # Shuffle datapoints prior to cross-validation (as otherwise there
     # are weird autocorrelations from the Sobol' sampling):
@@ -175,11 +200,16 @@ def cross_validation(
         ]
     }
 
+    # Record what the folds were trained on:
+    cv_dict.update(run_record)
+
     # Perform 8-fold cross validation:
     cv_models_folderpath = os.path.join(id_folderpath, "cv_models")
     for k_index in range(K_FOLD_COUNT):
-        # Set up the model and the model's associated training apparatus:
+        # Set up the model and the model's associated training apparatus. Each fold has its own
+        # seed, so that its model does not depend on what was trained before it:
         print(f"Performing validation with index: {k_index}...", flush=True)
+        torch.manual_seed(1 + k_index)
         model_manager = DeepKernelModelManager(inducing_points, gp_settings)
 
         # Get test indices:
@@ -316,42 +346,49 @@ def cross_validation(
     return cv_dict
 
 
-def main():
-    # Set seed:
-    torch.manual_seed(0)
+def prepare_training(args, gp_settings):
+    """Load the training data, sample the inducing points and set up the models folder.
 
-    # Parse arguments:
-    args = parse_arguments()
-    gp_settings = GPSettings.from_arguments(args)
-    print(f"Using experiment {args.experiment_dirpath}...")
-    print(f"Training on {args.metric_name}...")
-    print(f"GP settings: {gp_settings.to_dict()}")
-
+    Both stages call this, so they train on the same rows with the same inducing points.
+    """
     # The models train on the dataset aggregated across history matching waves:
     dataset_dirpath = os.path.join(args.experiment_dirpath, GLOBAL_DATASET_FOLDER)
     wave_indices, wave_row_indices = load_wave_provenance(dataset_dirpath)
-    wave_ids, wave_row_counts = np.unique(wave_indices, return_counts=True)
+
+    # The models are saved to the given wave, by default the most recent in the dataset, as it
+    # is that wave's posterior that they are used to sample. They train on that wave and the
+    # ones before it, so a job that starts after a later wave has been collated does not train
+    # on the later wave too:
+    dataset_wave_ids = np.unique(wave_indices)
+    hm_wave_id = int(np.max(dataset_wave_ids)) if args.hm_wave_id is None else args.hm_wave_id
+    if hm_wave_id not in dataset_wave_ids:
+        raise ValueError(
+            f"hm{hm_wave_id} is not in the global dataset, which has waves {dataset_wave_ids.tolist()}."
+        )
+    wave_ids, wave_row_counts = np.unique(wave_indices[wave_indices <= hm_wave_id], return_counts=True)
     for wave_id, wave_row_count in zip(wave_ids, wave_row_counts):
         print(f"Global dataset contains {wave_row_count} rows from hm{wave_id}...")
-
-    # The models are saved to the most recent wave in the dataset, as it is that
-    # wave's posterior that they are used to sample:
-    latest_wave_id = int(np.max(wave_ids))
-    wave_dirpath = os.path.join(args.experiment_dirpath, f"hm{latest_wave_id}")
+    wave_dirpath = os.path.join(args.experiment_dirpath, f"hm{hm_wave_id}")
     if not os.path.exists(wave_dirpath):
-        raise FileNotFoundError(f"The global dataset contains hm{latest_wave_id}, but {wave_dirpath} does not exist.")
+        raise FileNotFoundError(f"The global dataset contains hm{hm_wave_id}, but {wave_dirpath} does not exist.")
     print(f"Saving models to {wave_dirpath}...")
 
     # Load gridsearch data:
     print("Loading data...")
     parameter_matrix, output_metric, output_sem, replicate_counts, valid_indices, original_row_count = \
         load_gridsearch_data(dataset_dirpath, args.metric_name)
-    print(f"Using {parameter_matrix.shape[0]} of {original_row_count} rows of the sample matrix...")
     if wave_indices.shape[0] != original_row_count:
         raise ValueError(
             f"Wave indices have {wave_indices.shape[0]} rows, but the sample matrix has "
             f"{original_row_count}, rerun collate_hm.py."
         )
+
+    # Rows of later waves are left out, like failed simulations:
+    in_waves = wave_indices[valid_indices] <= hm_wave_id
+    parameter_matrix, output_metric, output_sem, replicate_counts, valid_indices = (
+        array[in_waves] for array in (parameter_matrix, output_metric, output_sem, replicate_counts, valid_indices)
+    )
+    print(f"Using {parameter_matrix.shape[0]} of {original_row_count} rows of the sample matrix...")
 
     # Get inducing points - sampling the row indices, so they can be recorded:
     print("Sampling inducing points...")
@@ -365,6 +402,26 @@ def main():
     os.makedirs(gp_folderpath, exist_ok=True)
     id_folderpath = os.path.join(gp_folderpath, args.metric_name)
     os.makedirs(id_folderpath, exist_ok=True)
+
+    return types.SimpleNamespace(
+        dataset_dirpath=dataset_dirpath, hm_wave_id=hm_wave_id,
+        wave_ids=wave_ids, wave_row_counts=wave_row_counts,
+        wave_indices=wave_indices, wave_row_indices=wave_row_indices,
+        parameter_matrix=parameter_matrix, output_metric=output_metric, output_sem=output_sem,
+        replicate_counts=replicate_counts, valid_indices=valid_indices, original_row_count=original_row_count,
+        inducing_indices=inducing_indices, inducing_points=inducing_points, id_folderpath=id_folderpath,
+    )
+
+
+def train_full_model(args, gp_settings, data):
+    """Train the model on every row, and save it with its predictions and diagnostics."""
+    # Unpack the training data:
+    dataset_dirpath, latest_wave_id = data.dataset_dirpath, data.hm_wave_id
+    wave_ids, wave_row_counts = data.wave_ids, data.wave_row_counts
+    wave_indices, wave_row_indices = data.wave_indices, data.wave_row_indices
+    parameter_matrix, output_metric, output_sem = data.parameter_matrix, data.output_metric, data.output_sem
+    replicate_counts, valid_indices, original_row_count = data.replicate_counts, data.valid_indices, data.original_row_count
+    inducing_indices, inducing_points, id_folderpath = data.inducing_indices, data.inducing_points, data.id_folderpath
 
     # The folder name does not depend on the GP settings, so say if this replaces models
     # trained with other settings:
@@ -396,6 +453,9 @@ def main():
         "deep_kernel_learning_rate": gp_settings.deep_kernel_learning_rate,
         "num_layers": gp_settings.hidden_layer_count,
         "num_neurons": gp_settings.hidden_layer_neuron_count,
+        "due": gp_settings.due,
+        "due_spectral_coefficient": DUE_SPECTRAL_COEFFICIENT,
+        "due_activation": DUE_ACTIVATION.__name__,
         "batch_size": gp_settings.batch_size,
         "original_row_count": int(original_row_count),
         "valid_row_count": int(parameter_matrix.shape[0]),
@@ -480,20 +540,65 @@ def main():
         warped_inducing_points=run_warp_inference(model_manager, final_inducing_points, gp_settings.batch_size)
     )
 
+
+def run_cross_validation_stage(gp_settings, data):
+    """Cross-validate the model, and estimate the Sobol' indices of the saved full model."""
+    # The Sobol' indices come from the full model, so check it was trained on the same rows
+    # with the same settings:
+    training_config_filepath = os.path.join(data.id_folderpath, "training_config.json")
+    model_filepath = os.path.join(data.id_folderpath, "model.pth")
+    if not (os.path.exists(training_config_filepath) and os.path.exists(model_filepath)):
+        raise FileNotFoundError(
+            f"No full model found in {data.id_folderpath}: train it first (--stage full)."
+        )
+    with open(training_config_filepath) as training_config_fstream:
+        training_config = json.load(training_config_fstream)
+    run_record = {
+        "gp_settings": gp_settings.to_dict(),
+        "wave_ids": [int(wave_id) for wave_id in data.wave_ids],
+    }
+    for key, value in run_record.items():
+        if training_config.get(key) != value:
+            raise ValueError(
+                f"The full model in {data.id_folderpath} was trained with {key} {training_config.get(key)}, "
+                f"not {value}: train it again with these settings first (--stage full)."
+            )
+
     # Perform cross-validation - the per-datapoint diagnostics and the per-fold
     # metrics are saved by the function itself as each fold finishes:
     cv_dict = cross_validation(
-        parameter_matrix, output_metric, output_sem, replicate_counts, inducing_points,
-        valid_indices, original_row_count, wave_indices, wave_row_indices, id_folderpath, gp_settings
+        data.parameter_matrix, data.output_metric, data.output_sem, data.replicate_counts, data.inducing_points,
+        data.valid_indices, data.original_row_count, data.wave_indices, data.wave_row_indices, data.id_folderpath,
+        gp_settings, run_record
     )
     for key in ["mae", "mse", "train_mse", "sll", "lcr", "tcr"]:
         print(f"Mean {key}: {np.mean(cv_dict[key])}")
 
-    # Get Sobol' indices from GP model:
+    # Get Sobol' indices from the full GP model:
     print("Running Sobol' index inferece...", flush=True)
-    Si, STi = run_sobol_index_inference(model_manager.model, parameter_matrix.shape[1])
-    np.save(os.path.join(id_folderpath, "sobol_i.npy"), Si)
-    np.save(os.path.join(id_folderpath, "sobol_Ti.npy"), STi)
+    model = load_torch_object(model_filepath)
+    Si, STi = run_sobol_index_inference(model, data.parameter_matrix.shape[1])
+    np.save(os.path.join(data.id_folderpath, "sobol_i.npy"), Si)
+    np.save(os.path.join(data.id_folderpath, "sobol_Ti.npy"), STi)
+
+
+def main():
+    # Set seed:
+    torch.manual_seed(0)
+
+    # Parse arguments:
+    args = parse_arguments()
+    gp_settings = GPSettings.from_arguments(args)
+    print(f"Using experiment {args.experiment_dirpath}...")
+    print(f"Training on {args.metric_name}...")
+    print(f"GP settings: {gp_settings.to_dict()}")
+    print(f"Running stage: {args.stage}...")
+
+    data = prepare_training(args, gp_settings)
+    if args.stage in ("all", "full"):
+        train_full_model(args, gp_settings, data)
+    if args.stage in ("all", "cross_validation"):
+        run_cross_validation_stage(gp_settings, data)
 
 
 if __name__ == "__main__":

@@ -37,5 +37,4 @@ uv run --no-sync python python_scripts/inference/mcmc_gp_cov_fit.py \
     --gp_models_dirpath "$gp_models_dirpath" \
     --phenotype "${phenotypes[$SLURM_ARRAY_TASK_ID]}" \
     --experimental_lengthscales \
-    --adaptive_proposals --burn_in_fraction "$burn_in_fraction" \
-    --no_calibration
+    --adaptive_proposals --burn_in_fraction "$burn_in_fraction"
