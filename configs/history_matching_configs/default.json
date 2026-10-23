@@ -5,7 +5,7 @@
     "burn_in_fraction": 0.25,
     "max_failed_fraction": 0.1,
     "simulations_per_task": 64,
-    "array_task_limit": 90,
+    "array_task_limit": 95,
     "run_validation": true,
     "delete_run_data": true,
     "gaussian_process": {
