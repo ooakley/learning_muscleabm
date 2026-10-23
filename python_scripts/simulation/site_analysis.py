@@ -202,18 +202,26 @@ def find_motion_metrics(position_array):
 
         # Get full trajectory length:
         step_lengths = np.sqrt(np.sum(step_differences ** 2, axis=1))
+        path_length = np.sum(step_lengths)
+
+        # Skip entirely stationary cells, which have no meander ratio, and whose zero speed would
+        # make the site's geometric mean speed zero:
+        if path_length <= 0:
+            continue
+
         average_speed = np.mean(step_lengths)  # Get mean pixels per frame.
         average_speed *= PIXEL_SIZE  # Multiply by µm per pixel to get µm per frame.
         average_speed /= FRAME_DURATION  # Divide by 2.5 minutes to get µm per minute.
         average_speeds.append(average_speed)
 
         # Get meander ratio:
-        path_length = np.sum(step_lengths)
-        if path_length <= 0:  # If cell is entirely stationary, skip
-            continue
         total_displacement = np.sqrt(np.sum(np.sum(step_differences, axis=0) ** 2))
         meander_ratio = total_displacement / path_length
         meander_ratios.append(meander_ratio)
+
+    # Neither metric is defined if no cell moved:
+    if not average_speeds:
+        return np.nan, np.nan
 
     # We want a per-site geometric mean of the particle speed distribution:
     site_average_speed = np.exp(np.mean(np.log(average_speeds)))
