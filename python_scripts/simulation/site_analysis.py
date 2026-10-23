@@ -232,12 +232,13 @@ def find_motion_metrics(position_array):
 
 
 def find_motion_order(position_array):
-    """Nematic order parameter and mean direction of the cells' frame-to-frame motion.
+    """Nematic order parameter and mean axis of the cells' frame-to-frame motion.
 
     The order parameter is, for each frame, the magnitude of the mean of exp(2i theta) over the
     cells that moved, theta being each cell's direction of motion, averaged over frames. It is 1
     when cells move along a common axis, whichever way along it, and 0 when their directions are
-    isotropic. The mean direction is the (polar) direction of the cells' mean unit velocity.
+    isotropic. The mean axis is half the angle of the mean of exp(2i theta) over frames, in
+    (-pi/2, pi/2]: the axis of motion, without a direction along it.
     """
     # Array shape: (CELL_NUMBER, TIMESTEPS, (X, Y)). Take frame-to-frame differences across the
     # periodic boundaries:
@@ -255,10 +256,8 @@ def find_motion_order(position_array):
     nematic_x = np.nanmean(np.cos(2 * headings), axis=0)
     nematic_y = np.nanmean(np.sin(2 * headings), axis=0)
     order_parameter = np.mean(np.sqrt(nematic_x**2 + nematic_y**2))
-    mean_direction = np.arctan2(
-        np.mean(np.nanmean(np.sin(headings), axis=0)), np.mean(np.nanmean(np.cos(headings), axis=0))
-    )
-    return order_parameter, mean_direction
+    mean_axis = np.arctan2(np.mean(nematic_y), np.mean(nematic_x)) / 2
+    return order_parameter, mean_axis
 
 
 def get_mean_length(trajectory_dataframe):
@@ -475,8 +474,8 @@ def main():
         # Get average meander ratio across cells:
         meander_ratio, mean_speed = find_motion_metrics(interpolated_array)
 
-        # Get the nematic order parameter and mean direction of cell motion:
-        order_parameter, mean_direction = find_motion_order(interpolated_array)
+        # Get the nematic order parameter and mean axis of cell motion (saved as mean_directions):
+        order_parameter, mean_axis = find_motion_order(interpolated_array)
 
         # Plot if first seed:
         if seed == 0:
@@ -496,7 +495,7 @@ def main():
         meander_ratios.append(meander_ratio)
         speeds.append(mean_speed)
         order_parameters.append(order_parameter)
-        mean_directions.append(mean_direction)
+        mean_directions.append(mean_axis)
         if args.com_analysis:
             cell_lengths.append(get_mean_length(trajectory_dataframe) / 2)
 
