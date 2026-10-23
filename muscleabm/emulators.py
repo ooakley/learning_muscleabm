@@ -13,14 +13,10 @@ import numpy as np
 from torch.nn.utils import parametrize
 from torch.utils.data import TensorDataset, DataLoader
 
-# Settings of the residual (DUE) deep kernel, used when a model is built with due=True. The
-# residual branch is contractive, Lip(g) < 1, so the warp x + g(x) is invertible and
-# bi-Lipschitz (Behrmann et al. 2019, https://arxiv.org/abs/1811.00995, Theorem 1 and
-# Lemma 2), which stops the warp collapsing distinct inputs together (van Amersfoort et al.
-# 2021, https://arxiv.org/abs/2102.11409). Each linear layer's spectral norm is capped at the
-# coefficient, and the activation is 1-Lipschitz:
-DUE_SPECTRAL_COEFFICIENT = 0.95
-DUE_ACTIVATION = torch.nn.ELU
+# Activation of the residual blocks of the deep kernel. It is 1-Lipschitz, so capping the
+# spectral norm of every linear layer of a block bounds the Lipschitz constant of the block's
+# residual branch (Behrmann et al. 2019, https://arxiv.org/abs/1811.00995):
+RESIDUAL_ACTIVATION = torch.nn.ELU
 
 
 class SpectralCap(torch.nn.Module):
@@ -83,28 +79,47 @@ class DeepInputTransformation(torch.nn.Module):
 
 
 class ResidualInputTransformation(torch.nn.Module):
-    """One residual block, x + g(x), around a deep input transformation with capped spectral norms.
+    """A stack of residual blocks, x <- x + g(x), at the input dimension.
 
-    With ELU (Lipschitz constant 1) and every linear layer capped at DUE_SPECTRAL_COEFFICIENT,
-    Lip(g) <= DUE_SPECTRAL_COEFFICIENT ** (hidden_layer_count + 1), so distances between inputs
-    are scaled by a factor between 1 - Lip(g) and 1 + Lip(g) (Behrmann et al. 2019, Lemma 2).
+    Each block's branch g is a deep input transformation with RESIDUAL_ACTIVATION, and the spectral
+    norm of every linear layer capped at spectral_coefficient, so Lip(g) is at most
+    spectral_coefficient ** (hidden_layer_count + 1). If that is below 1, each block is invertible
+    and scales distances between inputs by a factor between 1 - Lip(g) and 1 + Lip(g)
+    (Behrmann et al. 2019, Theorem 1 and Lemma 2), and the stack by those factors to the power of
+    the number of blocks. This stops the warp collapsing distinct inputs together, as in DUE
+    (van Amersfoort et al. 2021, https://arxiv.org/abs/2102.11409).
     """
 
-    def __init__(self, dimension, hidden_layer_count=2, hidden_layer_neuron_count=16):
+    def __init__(
+        self, dimension, hidden_layer_count=2, hidden_layer_neuron_count=16,
+        spectral_coefficient=0.95, residual_block_count=1
+    ):
         super().__init__()
-        self.branch = DeepInputTransformation(
-            dimension, hidden_layer_count, hidden_layer_neuron_count,
-            activation=DUE_ACTIVATION, spectral_cap=DUE_SPECTRAL_COEFFICIENT
-        )
+        self.blocks = torch.nn.ModuleList([
+            DeepInputTransformation(
+                dimension, hidden_layer_count, hidden_layer_neuron_count,
+                activation=RESIDUAL_ACTIVATION, spectral_cap=spectral_coefficient
+            )
+            for _ in range(residual_block_count)
+        ])
 
     def forward(self, x):
-        return x + self.branch(x)
+        for block in self.blocks:
+            x = x + block(x)
+        return x
+
+    def __setstate__(self, state):
+        # Models saved with a single residual block, before the number of blocks was a setting,
+        # hold it as "branch":
+        super().__setstate__(state)
+        if "branch" in self._modules:
+            self.blocks = torch.nn.ModuleList([self._modules.pop("branch")])
 
 
 class SparseGPModel(gpytorch.models.ApproximateGP):
     def __init__(
         self, inducing_points, dimensions, hidden_layer_count=2, hidden_layer_neuron_count=16,
-        due=False
+        spectral_coefficient=0.95, residual_block_count=1
     ):
         # Set up distribution:
         variational_distribution = gpytorch.variational.CholeskyVariationalDistribution(
@@ -120,15 +135,11 @@ class SparseGPModel(gpytorch.models.ApproximateGP):
         # Inherit rest of init logic from approximate GP:
         super().__init__(variational_strategy)
 
-        # Instantiate input transform, with a residual connection if set:
-        if due:
-            self.input_transform = ResidualInputTransformation(
-                dimensions, hidden_layer_count, hidden_layer_neuron_count
-            )
-        else:
-            self.input_transform = DeepInputTransformation(
-                dimensions, hidden_layer_count, hidden_layer_neuron_count
-            )
+        # Instantiate input transform:
+        self.input_transform = ResidualInputTransformation(
+            dimensions, hidden_layer_count, hidden_layer_neuron_count,
+            spectral_coefficient, residual_block_count
+        )
 
         # Define mean and additive covariance functions:
         self.mean_module = gpytorch.means.ConstantMean()
@@ -209,13 +220,14 @@ class ModelManager:
 
     def __init__(
         self, inducing_points, learning_rate, hidden_layer_count=2, hidden_layer_neuron_count=16,
-        due=False
+        spectral_coefficient=0.95, residual_block_count=1
     ):
         # Set up model:
         inducing_points = torch.tensor(inducing_points)
         self.likelihood = gpytorch.likelihoods.GaussianLikelihood()
         self.model = SparseGPModel(
-            inducing_points, inducing_points.shape[1], hidden_layer_count, hidden_layer_neuron_count, due
+            inducing_points, inducing_points.shape[1], hidden_layer_count, hidden_layer_neuron_count,
+            spectral_coefficient, residual_block_count
         )
 
         # The default noise constraint sets the minimum too high,

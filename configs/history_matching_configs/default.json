@@ -13,9 +13,10 @@
         "inducing_point_count": 512,
         "hidden_layer_count": 2,
         "hidden_layer_neuron_count": 64,
+        "spectral_coefficient": 0.95,
+        "residual_block_count": 1,
         "learning_rate": 0.01,
         "deep_kernel_learning_rate": 0.003,
-        "batch_size": 512,
-        "due": false
+        "batch_size": 512
     }
 }
