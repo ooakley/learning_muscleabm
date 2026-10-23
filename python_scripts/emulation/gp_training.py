@@ -12,7 +12,7 @@ import numpy as np
 
 from muscleabm.datasets import GLOBAL_DATASET_FOLDER, load_gridsearch_data
 from muscleabm.emulators import (
-    DUE_ACTIVATION, DUE_SPECTRAL_COEFFICIENT, ModelManager, load_torch_object, run_inference
+    RESIDUAL_ACTIVATION, ModelManager, load_torch_object, run_inference
 )
 from muscleabm.history_matching import MODELS_DIRNAME, GPSettings
 from muscleabm.sensitivity import run_sobol_index_inference
@@ -24,9 +24,9 @@ torch.set_default_dtype(torch.float64)
 
 K_FOLD_COUNT = 8
 
-# The GP architecture and training settings (training steps, inducing points, deep kernel
-# layers and neurons, learning rates, batch size and whether the deep kernel is residual, as in
-# DUE) are command line arguments, with defaults in muscleabm/history_matching.py. Every model
+# The GP architecture and training settings (training steps, inducing points, the deep kernel's
+# layers, neurons, spectral coefficient and residual blocks, learning rates and batch size) are
+# command line arguments, with defaults in muscleabm/history_matching.py. Every model
 # trains for the same number of optimiser steps, however large the dataset, so that models of
 # later waves are not trained for longer.
 #
@@ -101,7 +101,7 @@ class DeepKernelModelManager(ModelManager):
         super().__init__(
             inducing_points, learning_rate,
             gp_settings.hidden_layer_count, gp_settings.hidden_layer_neuron_count,
-            gp_settings.due
+            gp_settings.spectral_coefficient, gp_settings.residual_block_count
         )
 
         # Split the model parameters into the deep kernel network and everything else:
@@ -453,9 +453,12 @@ def train_full_model(args, gp_settings, data):
         "deep_kernel_learning_rate": gp_settings.deep_kernel_learning_rate,
         "num_layers": gp_settings.hidden_layer_count,
         "num_neurons": gp_settings.hidden_layer_neuron_count,
-        "due": gp_settings.due,
-        "due_spectral_coefficient": DUE_SPECTRAL_COEFFICIENT,
-        "due_activation": DUE_ACTIVATION.__name__,
+        "spectral_coefficient": gp_settings.spectral_coefficient,
+        "residual_block_count": gp_settings.residual_block_count,
+        "residual_activation": RESIDUAL_ACTIVATION.__name__,
+        # Bound on the Lipschitz constant of each residual block's branch; the warp is only
+        # guaranteed to be invertible and bi-Lipschitz if it is below 1:
+        "residual_lipschitz_bound": gp_settings.spectral_coefficient ** (gp_settings.hidden_layer_count + 1),
         "batch_size": gp_settings.batch_size,
         "original_row_count": int(original_row_count),
         "valid_row_count": int(parameter_matrix.shape[0]),
@@ -592,6 +595,13 @@ def main():
     print(f"Using experiment {args.experiment_dirpath}...")
     print(f"Training on {args.metric_name}...")
     print(f"GP settings: {gp_settings.to_dict()}")
+    lipschitz_bound = gp_settings.spectral_coefficient ** (gp_settings.hidden_layer_count + 1)
+    if lipschitz_bound >= 1:
+        print(
+            f"Warning: the residual blocks' Lipschitz bound, spectral_coefficient ** (hidden_layer_count + 1) "
+            f"= {lipschitz_bound:.3g}, is not below 1, so the warp is not guaranteed to be invertible "
+            f"or bi-Lipschitz."
+        )
     print(f"Running stage: {args.stage}...")
 
     data = prepare_training(args, gp_settings)

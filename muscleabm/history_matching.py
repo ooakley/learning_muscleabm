@@ -24,10 +24,11 @@ A history matching config is a .json file of the form:
             "inducing_point_count": 512,
             "hidden_layer_count": 2,
             "hidden_layer_neuron_count": 32,
+            "spectral_coefficient": 0.95,
+            "residual_block_count": 1,
             "learning_rate": 0.01,
             "deep_kernel_learning_rate": 0.003,
-            "batch_size": 512,
-            "due": false
+            "batch_size": 512
         }
     }
 
@@ -50,10 +51,12 @@ delete_run_data:   whether to delete each wave's run_data folder, to save space,
 gaussian_process:  architecture and training settings of the GP emulators. They train for
                    a fixed number of optimiser steps (minibatches), so that a wave's models
                    train for as long as the first wave's, however large the dataset has grown.
-                   due (true or false) adds a residual connection around the deep kernel
-                   network, warping x to x + g(x), with g contractive (ELU activations and
-                   spectral norms capped at 0.95), so that the warp is invertible and
-                   bi-Lipschitz, as in DUE (van Amersfoort et al. 2021).
+                   The deep kernel warps the inputs with residual_block_count residual
+                   blocks, x <- x + g(x), as in DUE (van Amersfoort et al. 2021). Each block's
+                   branch g has hidden_layer_count hidden layers of hidden_layer_neuron_count
+                   neurons, ELU activations, and every linear layer's spectral norm capped at
+                   spectral_coefficient, so Lip(g) <= spectral_coefficient ** (hidden_layer_count
+                   + 1). Below 1, the warp is invertible and bi-Lipschitz.
 
 Each wave's models are saved to its MODELS_DIRNAME folder, and each metric's model folder
 records the settings it was trained with in training_config.json.
@@ -68,17 +71,9 @@ PHENOTYPE_COUNT = 2
 MODELS_DIRNAME = "trained_models"
 MCMC_DIRNAME = "disc_cov_mcmc_results"
 
-def boolean(value):
-    """A true or false setting, given as a bool or (on the command line) as "true" or "false"."""
-    if isinstance(value, bool):
-        return value
-    if value in ("true", "false"):
-        return value == "true"
-    raise ValueError("expected true or false, got {!r}".format(value))
-
 
 # GP settings, with their types and defaults. The defaults are those gp_training.py uses
-# when run without a config. Every setting is a positive number, apart from the booleans:
+# when run without a config. Every setting is a positive number:
 GP_SETTINGS = [
     # (name, type, default, help)
     # 3840 steps is 15 epochs of a 2^17 simulation first wave at batch size 512:
@@ -86,18 +81,18 @@ GP_SETTINGS = [
      "Optimiser steps (minibatches) for the full model and each cross-validation fold, "
      "whatever the dataset size."),
     ("inducing_point_count", int, 512, "Inducing points of the sparse variational GP."),
-    ("hidden_layer_count", int, 2, "Hidden layers of the deep kernel network."),
-    ("hidden_layer_neuron_count", int, 32, "Neurons in each hidden layer of the deep kernel network."),
+    ("hidden_layer_count", int, 2, "Hidden layers of each residual block of the deep kernel."),
+    ("hidden_layer_neuron_count", int, 32, "Neurons in each hidden layer of the deep kernel."),
+    # The activation of the residual blocks is RESIDUAL_ACTIVATION in muscleabm/emulators.py:
+    ("spectral_coefficient", float, 0.95,
+     "Cap on the spectral norm of every linear layer of the deep kernel. The warp is only "
+     "guaranteed to be invertible and bi-Lipschitz if spectral_coefficient ** "
+     "(hidden_layer_count + 1) is below 1."),
+    ("residual_block_count", int, 1, "Residual blocks, x <- x + g(x), of the deep kernel."),
     ("learning_rate", float, 0.01,
      "Learning rate of the GP (variational parameters, inducing locations, kernel and likelihood)."),
     ("deep_kernel_learning_rate", float, 0.003, "Learning rate of the deep kernel network."),
     ("batch_size", int, 512, "Batch size for training and inference."),
-    # The coefficient and activation of the residual deep kernel are set by DUE_SPECTRAL_COEFFICIENT
-    # and DUE_ACTIVATION in muscleabm/emulators.py:
-    ("due", boolean, False,
-     "Add a residual connection around the deep kernel network, x + g(x), with ELU activations "
-     "and every linear layer's spectral norm capped at 0.95, so the warp is invertible and "
-     "bi-Lipschitz (true or false). hidden_layer_count and hidden_layer_neuron_count set g."),
 ]
 
 
@@ -115,8 +110,7 @@ class GPSettings:
         """Command line arguments that set these settings in gp_training.py."""
         arguments = []
         for name, _, _, _ in GP_SETTINGS:
-            value = getattr(self, name)
-            arguments += ["--" + name, str(value).lower() if isinstance(value, bool) else str(value)]
+            arguments += ["--" + name, str(getattr(self, name))]
         return arguments
 
     @staticmethod
@@ -208,10 +202,7 @@ def load_config(config_path):
     _check_keys("gaussian_process", gp_config, [name for name, _, _, _ in GP_SETTINGS])
     gp_settings = {}
     for name, setting_type, _, _ in GP_SETTINGS:
-        if setting_type is boolean:
-            gp_settings[name] = _check_bool("gaussian_process." + name, gp_config[name])
-            continue
-        # Every other GP setting is a positive count or rate:
+        # Every GP setting is a positive count, rate or coefficient:
         value = _check_number("gaussian_process." + name, gp_config[name], setting_type, 0)
         if value <= 0:
             raise ConfigError("gaussian_process.{} must be positive, got {!r}.".format(name, value))
