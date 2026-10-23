@@ -95,7 +95,7 @@ def _(datetime, os, subprocess):
 
 
 @app.cell
-def _():
+def _(os):
     METRICS_TO_PLOT = [
         "speeds",
         "meander_ratios",
@@ -110,14 +110,34 @@ def _():
         "Coherency"
     ]
 
-    EXPERIMENT_DIRPATH = "model_experiments/2026-09-16-collisions_shape"
-    return EXPERIMENT_DIRPATH, METRICS_LABELS, METRICS_TO_PLOT
+    EXPERIMENT_DIRPATH = "model_experiments/2026-10-04-collisions_shape"
+    WAVE_INDEX = 5
+    wave_dirpath = os.path.join(EXPERIMENT_DIRPATH, f"hm{WAVE_INDEX}")
+    # model_dirpath = os.path.join(wave_dirpath, "trained_models")
+    model_dirpath = os.path.join(wave_dirpath, "pll_gp_models_e15_ip512_l2_n64")
+    return (
+        EXPERIMENT_DIRPATH,
+        METRICS_LABELS,
+        METRICS_TO_PLOT,
+        model_dirpath,
+        wave_dirpath,
+    )
 
 
 @app.cell
-def _(EXPERIMENT_DIRPATH, METRICS_TO_PLOT, json, np, os):
+def _(
+    EXPERIMENT_DIRPATH,
+    METRICS_TO_PLOT,
+    json,
+    model_dirpath,
+    np,
+    os,
+    wave_dirpath,
+):
     # Load in gridsearch data:
-    parameter_values = np.load(os.path.join(EXPERIMENT_DIRPATH, "sample_matrix.npy"))
+    parameter_values = np.load(os.path.join(wave_dirpath, "sample_matrix.npy"))
+    parameter_values = np.load("model_experiments/2026-10-04-collisions_shape/global_dataset/sample_matrix.npy")
+
     with open(os.path.join(EXPERIMENT_DIRPATH, "config.json")) as json_file:
         config_dict = json.load(json_file)
 
@@ -129,7 +149,7 @@ def _(EXPERIMENT_DIRPATH, METRICS_TO_PLOT, json, np, os):
         for metric_name in METRICS_TO_PLOT:
             # Load actual data:
             metric_array = np.load(os.path.join(
-                EXPERIMENT_DIRPATH, "summary_data", f"{metric_name}.npy"
+                wave_dirpath, "summary_data", f"{metric_name}.npy"
             ))
             metric_mean = np.nanmean(metric_array, axis=1)
             metric_std = np.nanstd(metric_array, axis=1)
@@ -143,13 +163,13 @@ def _(EXPERIMENT_DIRPATH, METRICS_TO_PLOT, json, np, os):
 
             # Load predictions:
             preds_array = np.load(os.path.join(
-                EXPERIMENT_DIRPATH, "gaussian_process_models", f"{metric_name}", "parameter_predictions.npy"
+                model_dirpath, f"{metric_name}", "parameter_predictions.npy"
             ))
             preds_dict[metric_name] = preds_array
         return metrics_dict, noise_dict, preds_dict
 
     metrics_dict, noise_dict, preds_dict = load_metrics()
-    return metrics_dict, noise_dict, preds_dict
+    return metrics_dict, noise_dict, parameter_values, preds_dict
 
 
 @app.cell
@@ -375,6 +395,103 @@ def _(
         plt.show()
 
     plot_all_losses()
+    return
+
+
+@app.cell
+def _(METRICS_TO_PLOT, model_dirpath, np, os):
+    # Get metrics:
+    def load_diagnostics():
+        diagnostics_list = []
+        for metric_name in METRICS_TO_PLOT:
+            # Load diagnostics:
+            metric_diagnostics = np.load(os.path.join(
+                model_dirpath, f"{metric_name}", "full_model_diagnostics.npz"
+            ))
+            diagnostics_list.append(metric_diagnostics)
+        return diagnostics_list
+
+    diagnostics_list = load_diagnostics()
+    return (diagnostics_list,)
+
+
+@app.cell
+def _(diagnostics_list):
+    test_warped_parameters = diagnostics_list[0]["warped_parameters"]
+    return (test_warped_parameters,)
+
+
+@app.cell
+def _(np, parameter_values, test_warped_parameters):
+    # Get empirical Lipschitz ratios:
+
+    SAMPLE_COUNT = 100000
+
+    def sample_empirical_ratio():
+        gen = np.random.default_rng()
+        ratios = []
+        for _ in range(SAMPLE_COUNT):
+            point_a, point_b = gen.choice(2**17, size=2)
+
+            # Get base distance:
+            base_a = parameter_values[point_a, :]
+            base_b = parameter_values[point_b, :]
+            base_distance = np.linalg.norm(base_a - base_b)
+
+            # Get warped distance:
+            warp_a = test_warped_parameters[point_a, :]
+            warp_b = test_warped_parameters[point_b, :]
+            warp_distance = np.linalg.norm(warp_a - warp_b)
+
+            ratios.append(warp_distance / base_distance)
+
+        return np.array(ratios)
+        
+
+    ratio_array = sample_empirical_ratio()
+    return (ratio_array,)
+
+
+@app.cell
+def _(plt, ratio_array):
+    plt.hist(ratio_array, bins=100)
+    return
+
+
+@app.cell
+def _(plt, test_warped_parameters):
+    def plot_warped_inputs():
+        fig, ax = plt.subplots()
+        ax.scatter(test_warped_parameters[:, 0], test_warped_parameters[:, 1], s=1, alpha=0.5, edgecolors="none")
+        ax.set_aspect("equal")
+        plt.show()
+
+    plot_warped_inputs()
+    return
+
+
+@app.cell
+def _():
+    import umap
+    return (umap,)
+
+
+@app.cell
+def _(test_warped_parameters, umap):
+    umap_manager = umap.UMAP()
+    warp_embeddings = umap_manager.fit_transform(test_warped_parameters)
+    return (warp_embeddings,)
+
+
+@app.cell
+def _(plt, warp_embeddings):
+    def plot_warped_embeddings():
+        fig, ax = plt.subplots()
+        ax.scatter(warp_embeddings[:, 0], warp_embeddings[:, 1], s=1, alpha=0.2, edgecolors="none")
+        ax.set_aspect("equal")
+        plt.show()
+
+    plot_warped_embeddings()
     return
 
 
