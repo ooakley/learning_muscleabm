@@ -24,11 +24,11 @@ torch.set_default_dtype(torch.float64)
 
 K_FOLD_COUNT = 8
 
-# The GP architecture and training settings (training steps, inducing points, the deep kernel's
-# layers, neurons, spectral coefficient and residual blocks, learning rates and batch size) are
-# command line arguments, with defaults in muscleabm/history_matching.py. Every model
-# trains for the same number of optimiser steps, however large the dataset, so that models of
-# later waves are not trained for longer.
+# The GP architecture and training settings (epochs, constant_step, inducing points, the deep
+# kernel's layers, neurons, spectral coefficient and residual blocks, learning rates and batch
+# size) are command line arguments, with defaults in muscleabm/history_matching.py. Each model
+# trains for epochs passes through its training data, or with constant_step, for the optimiser
+# steps those passes take on the first wave's data (see get_step_count).
 #
 # Training runs in two stages, which can be run as separate jobs (--stage), so that the MCMC,
 # which only needs the full model, does not wait for the cross-validation:
@@ -91,10 +91,22 @@ def scatter_to_original(values, original_indices, original_row_count):
     return output
 
 
+def get_step_count(gp_settings, train_row_count, row_count, first_wave_row_count):
+    """Optimiser steps to train a model on train_row_count of the dataset's row_count rows for.
+
+    That is epochs passes through the model's training data, or with constant_step, through the
+    same share of the first wave's first_wave_row_count rows, so that models of later waves train
+    for as many steps as the first wave's. The two agree on the first wave.
+    """
+    if gp_settings.constant_step:
+        train_row_count = round(train_row_count * first_wave_row_count / row_count)
+    return gp_settings.epochs * math.ceil(train_row_count / gp_settings.batch_size)
+
+
 class DeepKernelModelManager(ModelManager):
     """Model manager with its own learning rate for the deep kernel network, and cosine decay."""
 
-    def __init__(self, inducing_points, gp_settings):
+    def __init__(self, inducing_points, gp_settings, step_count):
         # Set up model:
         learning_rate = gp_settings.learning_rate
         deep_kernel_learning_rate = gp_settings.deep_kernel_learning_rate
@@ -114,14 +126,14 @@ class DeepKernelModelManager(ModelManager):
 
         # Set up optimisation - Adam seems to work best (need to properly test this).
         # The scheduler below decays each group from its own initial learning rate, over the
-        # optimiser steps of training:
+        # step_count optimiser steps of training:
         self.optimizer = torch.optim.Adam([
             {'params': gp_parameters, 'lr': learning_rate},
             {'params': self.likelihood.parameters(), 'lr': learning_rate},
             {'params': deep_kernel_parameters, 'lr': deep_kernel_learning_rate},
         ])
         self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            self.optimizer, T_max=gp_settings.training_steps
+            self.optimizer, T_max=step_count
         )
 
 
@@ -140,7 +152,7 @@ def run_warp_inference(model_manager, inputs, batch_size=512):
 def cross_validation(
         parameter_matrix, output_metric, output_sem, replicate_counts, inducing_points,
         valid_indices, original_row_count, wave_indices, wave_row_indices, id_folderpath, gp_settings,
-        run_record
+        first_wave_row_count, run_record
     ):
     # Shuffle datapoints prior to cross-validation (as otherwise there
     # are weird autocorrelations from the Sobol' sampling):
@@ -196,7 +208,7 @@ def cross_validation(
         key: [] for key in [
             "mae", "mse", "sll", "lcr", "tcr",
             "train_mae", "train_mse", "noise_floor", "null_loss", "model_loss",
-            "whiten_mean", "whiten_std", "likelihood_noise", "outputscale"
+            "whiten_mean", "whiten_std", "likelihood_noise", "outputscale", "training_steps"
         ]
     }
 
@@ -209,8 +221,6 @@ def cross_validation(
         # Set up the model and the model's associated training apparatus. Each fold has its own
         # seed, so that its model does not depend on what was trained before it:
         print(f"Performing validation with index: {k_index}...", flush=True)
-        torch.manual_seed(1 + k_index)
-        model_manager = DeepKernelModelManager(inducing_points, gp_settings)
 
         # Get test indices:
         test_indices = np.arange(k_index, dataset_size, K_FOLD_COUNT)
@@ -221,6 +231,13 @@ def cross_validation(
         # Get training indices:
         train_mask = np.ones(dataset_size, dtype=bool)
         train_mask[test_indices] = 0
+        step_count = get_step_count(gp_settings, int(np.sum(train_mask)), dataset_size, first_wave_row_count)
+        cv_dict["training_steps"].append(step_count)
+
+        # Set up the model and the model's associated training apparatus. Each fold has its own
+        # seed, so that its model does not depend on what was trained before it:
+        torch.manual_seed(1 + k_index)
+        model_manager = DeepKernelModelManager(inducing_points, gp_settings, step_count)
 
         # Set up dataset:
         train_parameters = permuted_parameters[train_mask, :]
@@ -242,7 +259,7 @@ def cross_validation(
         whitened_test_noise = (test_sem / train_std) ** 2
 
         # Train model:
-        model_manager.train_steps(train_parameters, whitened_train, gp_settings.batch_size, gp_settings.training_steps)
+        model_manager.train_steps(train_parameters, whitened_train, gp_settings.batch_size, step_count)
 
         # Save this fold's model, whitening transform and loss history, so that further
         # held-out diagnostics can be computed later without retraining:
@@ -390,6 +407,10 @@ def prepare_training(args, gp_settings):
     )
     print(f"Using {parameter_matrix.shape[0]} of {original_row_count} rows of the sample matrix...")
 
+    # Rows from the first wave, which set the training steps of every wave with constant_step:
+    row_wave_indices = wave_indices[valid_indices]
+    first_wave_row_count = int(np.sum(row_wave_indices == np.min(row_wave_indices)))
+
     # Get inducing points - sampling the row indices, so they can be recorded:
     print("Sampling inducing points...")
     generator = np.random.default_rng(0)
@@ -410,6 +431,7 @@ def prepare_training(args, gp_settings):
         parameter_matrix=parameter_matrix, output_metric=output_metric, output_sem=output_sem,
         replicate_counts=replicate_counts, valid_indices=valid_indices, original_row_count=original_row_count,
         inducing_indices=inducing_indices, inducing_points=inducing_points, id_folderpath=id_folderpath,
+        first_wave_row_count=first_wave_row_count,
     )
 
 
@@ -435,6 +457,11 @@ def train_full_model(args, gp_settings, data):
                 f"{previous_settings}"
             )
 
+    # The full model trains on every row:
+    step_count = get_step_count(
+        gp_settings, parameter_matrix.shape[0], parameter_matrix.shape[0], data.first_wave_row_count
+    )
+
     # Record the settings these models were trained with:
     training_dict = {
         "experiment_dirpath": args.experiment_dirpath,
@@ -444,9 +471,10 @@ def train_full_model(args, gp_settings, data):
         "latest_wave_id": latest_wave_id,
         "metric_name": args.metric_name,
         "gp_settings": gp_settings.to_dict(),
-        "training_steps": gp_settings.training_steps,
+        "training_steps": step_count,
+        "first_wave_row_count": data.first_wave_row_count,
         # Passes through the data that training_steps works out to, for the full model:
-        "training_epochs": gp_settings.training_steps / math.ceil(parameter_matrix.shape[0] / gp_settings.batch_size),
+        "training_epochs": step_count / math.ceil(parameter_matrix.shape[0] / gp_settings.batch_size),
         "k_fold_count": K_FOLD_COUNT,
         "inducing_point_count": gp_settings.inducing_point_count,
         "learning_rate": gp_settings.learning_rate,
@@ -470,7 +498,7 @@ def train_full_model(args, gp_settings, data):
 
     # Set up the model and the model's associated training apparatus:
     print("Setting up model...")
-    model_manager = DeepKernelModelManager(inducing_points, gp_settings)
+    model_manager = DeepKernelModelManager(inducing_points, gp_settings, step_count)
 
     # Whiten metric distribution:
     metric_mean = np.mean(output_metric)
@@ -483,7 +511,7 @@ def train_full_model(args, gp_settings, data):
 
     # Train the model:
     print("Training model...")
-    model_manager.train_steps(parameter_matrix, whitened_metric, gp_settings.batch_size, gp_settings.training_steps)
+    model_manager.train_steps(parameter_matrix, whitened_metric, gp_settings.batch_size, step_count)
     print("Saving model...")
     model_manager.save(id_folderpath)
 
@@ -572,7 +600,7 @@ def run_cross_validation_stage(gp_settings, data):
     cv_dict = cross_validation(
         data.parameter_matrix, data.output_metric, data.output_sem, data.replicate_counts, data.inducing_points,
         data.valid_indices, data.original_row_count, data.wave_indices, data.wave_row_indices, data.id_folderpath,
-        gp_settings, run_record
+        gp_settings, data.first_wave_row_count, run_record
     )
     for key in ["mae", "mse", "train_mse", "sll", "lcr", "tcr"]:
         print(f"Mean {key}: {np.mean(cv_dict[key])}")

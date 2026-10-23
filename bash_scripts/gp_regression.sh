@@ -16,7 +16,7 @@
 # The models train on the rows of the global dataset from waves up to hm_wave_id, and are saved
 # to that wave, inside the GP models folder if given, or trained_models/ if not (or given as "").
 # Any further arguments are passed to gp_training.py:
-#     the GP architecture and training settings (e.g. --training_steps 3840 --hidden_layer_count 2),
+#     the GP architecture and training settings (e.g. --epochs 15 --constant_step false),
 #         which otherwise take the defaults in muscleabm/history_matching.py;
 #     --stage full, cross_validation or all (the default): submit_hm_waves.sh trains the full
 #         models first (full), then cross-validates them and estimates their Sobol' indices in a

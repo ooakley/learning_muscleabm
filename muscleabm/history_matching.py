@@ -20,7 +20,8 @@ A history matching config is a .json file of the form:
         "run_validation": true,
         "delete_run_data": true,
         "gaussian_process": {
-            "training_steps": 3840,
+            "epochs": 15,
+            "constant_step": false,
             "inducing_point_count": 512,
             "hidden_layer_count": 2,
             "hidden_layer_neuron_count": 32,
@@ -49,8 +50,9 @@ delete_run_data:   whether to delete each wave's run_data folder, to save space,
                    wave has passed the check of failed simulations and is in the global
                    dataset. Its simulations then cannot be rerun or recollated.
 gaussian_process:  architecture and training settings of the GP emulators. They train for
-                   a fixed number of optimiser steps (minibatches), so that a wave's models
-                   train for as long as the first wave's, however large the dataset has grown.
+                   epochs passes through the data, unless constant_step is true: then every
+                   wave's models train for the optimiser steps (minibatches) that epochs takes
+                   on the first wave's data, however large the dataset has grown.
                    The deep kernel warps the inputs with residual_block_count residual
                    blocks, x <- x + g(x), as in DUE (van Amersfoort et al. 2021). Each block's
                    branch g has hidden_layer_count hidden layers of hidden_layer_neuron_count
@@ -72,14 +74,25 @@ MODELS_DIRNAME = "trained_models"
 MCMC_DIRNAME = "disc_cov_mcmc_results"
 
 
+def boolean(value):
+    """A true or false setting, given as a bool or (on the command line) as "true" or "false"."""
+    if isinstance(value, bool):
+        return value
+    if value in ("true", "false"):
+        return value == "true"
+    raise ValueError("expected true or false, got {!r}".format(value))
+
+
 # GP settings, with their types and defaults. The defaults are those gp_training.py uses
-# when run without a config. Every setting is a positive number:
+# when run without a config. Every setting is a positive number, apart from the booleans:
 GP_SETTINGS = [
     # (name, type, default, help)
-    # 3840 steps is 15 epochs of a 2^17 simulation first wave at batch size 512:
-    ("training_steps", int, 3840,
-     "Optimiser steps (minibatches) for the full model and each cross-validation fold, "
-     "whatever the dataset size."),
+    ("epochs", int, 15,
+     "Passes through the training data, for the full model and each cross-validation fold. With "
+     "constant_step, passes through the first wave's data instead."),
+    ("constant_step", boolean, False,
+     "Train every wave's models for the optimiser steps that epochs takes on the first wave's data, "
+     "so that later waves, with more data, are not trained for longer (true or false)."),
     ("inducing_point_count", int, 512, "Inducing points of the sparse variational GP."),
     ("hidden_layer_count", int, 2, "Hidden layers of each residual block of the deep kernel."),
     ("hidden_layer_neuron_count", int, 32, "Neurons in each hidden layer of the deep kernel."),
@@ -110,7 +123,8 @@ class GPSettings:
         """Command line arguments that set these settings in gp_training.py."""
         arguments = []
         for name, _, _, _ in GP_SETTINGS:
-            arguments += ["--" + name, str(getattr(self, name))]
+            value = getattr(self, name)
+            arguments += ["--" + name, str(value).lower() if isinstance(value, bool) else str(value)]
         return arguments
 
     @staticmethod
@@ -202,7 +216,10 @@ def load_config(config_path):
     _check_keys("gaussian_process", gp_config, [name for name, _, _, _ in GP_SETTINGS])
     gp_settings = {}
     for name, setting_type, _, _ in GP_SETTINGS:
-        # Every GP setting is a positive count, rate or coefficient:
+        if setting_type is boolean:
+            gp_settings[name] = _check_bool("gaussian_process." + name, gp_config[name])
+            continue
+        # Every other GP setting is a positive count, rate or coefficient:
         value = _check_number("gaussian_process." + name, gp_config[name], setting_type, 0)
         if value <= 0:
             raise ConfigError("gaussian_process.{} must be positive, got {!r}.".format(name, value))

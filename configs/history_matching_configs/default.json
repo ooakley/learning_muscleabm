@@ -9,7 +9,8 @@
     "run_validation": true,
     "delete_run_data": true,
     "gaussian_process": {
-        "training_steps": 3840,
+        "epochs": 15,
+        "constant_step": false,
         "inducing_point_count": 512,
         "hidden_layer_count": 2,
         "hidden_layer_neuron_count": 64,
