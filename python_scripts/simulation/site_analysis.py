@@ -22,6 +22,9 @@ WORLD_SIZE = 1024
 PIXEL_SIZE = 0.3469 * 2  # Pixel size in µm, accounting for binning
 TRAVEL_LIMIT = 75
 FRAME_DURATION = 2.5
+# Distance in pixels below which a cell counts as not having moved, well below any real motion
+# but above rounding error in the positions:
+MOVEMENT_TOLERANCE = 1e-9
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Process a folder with a given integer name.')
@@ -206,7 +209,7 @@ def find_motion_metrics(position_array):
 
         # Skip entirely stationary cells, which have no meander ratio, and whose zero speed would
         # make the site's geometric mean speed zero:
-        if path_length <= 0:
+        if path_length <= MOVEMENT_TOLERANCE:
             continue
 
         average_speed = np.mean(step_lengths)  # Get mean pixels per frame.
@@ -226,6 +229,36 @@ def find_motion_metrics(position_array):
     # We want a per-site geometric mean of the particle speed distribution:
     site_average_speed = np.exp(np.mean(np.log(average_speeds)))
     return np.mean(meander_ratios), site_average_speed
+
+
+def find_motion_order(position_array):
+    """Nematic order parameter and mean direction of the cells' frame-to-frame motion.
+
+    The order parameter is, for each frame, the magnitude of the mean of exp(2i theta) over the
+    cells that moved, theta being each cell's direction of motion, averaged over frames. It is 1
+    when cells move along a common axis, whichever way along it, and 0 when their directions are
+    isotropic. The mean direction is the (polar) direction of the cells' mean unit velocity.
+    """
+    # Array shape: (CELL_NUMBER, TIMESTEPS, (X, Y)). Take frame-to-frame differences across the
+    # periodic boundaries:
+    differences = np.diff(position_array, axis=1)
+    differences[differences > WORLD_SIZE / 2] -= WORLD_SIZE
+    differences[differences < -(WORLD_SIZE / 2)] += WORLD_SIZE
+    x_diff, y_diff = differences[:, :, 0], differences[:, :, 1]
+
+    # Directions of motion, leaving out cells that did not move in a frame:
+    headings = np.arctan2(y_diff, x_diff)
+    moved = np.sqrt(x_diff**2 + y_diff**2) > MOVEMENT_TOLERANCE
+    headings[~moved] = np.nan
+
+    # Average over cells, then frames:
+    nematic_x = np.nanmean(np.cos(2 * headings), axis=0)
+    nematic_y = np.nanmean(np.sin(2 * headings), axis=0)
+    order_parameter = np.mean(np.sqrt(nematic_x**2 + nematic_y**2))
+    mean_direction = np.arctan2(
+        np.mean(np.nanmean(np.sin(headings), axis=0)), np.mean(np.nanmean(np.cos(headings), axis=0))
+    )
+    return order_parameter, mean_direction
 
 
 def get_mean_length(trajectory_dataframe):
@@ -442,17 +475,8 @@ def main():
         # Get average meander ratio across cells:
         meander_ratio, mean_speed = find_motion_metrics(interpolated_array)
 
-        # Get estimated order parameter from positional data:
-        x_diff = np.diff(interpolated_array[:, :, 0], axis=1)
-        y_diff = np.diff(interpolated_array[:, :, 1], axis=1)
-        particle_velocities = np.sqrt(x_diff**2 + y_diff**2)
-        # -- Calculate x and y components of order parameter, averaging across cells:
-        x_op_component = np.nanmean(x_diff / particle_velocities, axis=0)
-        y_op_component = np.nanmean(y_diff / particle_velocities, axis=0)
-        op_timeseries = np.sqrt(x_op_component**2 + y_op_component**2)
-        order_parameter = np.mean(op_timeseries)
-        # -- Get mean direction:
-        mean_direction = np.arctan2(np.mean(y_op_component), np.mean(x_op_component))
+        # Get the nematic order parameter and mean direction of cell motion:
+        order_parameter, mean_direction = find_motion_order(interpolated_array)
 
         # Plot if first seed:
         if seed == 0:
