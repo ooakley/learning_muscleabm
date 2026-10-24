@@ -11,6 +11,7 @@ import numpy as np
 from muscleabm.datasets import DISCREPANCY_FRACTIONS, GLOBAL_DATASET_FOLDER, MODEL_METRICS, WETLAB_METRICS
 from muscleabm.emulators import ModelManager
 from muscleabm.history_matching import MCMC_DIRNAME
+from muscleabm.sampling import get_count_layout
 
 # Set up parallelism across metrics:
 from concurrent.futures import ThreadPoolExecutor
@@ -20,11 +21,7 @@ print("--- --- Allocation summary: --- ---")
 torch.set_num_threads(16)
 print("Threads allocated to torch: ", torch.get_num_threads(), flush=True)
 
-PARAMETER_DIMENSION = 13
 CAT_VAR = "C(phenotype, Treatment(reference='CTL'))[T.RD]"
-QUERY_COUNTS = list(np.linspace(50, 300, 11).astype(int))
-SCALED_QUERY_COUNTS = (np.array(QUERY_COUNTS) - 50) / (400 - 50)
-GRIDSEARCH_COUNT_INDEX = 12
 CHAIN_LENGTH = 32768 * 2
 BATCH_SIZE = 8
 LENGTHSCALE_FRACTION = 1.0
@@ -78,6 +75,11 @@ def parse_arguments():
              'to load them from the wet lab GP results folder.'
     )
     parser.add_argument(
+        '--query_counts', type=int, nargs='+', required=True,
+        help='Cell counts at which each parameter set\'s curves are compared with the wet lab ones. They '
+             'must be the counts the wet lab targets were computed at.'
+    )
+    parser.add_argument(
         '--burn_in_fraction', type=float, default=0.25,
         help='Fraction of the chain discarded as burn-in. Proposals are only adapted during burn-in.'
     )
@@ -87,6 +89,8 @@ def parse_arguments():
              'then freeze them for the rest of the chain.'
     )
     args = parser.parse_args()
+    if len(args.query_counts) < 2 or np.any(np.diff(args.query_counts) <= 0):
+        parser.error("--query_counts must be at least 2 counts, in increasing order.")
     if not 0 < args.burn_in_fraction < 1:
         parser.error("--burn_in_fraction must be between 0 and 1.")
     if args.experimental_lengthscales is not None:
@@ -98,6 +102,33 @@ def parse_arguments():
         if any(lengthscale <= 0 for lengthscale in args.experimental_lengthscales):
             parser.error("--experimental_lengthscales must be positive.")
     return args
+
+
+class QueryLayout:
+    """The emulator inputs at which a parameter set's curves are compared with the wet lab data.
+
+    The number of parameters and the column and range of the cell count come from the
+    experiment's config.json, and the counts compared at from --query_counts.
+    """
+
+    def __init__(self, config_dictionary, query_counts):
+        self.parameter_count, self.count_index, count_min, count_max = get_count_layout(config_dictionary)
+        # The chains move every parameter but the count:
+        self.sample_dimension = self.parameter_count - 1
+        self.query_counts = np.asarray(query_counts)
+        self.scaled_query_counts = (self.query_counts - count_min) / (count_max - count_min)
+        if np.any(self.scaled_query_counts < 0) or np.any(self.scaled_query_counts > 1):
+            raise ValueError(
+                f"The query counts {self.query_counts.tolist()} must lie within the count range "
+                f"[{count_min}, {count_max}] of the experiment's config."
+            )
+
+    def get_inputs(self, x):
+        """Emulator inputs (batch, query counts, parameters) for parameter sets x (batch, sample dimension)."""
+        input_x = np.empty((x.shape[0], len(self.scaled_query_counts), self.parameter_count))
+        for i, count in enumerate(self.scaled_query_counts):
+            input_x[:, i, :] = np.insert(x, self.count_index, count, axis=1)
+        return input_x
 
 
 class MetricInferenceManager:
@@ -380,13 +411,9 @@ def batch_ll_calculation(gp_mean, gp_cov, exp_mean, exp_cov):
     return -0.5 * (log_pdf_const + log_det + mahalanobis_sq)   # (B,)
 
 
-def estimate_log_likelihoods(x, inference_managers, target_data):
+def estimate_log_likelihoods(x, inference_managers, target_data, layout):
     # Here the batch count is the number of chains by the number of temperature steps:
-    batch = x.shape[0]
-    n_counts = len(SCALED_QUERY_COUNTS)
-    input_x = np.empty((batch, n_counts, PARAMETER_DIMENSION))
-    for i, count in enumerate(SCALED_QUERY_COUNTS):
-        input_x[:, i, :] = np.insert(x, GRIDSEARCH_COUNT_INDEX, count, axis=1)
+    input_x = layout.get_inputs(x)
 
     # # Collate log-likelihoods across metrics:
     # log_likelihoods = []
@@ -415,24 +442,24 @@ def estimate_log_likelihoods(x, inference_managers, target_data):
 
 
 def run_ensemble_mcmc(
-        inference_managers, target_data, batch_size, temperature_steps, chain_length,
+        inference_managers, target_data, layout, batch_size, temperature_steps, chain_length,
         burn_in_fraction=0.25, adaptive_proposals=False
     ):
     # Set up adaptation of the proposals, which only happens during burn-in:
     proposal_adapter = None
     if adaptive_proposals:
         proposal_adapter = ProposalAdapter(
-            temperature_steps, PARAMETER_DIMENSION - 1, int(chain_length * burn_in_fraction)
+            temperature_steps, layout.sample_dimension, int(chain_length * burn_in_fraction)
         )
 
     # Generate first candidate point & likelihood:
     rng = np.random.default_rng(0)
     base_temperatures = 2 ** (np.linspace(0, np.sqrt(8), temperature_steps) ** 2)
     tiled_temperatures = np.tile(base_temperatures, batch_size)
-    current_x = rng.uniform(size=(batch_size * temperature_steps, PARAMETER_DIMENSION - 1))
+    current_x = rng.uniform(size=(batch_size * temperature_steps, layout.sample_dimension))
 
     # Estimate current likelihood:
-    current_likelihood = estimate_log_likelihoods(current_x, inference_managers, target_data)
+    current_likelihood = estimate_log_likelihoods(current_x, inference_managers, target_data, layout)
     current_likelihood /= tiled_temperatures
 
     # Iterate through chain:
@@ -447,10 +474,10 @@ def run_ensemble_mcmc(
 
         # Sample new x:
         if proposal_adapter is None:
-            proposal_x = get_proposal(current_x.reshape(-1, PARAMETER_DIMENSION - 1), rng)
+            proposal_x = get_proposal(current_x.reshape(-1, layout.sample_dimension), rng)
         else:
-            proposal_x = proposal_adapter.propose(current_x.reshape(-1, PARAMETER_DIMENSION - 1), rng)
-        proposal_likelihood = estimate_log_likelihoods(proposal_x, inference_managers, target_data)
+            proposal_x = proposal_adapter.propose(current_x.reshape(-1, layout.sample_dimension), rng)
+        proposal_likelihood = estimate_log_likelihoods(proposal_x, inference_managers, target_data, layout)
         tempered_likelihood = proposal_likelihood / tiled_temperatures
 
         # Calculate acceptance criterion:
@@ -463,7 +490,7 @@ def run_ensemble_mcmc(
         current_likelihood[acceptance_mask] = tempered_likelihood[acceptance_mask]
 
         # Do temperature swaps, reshape for convenience:
-        current_x = current_x.reshape((batch_size, temperature_steps, PARAMETER_DIMENSION - 1))
+        current_x = current_x.reshape((batch_size, temperature_steps, layout.sample_dimension))
         base_likelihood = (current_likelihood * tiled_temperatures).reshape((batch_size, temperature_steps))
         current_likelihood = current_likelihood.reshape((batch_size, temperature_steps))
         swap_indices = rng.choice(temperature_steps - 1, size=batch_size)
@@ -498,7 +525,7 @@ def run_ensemble_mcmc(
             proposal_adapter.update(i, temperature_acceptance / batch_size, current_x)
 
         # Reshape back to batch:
-        current_x = current_x.reshape((-1, PARAMETER_DIMENSION - 1))
+        current_x = current_x.reshape((-1, layout.sample_dimension))
         current_likelihood = current_likelihood.flatten()
 
         # Add to chain:
@@ -511,7 +538,7 @@ def run_ensemble_mcmc(
     likelihoods = np.stack(likelihoods, axis=0) * tiled_temperatures
 
     # ---> (STEP, PARTICLE, TEMPERATURE, PARAMETER)
-    levelled_chain = chain.reshape((chain_length, batch_size, temperature_steps, PARAMETER_DIMENSION - 1))
+    levelled_chain = chain.reshape((chain_length, batch_size, temperature_steps, layout.sample_dimension))
     levelled_likelihoods = likelihoods.reshape((chain_length, batch_size, temperature_steps))
     acceptance_rate = np.stack(acceptance_rate, axis=1)
     rung_acceptance_rate = rung_acceptance / rung_proposal_count
@@ -519,12 +546,8 @@ def run_ensemble_mcmc(
     return levelled_chain, levelled_likelihoods, acceptance_rate, rung_acceptance_rate, adaptation_record
 
 
-def get_posterior_predictions(x, inference_managers):
-    batch = x.shape[0]
-    n_counts = len(SCALED_QUERY_COUNTS)
-    input_x = np.empty((batch, n_counts, PARAMETER_DIMENSION))
-    for i, count in enumerate(SCALED_QUERY_COUNTS):
-        input_x[:, i, :] = np.insert(x, GRIDSEARCH_COUNT_INDEX, count, axis=1)
+def get_posterior_predictions(x, inference_managers, layout):
+    input_x = layout.get_inputs(x)
 
     all_outputs = []
     all_errors = []
@@ -576,7 +599,7 @@ def get_experimental_lengthscales(argument_lengthscales, gp_wetlab_dirpath):
     return lengthscales
 
 
-def print_covariance_ratios(label, mc_distribution, inference_managers, target_data, burn_in_fraction):
+def print_covariance_ratios(label, mc_distribution, inference_managers, target_data, burn_in_fraction, layout):
     """Print a simple estimate of the experimental variance relative to the GP latent variance.
 
     Uses the diagonals of the covariances actually fed to the likelihood: the experimental
@@ -585,9 +608,9 @@ def print_covariance_ratios(label, mc_distribution, inference_managers, target_d
     """
     # Take evenly spaced samples from the cold chain after burn-in:
     chain_length = mc_distribution.shape[0]
-    cold_samples = mc_distribution[int(chain_length * burn_in_fraction):, :, 0, :].reshape(-1, PARAMETER_DIMENSION - 1)
+    cold_samples = mc_distribution[int(chain_length * burn_in_fraction):, :, 0, :].reshape(-1, layout.sample_dimension)
     sample_indices = np.linspace(0, cold_samples.shape[0] - 1, RATIO_SAMPLE_COUNT).astype(int)
-    _, _, sigma_gp = get_posterior_predictions(cold_samples[sample_indices, :], inference_managers)
+    _, _, sigma_gp = get_posterior_predictions(cold_samples[sample_indices, :], inference_managers, layout)
 
     print(f"--- --- {label}: experimental vs GP latent variance ({RATIO_SAMPLE_COUNT} cold chain samples) --- ---")
     for metric_index, (wetlab_metric, (_, exp_cov)) in enumerate(target_data.items()):
@@ -620,16 +643,33 @@ def main():
             != os.path.abspath(wave_dirpath):
         print(f"Warning: the GP models are not inside {wave_dirpath}.", flush=True)
 
+    # The emulator's inputs are laid out as in the experiment's sweeps, and the curves are compared
+    # at the given counts:
+    with open(os.path.join(args.experiment_dirpath, "config.json")) as config_fstream:
+        layout = QueryLayout(json.load(config_fstream), args.query_counts)
+    print(f"Comparing curves at counts {layout.query_counts.tolist()}...", flush=True)
+
     # Load wet lab data:
     site_dataframe = pd.read_csv("wetlab_data/site_dataframe.csv")
     particle_counts = np.array(site_dataframe["particle_count"])
     site_dataframe["scaled_particle_count"] = (particle_counts - np.mean(particle_counts)) / np.std(particle_counts)
 
     # Get scaled points to query:
-    scaled_query = (QUERY_COUNTS - np.mean(particle_counts)) / np.std(particle_counts)
+    scaled_query = (layout.query_counts - np.mean(particle_counts)) / np.std(particle_counts)
 
-    # Get the data we want to fit to from our regression results:
+    # Get the data we want to fit to from our regression results, which must have been computed at
+    # the same counts:
     gp_wetlab_dirpath = os.path.join("wetlab_data", "gp_results")
+    target_counts_filepath = os.path.join(gp_wetlab_dirpath, "query_counts.npy")
+    if os.path.exists(target_counts_filepath):
+        target_counts = np.load(target_counts_filepath)
+        if not np.array_equal(target_counts, layout.query_counts):
+            raise ValueError(
+                f"The wet lab targets were computed at counts {target_counts.tolist()}, "
+                f"not the query counts {layout.query_counts.tolist()}."
+            )
+    else:
+        print(f"No {target_counts_filepath} found, so the query counts are not checked against the wet lab targets.", flush=True)
     wt_data = {}
     rd_data = {}
 
@@ -640,7 +680,7 @@ def main():
     if args.experimental_lengthscales is not None:
         experimental_lengthscales = get_experimental_lengthscales(args.experimental_lengthscales, gp_wetlab_dirpath)
         # The lengthscales are in particle counts, so the correlation is built over the raw design counts:
-        query_counts = np.array(QUERY_COUNTS, dtype=float)
+        query_counts = layout.query_counts.astype(float)
         query_spacing = query_counts[1] - query_counts[0]
         print("Using outer product GP covariance with experimental lengthscales...", flush=True)
         for wetlab_metric, model_metric in zip(WETLAB_METRICS, MODEL_METRICS):
@@ -707,8 +747,8 @@ def main():
     parameter_matrix = np.load(os.path.join(global_dirpath, "sample_matrix.npy"))[wave_mask, :]
     reduced_parameter_matrix = np.concatenate(
         [
-            parameter_matrix[:, :GRIDSEARCH_COUNT_INDEX],
-            parameter_matrix[:, GRIDSEARCH_COUNT_INDEX + 1:]
+            parameter_matrix[:, :layout.count_index],
+            parameter_matrix[:, layout.count_index + 1:]
         ], axis=1
     )
     print(f"Reduced parameter shape: {reduced_parameter_matrix.shape}", flush=True)
@@ -741,6 +781,7 @@ def main():
         "hm_wave_id": args.hm_wave_id,
         "gp_models_dirpath": args.gp_models_dirpath,
         "burn_in_fraction": args.burn_in_fraction,
+        "query_counts": layout.query_counts.tolist(),
         "adaptive_proposals": args.adaptive_proposals,
         "gp_covariance": "full" if experimental_lengthscales is None else "outer_product",
         "experimental_lengthscales": experimental_lengthscales
@@ -761,7 +802,7 @@ def main():
     # Estimate high likelihood parameter combination distribution with MCMC:
     print(f"Running parallel tempering MCMC for {label} data...", flush=True)
     mc_distribution, likelihoods, acceptance_rate, rung_acceptance_rate, adaptation_record = run_ensemble_mcmc(
-        inference_managers, target_data,
+        inference_managers, target_data, layout,
         batch_size=BATCH_SIZE, temperature_steps=6, chain_length=CHAIN_LENGTH,
         burn_in_fraction=args.burn_in_fraction, adaptive_proposals=args.adaptive_proposals
     )
@@ -781,13 +822,13 @@ def main():
             "Acceptance rates after burn-in, by temperature: "
             f"{np.round(np.mean(acceptance_rate[:, burn_in_step_count:], axis=1), 3)}", flush=True
         )
-    print_covariance_ratios(label, mc_distribution, inference_managers, target_data, args.burn_in_fraction)
+    print_covariance_ratios(label, mc_distribution, inference_managers, target_data, args.burn_in_fraction, layout)
 
     # Run posterior inference:
     print(f"Running posterior inference for {label} distribution...", flush=True)
     posterior_mean, posterior_std, posterior_sigma = get_posterior_predictions(
-        mc_distribution[burn_in_step_count::64, :, 0, :].reshape(-1, PARAMETER_DIMENSION - 1),
-        inference_managers
+        mc_distribution[burn_in_step_count::64, :, 0, :].reshape(-1, layout.sample_dimension),
+        inference_managers, layout
     )
     np.save(os.path.join(mcmc_dirpath, f"{file_prefix}_posterior_mean.npy"), posterior_mean)
     np.save(os.path.join(mcmc_dirpath, f"{file_prefix}_posterior_std.npy"), posterior_std)
