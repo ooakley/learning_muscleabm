@@ -51,8 +51,9 @@ def _():
         """
         x, g, y : (N,) raw x, integer group index, response
         x_star  : (M,) design points
-        Returns (mean, Sigma_exp): posterior mean and covariance of the population
-        curve m + f at x_star (excludes group offsets b_g and observation noise).
+        Returns (mean, Sigma_exp, Sigma_level, ell): posterior mean and covariance of the
+        population curve m + f at x_star (excludes group offsets b_g and observation noise),
+        the part of that covariance due to the uncertainty in the level m, and the lengthscale.
 
         The level m is treated as unknown, with a vague prior, rather than as its fitted value,
         so Sigma_exp includes the uncertainty in the population level (about tau^2 over the
@@ -99,11 +100,13 @@ def _():
             beta = Kinv_y.sum() / level_precision
             mean = beta + Ks @ (Kinv_y - beta * Kinv_ones)
             R = torch.ones(len(x_star)) - Kinv_KsT.sum(dim=0)
-            Sigma = Kss - Ks @ Kinv_KsT + torch.outer(R, R) / level_precision
+            Sigma_level = torch.outer(R, R) / level_precision
+            Sigma = Kss - Ks @ Kinv_KsT + Sigma_level
 
         Sigma = 0.5 * (Sigma + Sigma.T)                           # symmetrise
         mean = (mean * y_sd + y_mu).numpy()
         Sigma = (Sigma * y_sd**2).numpy()                         # back to original units
+        Sigma_level = (Sigma_level * y_sd**2).numpy()
         ell = model.k_f.base_kernel.lengthscale.item()
 
         print(f"sigma_f={model.k_f.outputscale.sqrt().item():.3f}  "
@@ -111,7 +114,7 @@ def _():
               f"tau={model.k_g.outputscale.sqrt().item():.3f}  "
               f"sigma_n={lik.noise.sqrt().item():.3f}  (standardised units)")
 
-        return mean, Sigma, ell
+        return mean, Sigma, Sigma_level, ell
     return fit_exp_covariance, np, os, pd, plt
 
 
@@ -150,11 +153,12 @@ def _(fit_exp_covariance, np, os, save_directory, site_dataframe):
         for metric_label in METRICS:
             # Get output:
             metric_values = site_dataframe.loc[phenotype_mask, metric_label].to_numpy()
-            mean, sigma, ell = fit_exp_covariance(cell_count, group_var, metric_values, QUERY_COUNTS, n_iter=300, lr=0.05)
+            mean, sigma, level_sigma, ell = fit_exp_covariance(cell_count, group_var, metric_values, QUERY_COUNTS, n_iter=300, lr=0.05)
 
             # Save outputs:
             np.save(os.path.join(save_directory, f"{phenotype}_{metric_label}_mean.npy"), mean)
             np.save(os.path.join(save_directory, f"{phenotype}_{metric_label}_sigma.npy"), sigma)
+            np.save(os.path.join(save_directory, f"{phenotype}_{metric_label}_level_sigma.npy"), level_sigma)
             np.save(os.path.join(save_directory, f"{phenotype}_{metric_label}_lengthscale.npy"), ell)
     return QUERY_COUNTS, extract_fit_values
 
@@ -180,12 +184,20 @@ def _(QUERY_COUNTS, np, os, plt, save_directory):
 
             mean = np.load(os.path.join(save_directory, f"{phenotype}_{metric_label}_mean.npy"))
             sigma = np.load(os.path.join(save_directory, f"{phenotype}_{metric_label}_sigma.npy"))
+            level_sigma = np.load(os.path.join(save_directory, f"{phenotype}_{metric_label}_level_sigma.npy"))
             se = np.sqrt(np.diag(sigma))
+            curve_se = np.sqrt(np.diag(sigma - level_sigma))
 
-            # Plot regression:
-            ax.plot(QUERY_COUNTS, mean)
-            ax.fill_between(QUERY_COUNTS, mean - se, mean + se, alpha=0.2)
+            # Plot regression, with the total uncertainty (outer band) and the uncertainty
+            # in the curve alone, without the uncertainty in the level (inner band):
+            line, = ax.plot(QUERY_COUNTS, mean, label=phenotype)
+            ax.fill_between(QUERY_COUNTS, mean - se, mean + se, color=line.get_color(), alpha=0.15)
+            ax.fill_between(QUERY_COUNTS, mean - curve_se, mean + curve_se, color=line.get_color(), alpha=0.3)
 
+        ax.set_xlabel("Cell count")
+        ax.set_ylabel(metric_label)
+        ax.set_title("Bands: ±1 s.d., total (outer) and without level uncertainty (inner)", fontsize=9)
+        ax.legend()
         plt.show()
 
     plot_gp_regression("coherency_fraction")
