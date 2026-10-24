@@ -264,6 +264,8 @@ def analyse_site(site_csv, column, experiment):
     all_ids = np.unique(site_csv["tree_id"])
     data_dictionaries, total_movement, valid_ids = get_movement_descriptors(site_csv, all_ids, MIN_FRAMES)
     count_mean, _ = get_average_particle_count(site_csv, valid_ids)
+    # -- Detections per frame, valid or not, to check how many cells the valid tracks miss:
+    detection_mean, _ = get_average_particle_count(site_csv, all_ids)
     annd_mean, anni_mean = get_average_nearest_neighbour_distance(site_csv, valid_ids)
 
     # Get coherency and interaction values:
@@ -296,6 +298,7 @@ def analyse_site(site_csv, column, experiment):
     particle_or = np.array(particle_dataframe["outreach_ratio"])[frame_mask]
     site_data = {
         "particle_count": count_mean,
+        "detection_count": detection_mean,
         "annd": annd_mean,
         "anni": anni_mean,
         "coherency_fraction": coherency_fraction,

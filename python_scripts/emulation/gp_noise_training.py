@@ -6,9 +6,9 @@ import torch
 
 import numpy as np
 
-from dppy.finite_dpps import FiniteDPP
-
-from muscleabm.emulators import ModelManager, get_experiment_model_folderpath, run_inference
+from muscleabm.emulators import (
+    ModelManager, get_experiment_model_folderpath, run_inference, select_inducing_points_dpp
+)
 
 # Need a higher precision for computing double derivatives:
 torch.set_default_dtype(torch.float64)
@@ -39,23 +39,6 @@ def load_gridsearch_data(experiment_dirpath, metric_name):
     metric_sem = np.std(output_metric[~nan_mask], axis=1) / np.sqrt(16)
     print(f"Dataset size: {metric_sem.shape}", flush=True)
     return parameter_matrix[~nan_mask, :], np.log(metric_sem)
-
-
-def sample_inducing_points(num_points, parameter_matrix):
-    # Get likelihood matrix:
-    print("Getting squared exponential likelihood matrix...", flush=True)
-    distance_matrix = 1 - np.matmul(parameter_matrix[::7, :], parameter_matrix[::7, :].T).astype(np.float32)
-    likelihood_matrix = np.exp(distance_matrix ** 2)
-
-    # Set up determinantal point process:
-    print("Setting up point process...")
-    DPP = FiniteDPP('likelihood', **{'L': likelihood_matrix})
-    DPP.sample_mcmc_k_dpp(size=num_points, random_state=0)
-
-    # Get inducing points:
-    inducing_indices = DPP.list_of_samples[0][-1]
-    inducing_points = parameter_matrix[::7, :][inducing_indices, :]
-    return inducing_points
 
 
 def cross_validation(parameter_matrix, output_metric, inducing_points):
@@ -151,7 +134,8 @@ def main():
 
     # Get inducing points:
     print("Sampling inducing points...")
-    inducing_points = sample_inducing_points(512, parameter_matrix)
+    inducing_indices, _ = select_inducing_points_dpp(parameter_matrix, 512, np.random.default_rng(0))
+    inducing_points = parameter_matrix[inducing_indices, :]
 
     # Perform cross-validation:
     mae_list, mse_list, sll_list = cross_validation(parameter_matrix, output_sem, inducing_points)

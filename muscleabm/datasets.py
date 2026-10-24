@@ -6,12 +6,13 @@ import numpy as np
 # Folder of the experiment holding the data aggregated across history matching waves:
 GLOBAL_DATASET_FOLDER = "global_dataset"
 
-# Metrics measured from the simulations, and the wet lab metric each is fitted to:
+# Metrics measured from the simulations, and the wet lab metric each is fitted to. Waves
+# simulated before site_analysis.py saved coherency_fraction cannot be collated with these:
 MODEL_METRICS = [
     "speeds",
     "meander_ratios",
     "ann_indices",
-    "coherency"
+    "coherency_fraction"
 ]
 WETLAB_METRICS = [
     "mean_speed",

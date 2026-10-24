@@ -10,6 +10,7 @@ import torch
 
 import numpy as np
 
+from scipy.spatial.distance import pdist, squareform
 from torch.nn.utils import parametrize
 from torch.utils.data import TensorDataset, DataLoader
 
@@ -119,7 +120,7 @@ class ResidualInputTransformation(torch.nn.Module):
 class SparseGPModel(gpytorch.models.ApproximateGP):
     def __init__(
         self, inducing_points, dimensions, hidden_layer_count=2, hidden_layer_neuron_count=16,
-        spectral_coefficient=0.95, residual_block_count=1
+        spectral_coefficient=0.95, residual_block_count=1, learn_inducing_locations=True
     ):
         # Set up distribution:
         variational_distribution = gpytorch.variational.CholeskyVariationalDistribution(
@@ -129,7 +130,7 @@ class SparseGPModel(gpytorch.models.ApproximateGP):
         # Set up variational strategy:
         variational_strategy = gpytorch.variational.VariationalStrategy(
             self, inducing_points, variational_distribution,
-            learn_inducing_locations=True
+            learn_inducing_locations=learn_inducing_locations
         )
 
         # Inherit rest of init logic from approximate GP:
@@ -211,6 +212,67 @@ def _without_parametrizations(model):
     return model_copy
 
 
+# Largest number of candidate rows a k-DPP selection of inducing points draws from:
+DPP_CANDIDATE_COUNT = 4096
+
+
+def get_log_elementary_symmetric_polynomial(values, order):
+    """Log of the elementary symmetric polynomial of the given order of non-negative values."""
+    log_polynomials = np.full(order + 1, -np.inf)
+    log_polynomials[0] = 0.0
+    with np.errstate(divide="ignore"):
+        log_values = np.log(values)
+    for log_value in log_values:
+        log_polynomials[1:] = np.logaddexp(log_polynomials[1:], log_value + log_polynomials[:-1])
+    return log_polynomials[order]
+
+
+def select_inducing_points_dpp(candidates, inducing_point_count, rng):
+    """Choose inducing points among candidate inputs with a k-DPP, so they are spread out.
+
+    A k-DPP (Kulesza & Taskar 2012, https://arxiv.org/abs/1207.6083) favours sets of points that
+    are far apart under its kernel, so the points cover the candidates' region evenly rather than
+    clumping where the candidates are densest. The kernel is a squared exponential whose
+    lengthscale is the typical spacing of inducing_point_count points among the candidates (the
+    median nearest-neighbour distance in a uniformly random set of that many); a much longer one
+    leaves the kernel too close to singular to sample from.
+
+    Up to DPP_CANDIDATE_COUNT candidates are drawn uniformly first. Returns the indices of the
+    chosen rows of candidates, and the lengthscale.
+    """
+    # dppy is slow to import, and only needed here:
+    from dppy.finite_dpps import FiniteDPP
+
+    pool_size = min(DPP_CANDIDATE_COUNT, candidates.shape[0])
+    if inducing_point_count > pool_size:
+        raise ValueError(
+            f"Cannot choose {inducing_point_count} inducing points from {candidates.shape[0]} candidates."
+        )
+    pool_indices = rng.choice(candidates.shape[0], pool_size, replace=False)
+    distances = squareform(pdist(candidates[pool_indices]))
+
+    # Typical spacing of inducing_point_count points among the candidates:
+    spacing_indices = rng.choice(pool_size, inducing_point_count, replace=False)
+    spacing_distances = distances[np.ix_(spacing_indices, spacing_indices)]
+    np.fill_diagonal(spacing_distances, np.inf)
+    lengthscale = float(np.median(np.min(spacing_distances, axis=1)))
+
+    # Sample exactly inducing_point_count points from the k-DPP. Its sampler works with the
+    # elementary symmetric polynomials of the kernel's eigenvalues, which overflow at this size, so
+    # the kernel is first scaled to make the polynomial of order inducing_point_count about 1 (a
+    # k-DPP does not change when its kernel is scaled):
+    eigenvalues, eigenvectors = np.linalg.eigh(np.exp(-0.5 * (distances / lengthscale) ** 2))
+    eigenvalues = np.clip(eigenvalues, 0, None)
+    log_scale = -get_log_elementary_symmetric_polynomial(eigenvalues, inducing_point_count) / inducing_point_count
+    dpp = FiniteDPP("likelihood", L_eig_dec=(eigenvalues * np.exp(log_scale), eigenvectors))
+    with np.errstate(over="raise", invalid="raise"):
+        dpp.sample_exact_k_dpp(
+            size=inducing_point_count, random_state=np.random.RandomState(int(rng.integers(2**31)))
+        )
+    chosen = np.asarray(dpp.list_of_samples[-1]).ravel()
+    return pool_indices[chosen], lengthscale
+
+
 def load_torch_object(filepath):
     """Load a model, likelihood or optimiser saved whole with torch.save."""
     return torch.load(filepath, weights_only=False, pickle_module=_main_to_emulators_pickle)
@@ -220,14 +282,14 @@ class ModelManager:
 
     def __init__(
         self, inducing_points, learning_rate, hidden_layer_count=2, hidden_layer_neuron_count=16,
-        spectral_coefficient=0.95, residual_block_count=1
+        spectral_coefficient=0.95, residual_block_count=1, learn_inducing_locations=True
     ):
         # Set up model:
         inducing_points = torch.tensor(inducing_points)
         self.likelihood = gpytorch.likelihoods.GaussianLikelihood()
         self.model = SparseGPModel(
             inducing_points, inducing_points.shape[1], hidden_layer_count, hidden_layer_neuron_count,
-            spectral_coefficient, residual_block_count
+            spectral_coefficient, residual_block_count, learn_inducing_locations
         )
 
         # The default noise constraint sets the minimum too high,

@@ -35,6 +35,7 @@ collation_targets=(
     meander_ratios
     ann_indices
     coherency
+    coherency_fraction
     interaction
     order_parameters
     mean_directions
@@ -42,6 +43,7 @@ collation_targets=(
     # com_meander_ratios
     # com_ann_indices
     # com_coherency
+    # com_coherency_fraction
     # com_interaction
     # com_order_parameters
     # com_mean_directions

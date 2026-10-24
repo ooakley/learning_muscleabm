@@ -19,10 +19,12 @@ A history matching config is a .json file of the form:
         "array_task_limit": 90,
         "run_validation": true,
         "delete_run_data": true,
+        "query_counts": [50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300],
         "gaussian_process": {
             "epochs": 15,
             "constant_step": false,
             "inducing_point_count": 512,
+            "latest_wave_inducing_points": false,
             "hidden_layer_count": 2,
             "hidden_layer_neuron_count": 32,
             "spectral_coefficient": 0.95,
@@ -49,10 +51,16 @@ run_validation:    whether to test each wave's GP models against the simulations
 delete_run_data:   whether to delete each wave's run_data folder, to save space, once the
                    wave has passed the check of failed simulations and is in the global
                    dataset. Its simulations then cannot be rerun or recollated.
+query_counts:      cell counts at which the MCMC compares each parameter set's curves with the
+                   wet lab ones (which must be computed at the same counts). Later waves'
+                   simulations are given counts in their range, and the validation tests the
+                   emulators there.
 gaussian_process:  architecture and training settings of the GP emulators. They train for
                    epochs passes through the data, unless constant_step is true: then every
                    wave's models train for the optimiser steps (minibatches) that epochs takes
-                   on the first wave's data, however large the dataset has grown.
+                   on the first wave's data, however large the dataset has grown. With
+                   latest_wave_inducing_points, from the second wave on, the inducing points
+                   are drawn from the latest wave by a k-DPP and kept fixed in training.
                    The deep kernel warps the inputs with residual_block_count residual
                    blocks, x <- x + g(x), as in DUE (van Amersfoort et al. 2021). Each block's
                    branch g has hidden_layer_count hidden layers of hidden_layer_neuron_count
@@ -94,6 +102,10 @@ GP_SETTINGS = [
      "Train every wave's models for the optimiser steps that epochs takes on the first wave's data, "
      "so that later waves, with more data, are not trained for longer (true or false)."),
     ("inducing_point_count", int, 512, "Inducing points of the sparse variational GP."),
+    ("latest_wave_inducing_points", boolean, False,
+     "From the second wave on, draw the inducing points from the latest wave's rows with a k-DPP, "
+     "so they are spread through the posterior region, and keep them fixed in training "
+     "(true or false). Otherwise they are drawn uniformly from all rows, and trained."),
     ("hidden_layer_count", int, 2, "Hidden layers of each residual block of the deep kernel."),
     ("hidden_layer_neuron_count", int, 32, "Neurons in each hidden layer of the deep kernel."),
     # The activation of the residual blocks is RESIDUAL_ACTIVATION in muscleabm/emulators.py:
@@ -170,6 +182,16 @@ def _check_bool(path, value):
     return value
 
 
+def _check_counts(path, value):
+    """Check a config value is a list of at least 2 positive whole numbers, in increasing order."""
+    if not isinstance(value, list) or len(value) < 2:
+        raise ConfigError("{} must be a list of at least 2 counts, got {!r}.".format(path, value))
+    counts = [_check_number(path, count, int, 1) for count in value]
+    if any(later <= earlier for earlier, later in zip(counts, counts[1:])):
+        raise ConfigError("{} must be in increasing order, got {!r}.".format(path, value))
+    return counts
+
+
 def _check_keys(path, dictionary, expected_keys):
     if not isinstance(dictionary, dict):
         raise ConfigError("{} must be a JSON object.".format(path))
@@ -191,7 +213,7 @@ def load_config(config_path):
 
     _check_keys("The config", config, [
         "wave_count", "wave_size", "temperature_index", "burn_in_fraction", "max_failed_fraction",
-        "simulations_per_task", "array_task_limit", "run_validation", "delete_run_data",
+        "simulations_per_task", "array_task_limit", "run_validation", "delete_run_data", "query_counts",
         "gaussian_process",
     ])
     checked = {
@@ -204,6 +226,7 @@ def load_config(config_path):
         "array_task_limit": _check_number("array_task_limit", config["array_task_limit"], int, 1),
         "run_validation": _check_bool("run_validation", config["run_validation"]),
         "delete_run_data": _check_bool("delete_run_data", config["delete_run_data"]),
+        "query_counts": _check_counts("query_counts", config["query_counts"]),
     }
     if checked["wave_size"] % PHENOTYPE_COUNT != 0:
         raise ConfigError(
@@ -240,6 +263,7 @@ SHELL_SETTINGS = [
     "array_task_limit",
     "run_validation",  # true or false
     "delete_run_data",  # true or false
+    "query_counts",  # space separated
     "mcmc_dirname",  # MCMC_DIRNAME
     "gp_folder_name",  # MODELS_DIRNAME
     "gp_training_arguments",  # GPSettings.to_arguments(), space separated
@@ -260,6 +284,7 @@ def to_lines(config):
         str(config["array_task_limit"]),
         str(config["run_validation"]).lower(),
         str(config["delete_run_data"]).lower(),
+        " ".join(str(count) for count in config["query_counts"]),
         MCMC_DIRNAME,
         MODELS_DIRNAME,
         " ".join(gp_settings.to_arguments()),

@@ -23,6 +23,7 @@ OUTPUTS_FOLDER = "model_experiments"
 FIRST_WAVE_FOLDER = "hm0"
 
 # Design points used by the MCMC likelihood:
+# Should match the history matching config's query_counts, at which the MCMC compares curves:
 DEFAULT_DESIGN_COUNTS = [int(count) for count in np.linspace(50, 300, 11)]
 
 # Seeds for the scrambled Sobol' sequences. The curve gridsearch uses its own
