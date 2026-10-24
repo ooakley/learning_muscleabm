@@ -27,7 +27,7 @@ BATCH_SIZE = 8
 LENGTHSCALE_FRACTION = 1.0
 
 # Number of cold chain samples used for the covariance ratio summary:
-RATIO_SAMPLE_COUNT = 5
+RATIO_SAMPLE_COUNT = 200
 
 # Number of curves passed to the GP in a single flat call:
 EMULATION_CHUNK_SIZE = 64
@@ -600,11 +600,12 @@ def get_experimental_lengthscales(argument_lengthscales, gp_wetlab_dirpath):
 
 
 def print_covariance_ratios(label, mc_distribution, inference_managers, target_data, burn_in_fraction, layout):
-    """Print a simple estimate of the experimental variance relative to the GP latent variance.
+    """Print and return the GP latent variance relative to the experimental variance, in the posterior.
 
     Uses the diagonals of the covariances actually fed to the likelihood: the experimental
-    covariance (including structural uncertainty), and the GP latent covariance
-    averaged over a few samples from the cold chain after burn-in.
+    covariance (including structural uncertainty), and the GP latent covariance averaged over
+    samples from the cold chain after burn-in. The GP's share of their sum is the emulator's
+    share of the likelihood's variance where the posterior lies.
     """
     # Take evenly spaced samples from the cold chain after burn-in:
     chain_length = mc_distribution.shape[0]
@@ -613,15 +614,24 @@ def print_covariance_ratios(label, mc_distribution, inference_managers, target_d
     _, _, sigma_gp = get_posterior_predictions(cold_samples[sample_indices, :], inference_managers, layout)
 
     print(f"--- --- {label}: experimental vs GP latent variance ({RATIO_SAMPLE_COUNT} cold chain samples) --- ---")
+    ratios = {"sample_count": RATIO_SAMPLE_COUNT, "metrics": {}}
     for metric_index, (wetlab_metric, (_, exp_cov)) in enumerate(target_data.items()):
         exp_variance = np.mean(np.diag(exp_cov))
         gp_variance = np.mean(np.diagonal(sigma_gp[metric_index], axis1=-2, axis2=-1))
+        ratios["metrics"][wetlab_metric] = {
+            "experimental_std": float(np.sqrt(exp_variance)),
+            "gp_latent_std": float(np.sqrt(gp_variance)),
+            "gp_latent_std_over_experimental_std": float(np.sqrt(gp_variance / exp_variance)),
+            "gp_share_of_variance": float(gp_variance / (gp_variance + exp_variance)),
+        }
         print(
             f"{wetlab_metric}: experimental std. dev. {np.sqrt(exp_variance):.5g}, "
             f"GP latent std. dev. {np.sqrt(gp_variance):.5g}, "
-            f"variance ratio (experimental / GP): {exp_variance / gp_variance:.3g}",
+            f"variance ratio (experimental / GP): {exp_variance / gp_variance:.3g}, "
+            f"GP share of the variance: {gp_variance / (gp_variance + exp_variance):.3g}",
             flush=True
         )
+    return ratios
 
 
 def main():
@@ -822,7 +832,11 @@ def main():
             "Acceptance rates after burn-in, by temperature: "
             f"{np.round(np.mean(acceptance_rate[:, burn_in_step_count:], axis=1), 3)}", flush=True
         )
-    print_covariance_ratios(label, mc_distribution, inference_managers, target_data, args.burn_in_fraction, layout)
+    covariance_ratios = print_covariance_ratios(
+        label, mc_distribution, inference_managers, target_data, args.burn_in_fraction, layout
+    )
+    with open(os.path.join(mcmc_dirpath, f"{file_prefix}_covariance_ratios.json"), 'w') as output:
+        json.dump(covariance_ratios, output, indent=4)
 
     # Run posterior inference:
     print(f"Running posterior inference for {label} distribution...", flush=True)
