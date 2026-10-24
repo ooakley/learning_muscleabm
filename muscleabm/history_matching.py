@@ -23,6 +23,7 @@ A history matching config is a .json file of the form:
             "epochs": 15,
             "constant_step": false,
             "inducing_point_count": 512,
+            "latest_wave_inducing_points": false,
             "hidden_layer_count": 2,
             "hidden_layer_neuron_count": 32,
             "spectral_coefficient": 0.95,
@@ -52,7 +53,9 @@ delete_run_data:   whether to delete each wave's run_data folder, to save space,
 gaussian_process:  architecture and training settings of the GP emulators. They train for
                    epochs passes through the data, unless constant_step is true: then every
                    wave's models train for the optimiser steps (minibatches) that epochs takes
-                   on the first wave's data, however large the dataset has grown.
+                   on the first wave's data, however large the dataset has grown. With
+                   latest_wave_inducing_points, from the second wave on, the inducing points
+                   are drawn from the latest wave by a k-DPP and kept fixed in training.
                    The deep kernel warps the inputs with residual_block_count residual
                    blocks, x <- x + g(x), as in DUE (van Amersfoort et al. 2021). Each block's
                    branch g has hidden_layer_count hidden layers of hidden_layer_neuron_count
@@ -94,6 +97,10 @@ GP_SETTINGS = [
      "Train every wave's models for the optimiser steps that epochs takes on the first wave's data, "
      "so that later waves, with more data, are not trained for longer (true or false)."),
     ("inducing_point_count", int, 512, "Inducing points of the sparse variational GP."),
+    ("latest_wave_inducing_points", boolean, False,
+     "From the second wave on, draw the inducing points from the latest wave's rows with a k-DPP, "
+     "so they are spread through the posterior region, and keep them fixed in training "
+     "(true or false). Otherwise they are drawn uniformly from all rows, and trained."),
     ("hidden_layer_count", int, 2, "Hidden layers of each residual block of the deep kernel."),
     ("hidden_layer_neuron_count", int, 32, "Neurons in each hidden layer of the deep kernel."),
     # The activation of the residual blocks is RESIDUAL_ACTIVATION in muscleabm/emulators.py:
