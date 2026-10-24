@@ -110,11 +110,11 @@ def _(os):
         "Coherency"
     ]
 
-    EXPERIMENT_DIRPATH = "model_experiments/2026-10-04-collisions_shape"
-    WAVE_INDEX = 5
+    EXPERIMENT_DIRPATH = "model_experiments/2026-10-23-collisions_shape"
+    WAVE_INDEX = 3
     wave_dirpath = os.path.join(EXPERIMENT_DIRPATH, f"hm{WAVE_INDEX}")
-    # model_dirpath = os.path.join(wave_dirpath, "trained_models")
-    model_dirpath = os.path.join(wave_dirpath, "pll_gp_models_e15_ip512_l2_n64")
+    model_dirpath = os.path.join(wave_dirpath, "trained_models")
+    # model_dirpath = os.path.join(wave_dirpath, "pll_gp_models_e15_ip512_l2_n64")
     return (
         EXPERIMENT_DIRPATH,
         METRICS_LABELS,
@@ -136,7 +136,7 @@ def _(
 ):
     # Load in gridsearch data:
     parameter_values = np.load(os.path.join(wave_dirpath, "sample_matrix.npy"))
-    parameter_values = np.load("model_experiments/2026-10-04-collisions_shape/global_dataset/sample_matrix.npy")
+    # parameter_values = np.load("model_experiments/2026-10-04-collisions_shape/global_dataset/sample_matrix.npy")
 
     with open(os.path.join(EXPERIMENT_DIRPATH, "config.json")) as json_file:
         config_dict = json.load(json_file)
@@ -153,23 +153,36 @@ def _(
             ))
             metric_mean = np.nanmean(metric_array, axis=1)
             metric_std = np.nanstd(metric_array, axis=1)
-            print(np.count_nonzero(np.isnan(metric_mean)))
-            print(np.count_nonzero(np.isnan(metric_std)))
+            # print(np.count_nonzero(np.isnan(metric_mean)))
+            # print(np.count_nonzero(np.isnan(metric_std)))
             metrics_dict[metric_name] = metric_mean
             noise_dict[metric_name] = metric_std
-            print("--- --- --- ---")
-            print(metrics_dict[metric_name].shape)
-            print(noise_dict[metric_name].shape)
+            # print("--- --- --- ---")
+            # print(metrics_dict[metric_name].shape)
+            # print(noise_dict[metric_name].shape)
 
             # Load predictions:
             preds_array = np.load(os.path.join(
                 model_dirpath, f"{metric_name}", "parameter_predictions.npy"
             ))
-            preds_dict[metric_name] = preds_array
+            preds_dict[metric_name] = preds_array[131072:]
         return metrics_dict, noise_dict, preds_dict
 
     metrics_dict, noise_dict, preds_dict = load_metrics()
     return metrics_dict, noise_dict, parameter_values, preds_dict
+
+
+@app.cell
+def _(np, os, wave_dirpath):
+    mcmc_dirpath = os.path.join(wave_dirpath, "disc_cov_mcmc_results")
+    wt_chain = np.load(os.path.join(mcmc_dirpath, "wt_mcmc_chain.npy"))
+    rd_chain = np.load(os.path.join(mcmc_dirpath, "rd_mcmc_chain.npy"))
+
+    chain_length = wt_chain.shape[0]
+    burn_index = int(chain_length // 4)
+    wt_posterior = wt_chain[burn_index:, :, 0, :].reshape(-1, 12)
+    rd_posterior = rd_chain[burn_index:, :, 0, :].reshape(-1, 12)
+    return
 
 
 @app.cell
@@ -291,7 +304,7 @@ def _(
         fig, axs = plt.subplots(4, 2, figsize=(FULL_WIDTH * 0.6, FULL_HEIGHT))
 
         # Plot predictions:
-        for row_index in range(4):
+        for row_index in range(3):
             plot_predictions(row_index, axs[row_index, 0])
             plot_noise_predictions(row_index, axs[row_index, 1])
 
@@ -417,8 +430,15 @@ def _(METRICS_TO_PLOT, model_dirpath, np, os):
 
 @app.cell
 def _(diagnostics_list):
-    test_warped_parameters = diagnostics_list[0]["warped_parameters"]
-    return (test_warped_parameters,)
+    test_warped_parameters = diagnostics_list[2]["warped_parameters"]
+    test_warped_ip = diagnostics_list[2]["warped_inducing_points"]
+    return test_warped_ip, test_warped_parameters
+
+
+@app.cell
+def _(test_warped_parameters):
+    print(test_warped_parameters.shape)
+    return
 
 
 @app.cell
@@ -446,7 +466,7 @@ def _(np, parameter_values, test_warped_parameters):
             ratios.append(warp_distance / base_distance)
 
         return np.array(ratios)
-        
+
 
     ratio_array = sample_empirical_ratio()
     return (ratio_array,)
@@ -459,14 +479,15 @@ def _(plt, ratio_array):
 
 
 @app.cell
-def _(plt, test_warped_parameters):
-    def plot_warped_inputs():
+def _(plt, test_warped_ip, test_warped_parameters):
+    def plot_warped_inputs(i, j):
         fig, ax = plt.subplots()
-        ax.scatter(test_warped_parameters[:, 0], test_warped_parameters[:, 1], s=1, alpha=0.5, edgecolors="none")
+        ax.scatter(test_warped_parameters[:, i], test_warped_parameters[:, j], s=1, alpha=0.5, edgecolors="none")
+        ax.scatter(test_warped_ip[:, i], test_warped_ip[:, j], s=5, alpha=0.9, edgecolors="none")
         ax.set_aspect("equal")
         plt.show()
 
-    plot_warped_inputs()
+    plot_warped_inputs(3, 4)
     return
 
 
@@ -480,14 +501,22 @@ def _():
 def _(test_warped_parameters, umap):
     umap_manager = umap.UMAP()
     warp_embeddings = umap_manager.fit_transform(test_warped_parameters)
-    return (warp_embeddings,)
+    return umap_manager, warp_embeddings
 
 
 @app.cell
-def _(plt, warp_embeddings):
+def _(test_warped_ip, umap_manager):
+    warp_inducing_points = umap_manager.transform(test_warped_ip)
+    return (warp_inducing_points,)
+
+
+@app.cell
+def _(plt, warp_embeddings, warp_inducing_points):
     def plot_warped_embeddings():
         fig, ax = plt.subplots()
         ax.scatter(warp_embeddings[:, 0], warp_embeddings[:, 1], s=1, alpha=0.2, edgecolors="none")
+        ax.scatter(warp_embeddings[:131072, 0], warp_embeddings[:131072, 1], s=1, alpha=0.2, edgecolors="none")
+        ax.scatter(warp_inducing_points[:, 0], warp_inducing_points[:, 1], s=8, alpha=0.9, edgecolors="none")
         ax.set_aspect("equal")
         plt.show()
 

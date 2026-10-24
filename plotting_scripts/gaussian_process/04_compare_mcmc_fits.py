@@ -103,9 +103,9 @@ def _(datetime, os, subprocess):
 @app.cell
 def _(np, os):
     PARAMETER_DIMENSION = 12
-    EXPERIMENT_DIRPATH = "model_experiments/2026-10-22-collisions_shape"
+    EXPERIMENT_DIRPATH = "model_experiments/2026-10-23-collisions_shape"
     # mcmc_results = "wide_mcmc_results"
-    hm_index = 1
+    hm_index = 3
     mcmc_results = f"hm{hm_index}/disc_cov_mcmc_results"
 
 
@@ -499,8 +499,8 @@ def _(
 def _(PARAMETER_DIMENSION, ctl_mcmc_chain, rd_mcmc_chain):
     chain_length = ctl_mcmc_chain.shape[0]
     quarter_index = int(chain_length // 4)
-    ctl_kde_posterior = ctl_mcmc_chain[quarter_index::256, :, 1, :].reshape(-1, PARAMETER_DIMENSION)
-    rd_kde_posterior = rd_mcmc_chain[quarter_index::256, :, 1, :].reshape(-1, PARAMETER_DIMENSION)
+    ctl_kde_posterior = ctl_mcmc_chain[quarter_index::256, :, 0, :].reshape(-1, PARAMETER_DIMENSION)
+    rd_kde_posterior = rd_mcmc_chain[quarter_index::256, :, 0, :].reshape(-1, PARAMETER_DIMENSION)
     return ctl_kde_posterior, quarter_index, rd_kde_posterior
 
 

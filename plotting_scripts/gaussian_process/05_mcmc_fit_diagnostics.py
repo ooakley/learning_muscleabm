@@ -128,10 +128,10 @@ def _():
 
 @app.cell
 def _(np, os):
-    EXPERIMENT_DIRPATH = "model_experiments/2026-10-02-collisions_shape"
+    EXPERIMENT_DIRPATH = "model_experiments/2026-10-23-collisions_shape"
     # mcmc_results = "wide_mcmc_results"
     # mcmc_results = "05_cov_mcmc_results"
-    mcmc_results = "hm3/disc_cov_mcmc_results"
+    mcmc_results = "hm1/disc_cov_mcmc_results"
 
     ctl_mcmc_chain = np.load(os.path.join(EXPERIMENT_DIRPATH, mcmc_results, "wt_mcmc_chain.npy"))
     ctl_mcmc_ar = np.load(os.path.join(EXPERIMENT_DIRPATH, mcmc_results, "wt_mcmc_acceptance_rate.npy"))
