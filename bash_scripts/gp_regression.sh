@@ -40,7 +40,7 @@ ml load uv
 # Lmod is not guaranteed to work with unset variables treated as errors, so only from here:
 set -u
 
-metrics=(speeds meander_ratios ann_indices coherency)
+metrics=(speeds meander_ratios ann_indices coherency_fraction)
 metric=${metrics[$SLURM_ARRAY_TASK_ID]}
 echo "Training the ${metric} GP model of hm${hm_wave_id}..."
 
