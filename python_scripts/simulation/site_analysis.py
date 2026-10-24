@@ -25,6 +25,9 @@ FRAME_DURATION = 2.5
 # Distance in pixels below which a cell counts as not having moved, well below any real motion
 # but above rounding error in the positions:
 MOVEMENT_TOLERANCE = 1e-9
+# Tracks need more steps than this to count towards a site's speed and meander ratio, as in the
+# wet lab analysis (python_scripts/wetlab/analyse_wetlab_data.py):
+MIN_TRACK_STEPS = 250
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Process a folder with a given integer name.')
@@ -169,7 +172,10 @@ def find_coherency_fraction(positions_array):
     # -- Concatenate to arrays:
     coherency_values = np.stack(coherency_values)
     interaction_values = np.stack(interaction_values)
-    return np.mean(coherency_values), np.mean(interaction_values)
+
+    # Mean coherency over the pixels of every trajectory, as the wet lab coherency_fraction:
+    coherency_fraction = np.sum(coherency[trajectory_array]) / np.sum(trajectory_array)
+    return np.mean(coherency_values), np.mean(interaction_values), coherency_fraction
 
 
 def find_anni(frame_positions):
@@ -192,37 +198,54 @@ def find_anni(frame_positions):
     return anni
 
 
+def split_into_tracks(trajectory):
+    """Split a cell's trajectory, (TIMESTEPS, (X, Y)), wherever it crosses the periodic boundary.
+
+    Wet lab tracks end when a cell leaves the field of view, and a new track starts when it (or
+    another cell) enters it, so each crossing ends one track and starts another.
+    """
+    crossings = np.any(np.abs(np.diff(trajectory, axis=0)) > WORLD_SIZE / 2, axis=1)
+    return np.split(trajectory, np.flatnonzero(crossings) + 1)
+
+
 def find_motion_metrics(position_array):
+    """Site meander ratio and geometric mean speed, from tracks as the wet lab analysis builds them.
+
+    As in python_scripts/wetlab/analyse_wetlab_data.py, each track's speed is its mean step length,
+    and its meander ratio is its displacement over its path length. Only tracks with more than
+    MIN_TRACK_STEPS steps, that moved, count towards the site's values. Tracks end at periodic
+    boundary crossings (see split_into_tracks), which shortens the tracks of fast cells, as leaving
+    the field of view does.
+    """
     # Array shape: (CELL_NUMBER, TIMESTEPS, (X, Y))
     meander_ratios = []
     average_speeds = []
     for cell_index in range(position_array.shape[0]):
-        # Unfold trajectory from the torus:
-        trajectory_array = position_array[cell_index, :, :]
-        step_differences = np.diff(trajectory_array, axis=0)
-        step_differences[step_differences > WORLD_SIZE / 2] -= WORLD_SIZE
-        step_differences[step_differences < -(WORLD_SIZE / 2)] += WORLD_SIZE
+        for track in split_into_tracks(position_array[cell_index, :, :]):
+            step_differences = np.diff(track, axis=0)
+            if step_differences.shape[0] <= MIN_TRACK_STEPS:
+                continue
 
-        # Get full trajectory length:
-        step_lengths = np.sqrt(np.sum(step_differences ** 2, axis=1))
-        path_length = np.sum(step_lengths)
+            # Get full track length:
+            step_lengths = np.sqrt(np.sum(step_differences ** 2, axis=1))
+            path_length = np.sum(step_lengths)
 
-        # Skip entirely stationary cells, which have no meander ratio, and whose zero speed would
-        # make the site's geometric mean speed zero:
-        if path_length <= MOVEMENT_TOLERANCE:
-            continue
+            # Skip entirely stationary tracks, which have no meander ratio, and whose zero speed
+            # would make the site's geometric mean speed zero:
+            if path_length <= MOVEMENT_TOLERANCE:
+                continue
 
-        average_speed = np.mean(step_lengths)  # Get mean pixels per frame.
-        average_speed *= PIXEL_SIZE  # Multiply by µm per pixel to get µm per frame.
-        average_speed /= FRAME_DURATION  # Divide by 2.5 minutes to get µm per minute.
-        average_speeds.append(average_speed)
+            average_speed = np.mean(step_lengths)  # Get mean pixels per frame.
+            average_speed *= PIXEL_SIZE  # Multiply by µm per pixel to get µm per frame.
+            average_speed /= FRAME_DURATION  # Divide by 2.5 minutes to get µm per minute.
+            average_speeds.append(average_speed)
 
-        # Get meander ratio:
-        total_displacement = np.sqrt(np.sum(np.sum(step_differences, axis=0) ** 2))
-        meander_ratio = total_displacement / path_length
-        meander_ratios.append(meander_ratio)
+            # Get meander ratio:
+            total_displacement = np.sqrt(np.sum(np.sum(step_differences, axis=0) ** 2))
+            meander_ratio = total_displacement / path_length
+            meander_ratios.append(meander_ratio)
 
-    # Neither metric is defined if no cell moved:
+    # Neither metric is defined if no track is long enough and moved:
     if not average_speeds:
         return np.nan, np.nan
 
@@ -401,6 +424,7 @@ def main():
     # Loop through subiterations:
     interaction_array = []
     coherency_array = []
+    coherency_fraction_array = []
     ann_indices = []
     meander_ratios = []
     speeds = []
@@ -453,17 +477,23 @@ def main():
         if not window_limits:
             site_coherency = np.nan
             site_interaction = np.nan
+            site_coherency_fraction = np.nan
         else:
             windowed_coherencies = []
             windowed_interactions = []
+            windowed_coherency_fractions = []
             for window_index in range(len(window_limits) - 1):
                 start_frame = window_limits[window_index]
                 end_frame = window_limits[window_index+1]
-                coherency, interaction = find_coherency_fraction(interpolated_array[:, start_frame:end_frame, :])
+                coherency, interaction, coherency_fraction = find_coherency_fraction(
+                    interpolated_array[:, start_frame:end_frame, :]
+                )
                 windowed_coherencies.append(np.copy(coherency))
                 windowed_interactions.append(np.copy(interaction))
+                windowed_coherency_fractions.append(np.copy(coherency_fraction))
             site_coherency = np.mean(windowed_coherencies)
             site_interaction = np.mean(windowed_interactions)
+            site_coherency_fraction = np.mean(windowed_coherency_fractions)
 
         # Loop through frames to get average ANNI:
         anni_timeseries = []
@@ -490,6 +520,7 @@ def main():
 
         # Accumulate to lists:
         coherency_array.append(site_coherency)
+        coherency_fraction_array.append(site_coherency_fraction)
         interaction_array.append(site_interaction)
         ann_indices.append(site_anni)
         meander_ratios.append(meander_ratio)
@@ -505,6 +536,7 @@ def main():
         np.save(os.path.join(run_folderpath, "interaction.npy"), interaction_array)
         coherency_array = np.array(coherency_array)
         np.save(os.path.join(run_folderpath, "coherency.npy"), coherency_array)
+        np.save(os.path.join(run_folderpath, "coherency_fraction.npy"), np.array(coherency_fraction_array))
         ann_indices = np.array(ann_indices)
         np.save(os.path.join(run_folderpath, "ann_indices.npy"), ann_indices)
         meander_ratios = np.array(meander_ratios)
@@ -519,6 +551,7 @@ def main():
         np.save(os.path.join(run_folderpath, "com_interaction.npy"), interaction_array)
         coherency_array = np.array(coherency_array)
         np.save(os.path.join(run_folderpath, "com_coherency.npy"), coherency_array)
+        np.save(os.path.join(run_folderpath, "com_coherency_fraction.npy"), np.array(coherency_fraction_array))
         ann_indices = np.array(ann_indices)
         np.save(os.path.join(run_folderpath, "com_ann_indices.npy"), ann_indices)
         meander_ratios = np.array(meander_ratios)
