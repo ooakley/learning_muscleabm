@@ -52,7 +52,12 @@ def _():
         x, g, y : (N,) raw x, integer group index, response
         x_star  : (M,) design points
         Returns (mean, Sigma_exp): posterior mean and covariance of the population
-        curve f at x_star (excludes group offsets b_g and observation noise).
+        curve m + f at x_star (excludes group offsets b_g and observation noise).
+
+        The level m is treated as unknown, with a vague prior, rather than as its fitted value,
+        so Sigma_exp includes the uncertainty in the population level (about tau^2 over the
+        number of experiments). This is the posterior with explicit basis functions of
+        Rasmussen & Williams 2006, section 2.7, eq. 2.42, with a single constant basis function.
         """
         x, y, x_star = (torch.as_tensor(a, dtype=torch.float64) for a in (x, y, x_star))
         g = torch.as_tensor(g, dtype=torch.float64)
@@ -78,15 +83,23 @@ def _():
             loss.backward()
             opt.step()
 
-        # Posterior of f only: K_f(*,*) - K_f(*,X) K_yy^{-1} K_f(X,*)
+        # Posterior of m + f, with m given a vague prior (R&W eq. 2.42, with H a row of ones):
+        #     beta  = (H K^-1 H^T)^-1 H K^-1 y
+        #     mean  = beta + K_* K^-1 (y - H^T beta)
+        #     Sigma = K_** - K_* K^-1 K_*^T + R^T (H K^-1 H^T)^-1 R,  R = H_* - H K^-1 K_*^T
         model.eval(); lik.eval()
         with torch.no_grad():
             Kyy = (model.k_f(X) + model.k_g(X)).to_dense() + lik.noise * torch.eye(len(x))
             Ks = model.k_f(Xs, X).to_dense()
             Kss = model.k_f(Xs, Xs).to_dense()
-            m = model.mean_module.constant
-            mean = m + Ks @ torch.linalg.solve(Kyy, ys - m)
-            Sigma = Kss - Ks @ torch.linalg.solve(Kyy, Ks.T)
+            Kinv_y = torch.linalg.solve(Kyy, ys)
+            Kinv_ones = torch.linalg.solve(Kyy, torch.ones(len(x)))
+            Kinv_KsT = torch.linalg.solve(Kyy, Ks.T)
+            level_precision = Kinv_ones.sum()
+            beta = Kinv_y.sum() / level_precision
+            mean = beta + Ks @ (Kinv_y - beta * Kinv_ones)
+            R = torch.ones(len(x_star)) - Kinv_KsT.sum(dim=0)
+            Sigma = Kss - Ks @ Kinv_KsT + torch.outer(R, R) / level_precision
 
         Sigma = 0.5 * (Sigma + Sigma.T)                           # symmetrise
         mean = (mean * y_sd + y_mu).numpy()
@@ -122,7 +135,10 @@ def _(os):
 
 @app.cell
 def _(fit_exp_covariance, np, os, save_directory, site_dataframe):
+    # Counts the targets are computed at. They must match the history matching config's
+    # query_counts, which the MCMC checks against the saved query_counts.npy:
     QUERY_COUNTS = np.linspace(50, 300, 11).astype(int)
+    np.save(os.path.join(save_directory, "query_counts.npy"), QUERY_COUNTS)
     METRICS = ["mean_speed", "mean_mr", "anni", "coherency_fraction"]
 
     def extract_fit_values(phenotype):

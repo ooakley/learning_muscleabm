@@ -18,6 +18,7 @@ from scipy.optimize import minimize_scalar
 
 from muscleabm.datasets import DISCREPANCY_FRACTIONS, MODEL_METRICS, WETLAB_METRICS
 from muscleabm.emulators import load_torch_object, run_inference
+from muscleabm.sampling import get_count_layout
 
 # Match the precision used to train the GP models:
 torch.set_default_dtype(torch.float64)
@@ -46,8 +47,20 @@ def parse_arguments():
         '--gp_models_dirpath', type=str, required=True,
         help='Folder written by the GP training script, containing one subfolder per metric.'
     )
+    parser.add_argument(
+        '--query_counts', type=int, nargs='+', default=None,
+        help='Cell counts at which the MCMC compares curves. Only simulations at counts within their '
+             'range are tested, as the emulators are not used elsewhere. By default, every simulation is.'
+    )
     args = parser.parse_args()
     return args
+
+
+def get_row_counts(experiment_dirpath, parameter_matrix):
+    """Cell count of each row of a wave, from its unit-cube count column and the config's range."""
+    with open(os.path.join(experiment_dirpath, "config.json")) as config_fstream:
+        _, count_index, count_min, count_max = get_count_layout(json.load(config_fstream))
+    return np.round(count_min + parameter_matrix[:, count_index] * (count_max - count_min))
 
 
 def load_wave_data(wave_dirpath, metric_name):
@@ -216,6 +229,7 @@ def main():
         "hm_wave_id": args.hm_wave_id,
         "validation_wave_id": next_wave_id,
         "gp_models_dirpath": args.gp_models_dirpath,
+        "query_counts": args.query_counts,
         "metrics": {}
     }
     for wetlab_metric, metric_name in zip(WETLAB_METRICS, MODEL_METRICS):
@@ -234,6 +248,17 @@ def main():
         parameter_matrix, metric_mean, metric_sem, valid_mask = load_wave_data(next_wave_dirpath, metric_name)
         row_phenotypes = load_row_phenotypes(next_wave_dirpath, parameter_matrix.shape[0])
         design_count_number = get_design_count_number(next_wave_dirpath, parameter_matrix.shape[0])
+
+        # Only test the emulators at the counts the MCMC uses them at:
+        in_query_range = np.ones(parameter_matrix.shape[0], dtype=bool)
+        if args.query_counts is not None:
+            row_counts = get_row_counts(args.experiment_dirpath, parameter_matrix)
+            in_query_range = (row_counts >= min(args.query_counts)) & (row_counts <= max(args.query_counts))
+            print(
+                f"Leaving out {np.count_nonzero(~in_query_range)} simulations at counts outside "
+                f"{min(args.query_counts)} to {max(args.query_counts)}..."
+            )
+        valid_mask = valid_mask & in_query_range
         print(f"Using {np.count_nonzero(valid_mask)} of {parameter_matrix.shape[0]} simulations...")
 
         # Load model and its whitening transform:
@@ -258,7 +283,7 @@ def main():
         experimental_variances = get_experimental_variances(wetlab_metric)
         if experimental_variances is None:
             print("No wet lab results found, skipping the comparison with experimental uncertainty.")
-        metric_dict = {"groups": {}}
+        metric_dict = {"rows_outside_query_range": int(np.count_nonzero(~in_query_range)), "groups": {}}
         for group_name, group_mask in groups.items():
             if np.count_nonzero(group_mask) == 0:
                 continue
@@ -321,6 +346,7 @@ def main():
         np.savez(
             os.path.join(id_folderpath, "wave_validation.npz"),
             valid_mask=valid_mask,
+            in_query_range=in_query_range,
             target=metric_mean,
             sem=metric_sem,
             prediction=prediction,

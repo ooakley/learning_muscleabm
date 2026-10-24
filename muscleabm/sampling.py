@@ -7,6 +7,19 @@ import math
 COUNT_PARAMETER_NAME = "numberOfCells"
 
 
+def get_count_layout(config_dictionary):
+    """Where the cell count sits among a sweep's parameters, and its range.
+
+    Returns the number of swept parameters, the index of the count among them (its column in the
+    unit-cube sample matrices), and the count's minimum and maximum.
+    """
+    gridsearch_parameters = config_dictionary["gridsearch_parameters"]
+    parameter_names = [name for name, _ in gridsearch_parameters]
+    count_index = parameter_names.index(COUNT_PARAMETER_NAME)
+    count_min, count_max = gridsearch_parameters[count_index][1]
+    return len(parameter_names), count_index, count_min, count_max
+
+
 class JSONOutputManager:
     """Generates JSON files, while keeping track of number of files generated."""
 

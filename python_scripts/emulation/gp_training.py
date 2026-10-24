@@ -12,7 +12,8 @@ import numpy as np
 
 from muscleabm.datasets import GLOBAL_DATASET_FOLDER, load_gridsearch_data
 from muscleabm.emulators import (
-    RESIDUAL_ACTIVATION, ModelManager, load_torch_object, run_inference
+    DPP_CANDIDATE_COUNT, RESIDUAL_ACTIVATION, ModelManager, load_torch_object, run_inference,
+    select_inducing_points_dpp
 )
 from muscleabm.history_matching import MODELS_DIRNAME, GPSettings
 from muscleabm.sensitivity import run_sobol_index_inference
@@ -106,14 +107,14 @@ def get_step_count(gp_settings, train_row_count, row_count, first_wave_row_count
 class DeepKernelModelManager(ModelManager):
     """Model manager with its own learning rate for the deep kernel network, and cosine decay."""
 
-    def __init__(self, inducing_points, gp_settings, step_count):
+    def __init__(self, inducing_points, gp_settings, step_count, learn_inducing_locations=True):
         # Set up model:
         learning_rate = gp_settings.learning_rate
         deep_kernel_learning_rate = gp_settings.deep_kernel_learning_rate
         super().__init__(
             inducing_points, learning_rate,
             gp_settings.hidden_layer_count, gp_settings.hidden_layer_neuron_count,
-            gp_settings.spectral_coefficient, gp_settings.residual_block_count
+            gp_settings.spectral_coefficient, gp_settings.residual_block_count, learn_inducing_locations
         )
 
         # Split the model parameters into the deep kernel network and everything else:
@@ -152,7 +153,7 @@ def run_warp_inference(model_manager, inputs, batch_size=512):
 def cross_validation(
         parameter_matrix, output_metric, output_sem, replicate_counts, inducing_points,
         valid_indices, original_row_count, wave_indices, wave_row_indices, id_folderpath, gp_settings,
-        first_wave_row_count, run_record
+        first_wave_row_count, learn_inducing_locations, run_record
     ):
     # Shuffle datapoints prior to cross-validation (as otherwise there
     # are weird autocorrelations from the Sobol' sampling):
@@ -237,7 +238,7 @@ def cross_validation(
         # Set up the model and the model's associated training apparatus. Each fold has its own
         # seed, so that its model does not depend on what was trained before it:
         torch.manual_seed(1 + k_index)
-        model_manager = DeepKernelModelManager(inducing_points, gp_settings, step_count)
+        model_manager = DeepKernelModelManager(inducing_points, gp_settings, step_count, learn_inducing_locations)
 
         # Set up dataset:
         train_parameters = permuted_parameters[train_mask, :]
@@ -411,10 +412,26 @@ def prepare_training(args, gp_settings):
     row_wave_indices = wave_indices[valid_indices]
     first_wave_row_count = int(np.sum(row_wave_indices == np.min(row_wave_indices)))
 
-    # Get inducing points - sampling the row indices, so they can be recorded:
-    print("Sampling inducing points...")
+    # Get inducing points - sampling the row indices, so they can be recorded. With
+    # latest_wave_inducing_points, after the first wave, they are spread through the latest wave's
+    # rows (which sample the previous posterior) by a k-DPP, and kept there in training:
     generator = np.random.default_rng(0)
-    inducing_indices = generator.choice(parameter_matrix.shape[0], gp_settings.inducing_point_count, replace=False)
+    if gp_settings.latest_wave_inducing_points and hm_wave_id > np.min(row_wave_indices):
+        print(f"Choosing inducing points among the rows of hm{hm_wave_id} with a k-DPP...")
+        latest_wave_rows = np.flatnonzero(row_wave_indices == hm_wave_id)
+        chosen_rows, dpp_lengthscale = select_inducing_points_dpp(
+            parameter_matrix[latest_wave_rows], gp_settings.inducing_point_count, generator
+        )
+        inducing_indices = latest_wave_rows[chosen_rows]
+        inducing_selection = {
+            "method": "dpp_latest_wave_fixed",
+            "dpp_lengthscale": dpp_lengthscale,
+            "dpp_candidate_count": int(min(DPP_CANDIDATE_COUNT, latest_wave_rows.shape[0])),
+        }
+    else:
+        print("Sampling inducing points...")
+        inducing_indices = generator.choice(parameter_matrix.shape[0], gp_settings.inducing_point_count, replace=False)
+        inducing_selection = {"method": "uniform_trainable"}
     inducing_points = parameter_matrix[inducing_indices, :]
     print(f"Inducing points shape: {inducing_points.shape}...")
 
@@ -431,7 +448,8 @@ def prepare_training(args, gp_settings):
         parameter_matrix=parameter_matrix, output_metric=output_metric, output_sem=output_sem,
         replicate_counts=replicate_counts, valid_indices=valid_indices, original_row_count=original_row_count,
         inducing_indices=inducing_indices, inducing_points=inducing_points, id_folderpath=id_folderpath,
-        first_wave_row_count=first_wave_row_count,
+        first_wave_row_count=first_wave_row_count, inducing_selection=inducing_selection,
+        learn_inducing_locations=inducing_selection["method"] == "uniform_trainable",
     )
 
 
@@ -477,6 +495,7 @@ def train_full_model(args, gp_settings, data):
         "training_epochs": step_count / math.ceil(parameter_matrix.shape[0] / gp_settings.batch_size),
         "k_fold_count": K_FOLD_COUNT,
         "inducing_point_count": gp_settings.inducing_point_count,
+        "inducing_point_selection": data.inducing_selection,
         "learning_rate": gp_settings.learning_rate,
         "deep_kernel_learning_rate": gp_settings.deep_kernel_learning_rate,
         "num_layers": gp_settings.hidden_layer_count,
@@ -498,7 +517,7 @@ def train_full_model(args, gp_settings, data):
 
     # Set up the model and the model's associated training apparatus:
     print("Setting up model...")
-    model_manager = DeepKernelModelManager(inducing_points, gp_settings, step_count)
+    model_manager = DeepKernelModelManager(inducing_points, gp_settings, step_count, data.learn_inducing_locations)
 
     # Whiten metric distribution:
     metric_mean = np.mean(output_metric)
@@ -600,7 +619,7 @@ def run_cross_validation_stage(gp_settings, data):
     cv_dict = cross_validation(
         data.parameter_matrix, data.output_metric, data.output_sem, data.replicate_counts, data.inducing_points,
         data.valid_indices, data.original_row_count, data.wave_indices, data.wave_row_indices, data.id_folderpath,
-        gp_settings, data.first_wave_row_count, run_record
+        gp_settings, data.first_wave_row_count, data.learn_inducing_locations, run_record
     )
     for key in ["mae", "mse", "train_mse", "sll", "lcr", "tcr"]:
         print(f"Mean {key}: {np.mean(cv_dict[key])}")

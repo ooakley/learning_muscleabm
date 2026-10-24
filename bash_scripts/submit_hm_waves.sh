@@ -57,7 +57,7 @@ dry_run=${DRY_RUN:-false}
 # Each is called as: sbatch <script> <experiment_dirpath> <hm_wave_id>
 # (the simulation script also gets the simulations per array task, the training script the
 # GP models folder name, the GP settings and the stage to run, and the MCMC script the GP
-# models folder and the burn-in fraction).
+# models folder, the burn-in fraction and the query counts).
 simulate_script="bash_scripts/gridsearch.sh"
 collate_script="bash_scripts/collate_gridsearch_data.sh"
 train_script="bash_scripts/gp_regression.sh"
@@ -75,9 +75,10 @@ delete_run_data_script="bash_scripts/delete_run_data.sh"
 # Read and checked by muscleabm/history_matching.py, so that a mistake stops the submission.
 # It prints, one per line: wave_count, wave_size, samples_per_phenotype (half of wave_size),
 # temperature_index, burn_in_fraction, max_failed_fraction, simulations_per_task,
-# array_task_limit, run_validation and delete_run_data (true or false), mcmc_dirname and
-# gp_folder_name (the folders the MCMC chains and GP models are saved to inside each wave
-# folder) and gp_training_arguments (the GP settings, as arguments of gp_training.py):
+# array_task_limit, run_validation and delete_run_data (true or false), query_counts (space
+# separated), mcmc_dirname and gp_folder_name (the folders the MCMC chains and GP models are
+# saved to inside each wave folder) and gp_training_arguments (the GP settings, as arguments of
+# gp_training.py):
 if [ ! -f "$hm_config_path" ]; then
     echo "No history matching config found at ${hm_config_path}, exiting..."
     exit 1
@@ -98,6 +99,7 @@ hm_settings=$(python3 -m muscleabm.history_matching "$hm_config_path")
     read -r array_task_limit
     read -r run_validation
     read -r delete_run_data
+    read -r -a query_counts
     read -r mcmc_dirname
     read -r gp_folder_name
     read -r -a gp_training_arguments
@@ -108,6 +110,7 @@ echo "History matching config ${hm_config_path}: ${wave_count} waves of ${wave_s
 echo "Burn-in fraction ${burn_in_fraction}, ${simulations_per_task} simulations per array task" \
     "(${array_task_limit} at once), stopping if over ${max_failed_fraction} of a wave's simulations fail," \
     "validation: ${run_validation}, delete run data: ${delete_run_data}"
+echo "Curves compared at counts ${query_counts[*]}; later waves simulated at counts ${query_counts[0]} to ${query_counts[-1]}"
 
 # --- Checks ---
 stage_names=(generate simulate collate train mcmc)
@@ -311,7 +314,8 @@ for wave in $(seq "$first_wave_id" $(( wave_count - 1 ))); do
                 "$(log_argument "$generate_python_script")" "$python_stage_script" "$generate_python_script" \
                 --experiment_dirpath "$experiment_dirpath" --hm_wave_id $(( wave - 1 )) \
                 --mcmc_dirname "$mcmc_dirname" --sample_count "$samples_per_phenotype" \
-                --burn_in_fraction "$burn_in_fraction" --temperature_index "$temperature_index")
+                --burn_in_fraction "$burn_in_fraction" --temperature_index "$temperature_index" \
+                --count_range "${query_counts[0]}" "${query_counts[-1]}")
             submitted_job_ids+=("$generate")
         else
             echo "    generate: ${wave_dirpath} already exists, skipping"
@@ -363,7 +367,7 @@ for wave in $(seq "$first_wave_id" $(( wave_count - 1 ))); do
             validate=$(submit "validate" ${dependency[@]+"${dependency[@]}"} --job-name="hm${wave}_validate" \
                 "$(log_argument "$validate_python_script")" "$python_stage_script" "$validate_python_script" \
                 --experiment_dirpath "$experiment_dirpath" --hm_wave_id $(( wave - 1 )) \
-                --gp_models_dirpath "$previous_gp_models_dirpath")
+                --gp_models_dirpath "$previous_gp_models_dirpath" --query_counts "${query_counts[@]}")
             submitted_job_ids+=("$validate")
         fi
 
@@ -398,7 +402,7 @@ for wave in $(seq "$first_wave_id" $(( wave_count - 1 ))); do
     # 9. Sample the posterior of both phenotypes:
     set_dependency afterok "$train"
     mcmc=$(submit "mcmc" ${dependency[@]+"${dependency[@]}"} --job-name="hm${wave}_mcmc" \
-        "$mcmc_script" "$experiment_dirpath" "$wave" "$gp_models_dirpath" "$burn_in_fraction")
+        "$mcmc_script" "$experiment_dirpath" "$wave" "$gp_models_dirpath" "$burn_in_fraction" "${query_counts[@]}")
     submitted_job_ids+=("$mcmc")
 done
 

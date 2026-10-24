@@ -52,11 +52,19 @@ def parse_arguments():
         "--temperature_index", type=int, default=DEFAULT_TEMPERATURE_INDEX,
         help="Temperature of the chains to draw samples from (0 is the cold chain)."
     )
+    parser.add_argument(
+        "--count_range", type=int, nargs=2, default=None, metavar=("MIN", "MAX"),
+        help="Range of the cell counts given to the simulations, within the config's count range. "
+             "submit_hm_waves.sh passes the range of the MCMC's query counts. Defaults to the "
+             "config's count range."
+    )
     arguments = parser.parse_args()
     if not 0 < arguments.burn_in_fraction < 1:
         parser.error("--burn_in_fraction must be between 0 and 1.")
     if arguments.temperature_index < 0:
         parser.error("--temperature_index must not be negative.")
+    if arguments.count_range is not None and arguments.count_range[0] >= arguments.count_range[1]:
+        parser.error("--count_range must be a minimum below a maximum.")
     return arguments
 
 
@@ -103,13 +111,14 @@ def thin_chain(mc_distribution, sample_count, burn_in_fraction, temperature_inde
     return samples, np.stack([step_indices, chain_indices], axis=1)
 
 
-def write_hm_sweep(config_dictionary, wave_folderpath, posterior_parameters, rng):
+def write_hm_sweep(config_dictionary, wave_folderpath, posterior_parameters, rng, count_range=None):
     """Write one simulation per posterior parameter set into the wave's run_data folder.
 
     posterior_parameters: (n_samples, n_parameters - 1) unit-cube values, count column removed.
 
-    Each parameter set is given a cell count drawn uniformly from the count range of
-    the config. Returns the full unit-cube sample matrix, with the count column re-inserted.
+    Each parameter set is given a cell count drawn uniformly from count_range (the range of the
+    MCMC's query counts), or by default from the count range of the config. Returns the full
+    unit-cube sample matrix, with the count column re-inserted (scaled by the config's range).
     """
     # Locate the count parameter and its range:
     gridsearch_parameters = config_dictionary["gridsearch_parameters"]
@@ -128,8 +137,11 @@ def write_hm_sweep(config_dictionary, wave_folderpath, posterior_parameters, rng
         raise ValueError("posterior_parameters must be unit-cube values in [0, 1].")
 
     # Assign a uniformly random cell count to each parameter set:
+    draw_min, draw_max = (count_min, count_max) if count_range is None else count_range
+    if draw_min < count_min or draw_max > count_max:
+        raise ValueError(f"The count range {count_range} must lie within the config's [{count_min}, {count_max}].")
     sample_count = posterior_parameters.shape[0]
-    exact_counts = rng.integers(int(count_min), int(count_max), size=sample_count, endpoint=True)
+    exact_counts = rng.integers(int(draw_min), int(draw_max), size=sample_count, endpoint=True)
 
     # Build the full unit-cube matrix, re-inserting the count column:
     scaled_counts = (exact_counts - count_min) / (count_max - count_min)
@@ -186,7 +198,9 @@ def main():
 
     # Write the folder structure and argument files:
     rng = np.random.default_rng([COUNT_SEED, arguments.hm_wave_id])
-    sample_matrix = write_hm_sweep(config_dictionary, wave_folderpath, posterior_parameters, rng)
+    sample_matrix = write_hm_sweep(
+        config_dictionary, wave_folderpath, posterior_parameters, rng, arguments.count_range
+    )
 
     # Save the matrix, and where each of its rows came from, in the wave folder:
     np.save(os.path.join(wave_folderpath, "sample_matrix.npy"), sample_matrix)
@@ -200,6 +214,7 @@ def main():
         "sample_count": arguments.sample_count,
         "phenotypes": PHENOTYPES,
         "temperature_index": arguments.temperature_index,
+        "count_range": arguments.count_range,
         "burn_in_fraction": arguments.burn_in_fraction,
         "count_seed": COUNT_SEED
     }

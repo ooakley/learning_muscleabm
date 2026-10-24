@@ -8,10 +8,12 @@
     "array_task_limit": 95,
     "run_validation": true,
     "delete_run_data": true,
+    "query_counts": [50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300],
     "gaussian_process": {
         "epochs": 15,
         "constant_step": false,
         "inducing_point_count": 512,
+        "latest_wave_inducing_points": false,
         "hidden_layer_count": 3,
         "hidden_layer_neuron_count": 64,
         "spectral_coefficient": 0.95,
