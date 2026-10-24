@@ -367,7 +367,7 @@ for wave in $(seq "$first_wave_id" $(( wave_count - 1 ))); do
             validate=$(submit "validate" ${dependency[@]+"${dependency[@]}"} --job-name="hm${wave}_validate" \
                 "$(log_argument "$validate_python_script")" "$python_stage_script" "$validate_python_script" \
                 --experiment_dirpath "$experiment_dirpath" --hm_wave_id $(( wave - 1 )) \
-                --gp_models_dirpath "$previous_gp_models_dirpath")
+                --gp_models_dirpath "$previous_gp_models_dirpath" --query_counts "${query_counts[@]}")
             submitted_job_ids+=("$validate")
         fi
 
